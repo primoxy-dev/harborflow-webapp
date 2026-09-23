@@ -1,4 +1,4 @@
-import { authorized, categoryName, configReady, gh, jobPath, json, putFile, readJson, sameOrigin } from '../lib/harborflow.mjs';
+import { nodeHandler, authorized, categoryName, configReady, gh, jobPath, json, putFile, readJson, sameOrigin } from '../lib/harborflow.mjs';
 
 async function existing(base) {
   const listing = await gh('GET', base);
@@ -14,7 +14,7 @@ function details(url, body) {
   const service = body ? body.service : url.searchParams.get('service');
   return jobPath(job, service);
 }
-export default async function handler(request) {
+async function route(request) {
   if (!configReady()) return json({ error: 'Private GitHub storage is not configured' }, 503);
   if (!authorized(request)) return json({ error: 'Sign in as primoxy-dev to access crew records' }, 401);
   try {
@@ -51,3 +51,5 @@ export default async function handler(request) {
     return json({ error: error.message || 'Could not save crew records' }, error instanceof SyntaxError ? 400 : 500);
   }
 }
+
+export default nodeHandler(route);
