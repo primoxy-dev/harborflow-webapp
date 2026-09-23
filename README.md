@@ -24,29 +24,35 @@
 
 หน้ารายละเอียด Crew Change เปิดเต็มจอ มี 3 แท็บ: **Crew members and Visitors, Travel, Checklist** กลุ่มรายชื่อ On-signers, Off-signers, Medical visitors, SIRE Inspectors, Surveyors, Service Engineers และ Other พับ/ขยายได้ แต่ละกลุ่มเพิ่มและลบคนในตารางได้ กด **Flight / Immigration** ที่แถวของบุคคลเพื่อกรอกข้อมูล Immigration และเพิ่ม/ลบเที่ยวบินของคนนั้น ส่วนแท็บ Travel มีตารางการใช้รถและเรือที่เพิ่ม/ลบรายการได้
 
-## สถานะการพัฒนา
+## Crew records and private documents
 
-เว็บนี้เป็น **interactive front-end prototype** พร้อมข้อมูลสาธิต ยังไม่มีฐานข้อมูล การเข้าสู่ระบบ การเก็บข้อมูลถาวร หรือการกำหนดสิทธิ์จริง การกด Approve, Sync และ Generate Report หลายจุดเป็นเพียงการแสดงผลสาธิต เฉพาะข้อมูล Job ที่ไม่ใช่ข้อมูลลูกเรือจะเก็บใน localStorage ของเบราว์เซอร์นี้หลังบันทึก ส่วนข้อมูล Crew Change รวมถึงหมายเลขเอกสาร วันที่เอกสาร Visa และเที่ยวบินยังอยู่ในหน่วยความจำและจะหายเมื่อรีโหลด
+The Crew members and Visitors tab saves records in the private repository `primoxy-dev/harborflow-job-documents`. Select **Sign in with GitHub** as `primoxy-dev`, edit the fields, and select **Save crew data**. Passport, Seaman Book, Flight and Visa / permission accept PDF, JPEG or PNG attachments up to 5 MB. The displayed filename confirms the attachment was uploaded and its crew record saved.
 
-ข้อมูลราคา ข่าว จำนวนงาน และหมายเลขเอกสารบนหน้าเว็บเป็นตัวอย่าง ยังไม่ได้เชื่อม Excel บน GitHub, ระบบ Finance, Email หรือ ERP และยังสร้าง PDF/Excel/PowerPoint จริงไม่ได้
-
-**อย่ากรอกข้อมูลส่วนบุคคลหรือเอกสารจริงใน prototype นี้** โดยเฉพาะเลข Passport และ Seaman Book เพราะหน้าเว็บยังไม่มีระบบรักษาความปลอดภัยหรือการจัดเก็บที่เหมาะสมสำหรับข้อมูลดังกล่าว
-
-## Create Job และโครงสร้างเอกสาร (งานระหว่างพัฒนา)
-
-ปุ่ม **Create job** เพิ่ม Job ในรายการ **Jobs saved in this browser** และเปิดรายละเอียดเพื่อเพิ่ม Service ได้แล้ว ข้อมูล Job และชื่อ Service ของ Job ที่สร้างใหม่เก็บเฉพาะใน localStorage ของเบราว์เซอร์นี้ ไม่มีการ sync ข้ามเครื่องหรือบัญชี หน้า Job แสดง **Planned GitHub folders** เป็นตัวอย่าง path; ยังไม่มีการสร้างไฟล์หรือโฟลเดอร์บน GitHub
-
-รูปแบบ path ที่เตรียมไว้:
+Records and attachments use this path:
 
 ```text
-Jobs/2026/09. SEP/10. SHION - HF-20260910-001/
-├── Crew Change/
-└── General/
+Jobs/YYYY/MM. MON/DD. VESSEL - JOB-NO/Service Name/Category/
+├── crew.json
+├── Passport/PERSON-ID/filename.pdf
+├── Seaman Book/PERSON-ID/filename.pdf
+├── Flight/PERSON-ID/FLIGHT-ID/filename.pdf
+└── Visa - permission/PERSON-ID/filename.pdf
 ```
 
-ชื่อโฟลเดอร์ถูกตัดอักขระที่ใช้เป็นตัวคั่น path และมี Job No. ต่อท้ายเพื่อแยกงานของเรือลำเดียวกันในวันเดียวกัน Service ที่เพิ่มใน Job จะปรากฏในรายการ path ตัวอย่าง ส่วน `General` มีไว้เสมอ
+Each category has its own `crew.json`. For **Other**, the typed category becomes the folder name. Job No. and ETA determine the path; changing either after records exist creates a new path. Move the old private folder manually if needed.
 
-เอกสารงานจริงควรอยู่ใน [private repository `primoxy-dev/harborflow-job-documents`](https://github.com/primoxy-dev/harborflow-job-documents) ที่แยกจาก source code สาธารณะ การทำให้ Sync ใช้งานจริงต้องมีฐานข้อมูล Job, ระบบ Login/สิทธิ์, และ API ฝั่ง server ที่รับรองสิทธิ์ผู้ใช้ก่อนเขียน GitHub โดยเก็บ GitHub credential เป็น secret ฝั่ง server เท่านั้น ไม่ฝัง token ใน `index.html` หรือ `enhancements.js` และไม่ส่งเอกสารส่วนบุคคลไป repository สาธารณะ
+### Required Vercel configuration
+
+Add these environment variables to the Vercel project before using personal data:
+
+- `GITHUB_OAUTH_CLIENT_ID`: GitHub OAuth App client ID.
+- `GITHUB_OAUTH_CLIENT_SECRET`: GitHub OAuth App client secret.
+- `HARBORFLOW_SESSION_SECRET`: a long random secret for signed, eight-hour login cookies.
+- `GITHUB_DOCUMENTS_TOKEN`: fine-grained GitHub token restricted to `primoxy-dev/harborflow-job-documents` with **Contents: Read and write**.
+
+Create the OAuth App in the `primoxy-dev` GitHub account. Set its callback URL to `https://YOUR-VERCEL-HOST/api/auth?mode=callback`. Use the exact host where this app will run. Configure the four variables for that deployment environment and redeploy. The API rejects writes until all variables exist, checks GitHub's authenticated login, and only permits `primoxy-dev`.
+
+The public source repository contains no GitHub credential or crew document. Job metadata is still stored in this browser. Other dashboard sections remain sample UI.
 
 ## งานที่ต้องทำก่อนใช้งานจริง
 
@@ -64,6 +70,8 @@ harborflow-webapp/
 ├── index.html        # โครงหน้าเว็บและส่วนสาธิตเดิม
 ├── enhancements.js   # การทำงาน Job, Service และ Crew Change
 ├── enhancements.css  # รูปแบบหน้าจอส่วนที่เพิ่ม
+├── api/              # GitHub login, crew sync and attachments
+├── lib/              # shared server-side validation and GitHub API
 └── README.md         # คู่มือและสถานะโปรเจกต์
 ```
 
