@@ -1,7 +1,7 @@
-import { randomBytes } from 'node:crypto';
+import { nodeHandler, randomBytes } from 'node:crypto';
 import { authorized, configReady, cookie, json, origin, sameOrigin, sessionCookie, sign, stateCookie, validSigned } from '../lib/harborflow.mjs';
 
-export default async function handler(request) {
+async function route(request) {
   const url = new URL(request.url);
   const mode = url.searchParams.get('mode') || 'status';
   if (mode === 'status') return json({ configured: configReady(), authenticated: authorized(request) });
@@ -40,3 +40,5 @@ export default async function handler(request) {
   }
   return json({ error: 'Unsupported action' }, 405);
 }
+
+export default nodeHandler(route);
