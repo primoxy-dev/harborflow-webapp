@@ -30,6 +30,7 @@
   let editingService = null;
   let auth = { configured: false, authenticated: false };
   let syncMessage = 'Checking GitHub access…';
+  let storageReady = false;
   const loadedCrew = new Set();
   let nextId = 1;
   const categories = ['On-signers', 'Off-signers', 'Medical visitors', 'SIRE Inspectors', 'Surveyors', 'Service Engineers', 'Other'];
@@ -124,7 +125,7 @@
   const createdJobsPanel = document.createElement('div');
   createdJobsPanel.className = 'panel';
   createdJobsPanel.style.marginTop = '18px';
-  createdJobsPanel.innerHTML = '<div class="panel-head"><h2>Jobs saved in this browser</h2><span class="small">Job details only; crew data resets on reload</span></div><div id="hfCreatedJobs"></div>';
+  createdJobsPanel.innerHTML = '<div class="panel-head"><h2>Jobs saved in this browser</h2><span class="small">Job details are stored in this browser</span></div><div id="hfCreatedJobs"></div>';
   document.querySelector('#operations').appendChild(createdJobsPanel);
   const createdJobs = createdJobsPanel.querySelector('#hfCreatedJobs');
   function renderCreatedJobs() {
@@ -189,7 +190,7 @@
           <div class="hf-field"><span>PIC</span><b>${activeJob.key.startsWith('created-') ? 'Not assigned' : 'Thanaphon'}</b></div>
         </div>
         <div class="hf-actions"><button type="submit" class="primary">Save job details</button></div>
-        <p class="small">Job details are saved in this browser. Crew identity data is not saved after reload.</p>
+        <p class="small">Job details are saved in this browser. Crew records can be saved from Crew members and Visitors after GitHub sign-in.</p>
       </form>
       <div class="panel-head"><h3>Services</h3><button type="button" class="secondary" data-action="add-service">+ Add</button></div>
       <div id="hfServices">${activeJob.services.length ? activeJob.services.map(service => `
@@ -208,7 +209,7 @@
         <label class="hf-field"><span>Status</span>${select(editingService && editingService !== 'new' ? editingService.status : 'Pending', ['Pending', 'Confirmed', 'Action needed', 'In progress', 'Done'], 'name="status"')}</label>
         <div class="hf-actions"><button type="button" class="secondary" data-action="cancel-service">Cancel</button><button type="submit" class="primary">Save service</button></div>
       </form>
-      ${activeJob.eta ? `<h3>Planned GitHub folders</h3><p class="small">Path preview only. No files have been synced.</p><code>${escapeHtml(activeJob.githubPath || jobPath(activeJob))}</code><ul>${servicePaths(activeJob).map(path => `<li><code>${escapeHtml(path)}</code></li>`).join('')}</ul>` : ''}
+      ${activeJob.eta ? `<h3>Planned GitHub folders</h3><p class="small">Folder paths for this job and its services.</p><code>${escapeHtml(activeJob.githubPath || jobPath(activeJob))}</code><ul>${servicePaths(activeJob).map(path => `<li><code>${escapeHtml(path)}</code></li>`).join('')}</ul>` : ''}
       <h3>Tasks, documents & timeline</h3>
       ${activeJob.key.startsWith('created-') ? '<p class="small">No tasks or documents have been recorded for this job.</p>' : `
       <div class="line-item"><b>Tasks: 8 / 11 complete</b><span>Visa confirmation overdue · Supplier follow-up due 23 Sep</span></div>
@@ -239,6 +240,7 @@
         activeService = service;
         if (service.name.trim().toLowerCase() === 'crew change') {
           activeTab = 'crew';
+          storageReady = false;
           renderCrew();
           detailDrawer.classList.add('open');
           loadCrew();
@@ -351,7 +353,7 @@
       <h2>${escapeHtml(activeService.name)}</h2>
       <div class="meta">Crew members and visitors · ${escapeHtml(activeJob.port)} · PIC: Thanaphon</div>
       <div class="tabs hf-tabs" role="tablist" aria-label="Crew change sections">${[['crew', 'Crew members and Visitors'], ['travel', 'Travel'], ['checklist', 'Checklist']].map(([key, label]) => `<button type="button" role="tab" aria-selected="${activeTab === key}" class="tab ${activeTab === key ? 'active' : ''}" data-action="tab" data-tab="${key}">${label}</button>`).join('')}</div>
-      ${activeTab === 'crew' ? `<div class="hf-save-bar"><span role="status">${escapeHtml(syncMessage)}</span><div>${auth.authenticated || !auth.configured ? '' : '<a class="secondary hf-sign-in" href="/api/auth?mode=start">Sign in with GitHub</a>'}<button type="button" class="primary" data-action="save-crew" ${auth.authenticated ? '' : 'disabled'}>Save crew data</button></div></div>` : ''}
+      ${activeTab === 'crew' ? `<div class="hf-save-bar"><span role="status">${escapeHtml(syncMessage)}</span><div>${auth.authenticated || !auth.configured ? '' : '<a class="secondary hf-sign-in" href="/api/auth?mode=start">Sign in with GitHub</a>'}<button type="button" class="primary" data-action="save-crew" ${auth.authenticated && storageReady ? '' : 'disabled'}>Save crew data</button></div></div>` : ''}
       <div role="tabpanel" class="hf-tab-panel">${activeTab === 'crew' ? categories.map(crewTable).join('') : activeTab === 'travel' ? travelTable() : checklist()}</div>
       <p class="hf-demo-note">Crew data and attachments are saved in the private GitHub job documents repository after you select Save.</p>
     `;
@@ -373,6 +375,7 @@
   }
   async function loadCrew() {
     const job = activeJob, service = activeService;
+    storageReady = false;
     try {
       auth = await api('/api/auth?mode=status');
       if (!auth.authenticated) {
@@ -380,8 +383,8 @@
         renderCrew();
         return;
       }
-      const key = `${job.key}:${service.name}`;
-      if (loadedCrew.has(key)) { syncMessage = 'Crew records loaded from GitHub.'; renderCrew(); return; }
+      const key = `${job.key}:${job.jobNo}:${job.eta}:${service.name}`;
+      if (loadedCrew.has(key)) { storageReady = true; syncMessage = 'Crew records loaded from GitHub.'; renderCrew(); return; }
       syncMessage = 'Loading crew records from GitHub…';
       renderCrew();
       const query = new URLSearchParams({ vessel: job.name, jobNo: job.jobNo, eta: job.eta, service: service.name });
@@ -389,6 +392,7 @@
       if (activeJob !== job || activeService !== service) return;
       job.crew = data.crew;
       loadedCrew.add(key);
+      storageReady = true;
       job.crew.forEach(person => {
         if (!person.attachments) person.attachments = {};
         if (!Array.isArray(person.flights)) person.flights = [];
@@ -402,7 +406,7 @@
     }
   }
   async function saveCrew() {
-    if (!auth.authenticated) return;
+    if (!auth.authenticated || !storageReady) return;
     syncMessage = 'Saving crew records…';
     renderCrew();
     try {
@@ -418,12 +422,12 @@
     }
   }
   function selectAttachment(button) {
-    if (!auth.authenticated) { syncMessage = 'Sign in as primoxy-dev before attaching files.'; renderCrew(); return; }
+    if (!auth.authenticated || !storageReady) { syncMessage = 'Load crew records after signing in before attaching files.'; renderCrew(); return; }
     const person = activeJob.crew.find(item => item.id === button.dataset.person);
     if (!person) return;
     const record = button.dataset.type === 'flight' ? person.flights.find(item => item.id === button.dataset.id) : person;
     if (!record) return;
-    attachmentTarget = { person, record, type: button.dataset.type };
+    attachmentTarget = { person, record, type: button.dataset.type, job: activeJob, service: activeService };
     attachmentInput.value = '';
     attachmentInput.click();
   }
@@ -431,6 +435,7 @@
     const file = attachmentInput.files?.[0];
     const target = attachmentTarget;
     if (!file || !target) return;
+    if (activeJob !== target.job || activeService !== target.service) return;
     if (file.size > 3 * 1024 * 1024) { syncMessage = 'File must be smaller than 3 MB.'; renderCrew(); return; }
     syncMessage = `Uploading ${file.name}…`;
     renderCrew();
@@ -441,6 +446,7 @@
         reader.onerror = () => reject(Error('Cannot read the selected file'));
         reader.readAsDataURL(file);
       });
+      if (activeJob !== target.job || activeService !== target.service) throw Error('Job changed during upload');
       const data = await api('/api/attachment', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
