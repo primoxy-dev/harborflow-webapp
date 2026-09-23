@@ -3,12 +3,33 @@
   const jobDrawer = document.getElementById('drawer');
   const detailDrawer = document.getElementById('crewDrawer');
   const jobs = new Map();
+  const jobStorageKey = 'harborflow-job-metadata-v1';
+  let savedJobs = {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(jobStorageKey) || '{}');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) savedJobs = parsed;
+  } catch { /* Private browsing or invalid saved data: keep the in-memory demo usable. */ }
+  const savedFields = ['jobNo', 'eta', 'etb', 'etd', 'principal'];
+  function persistJob(job) {
+    const data = Object.fromEntries(savedFields.map(field => [field, job[field] || '']));
+    if (job.key.startsWith('created-')) {
+      Object.assign(data, {
+        name: job.name, port: job.port, status: job.status,
+        githubPath: job.githubPath, services: job.services.map(service => ({
+          name: service.name, status: service.status
+        }))
+      });
+    }
+    savedJobs[job.key] = data;
+    try { localStorage.setItem(jobStorageKey, JSON.stringify(savedJobs)); return true; }
+    catch { return false; }
+  }
   let activeJob;
   let activeService;
   let activeTab = 'crew';
   let editingService = null;
   let nextId = 1;
-  const categories = ['On-signers', 'Off-signers', 'Medical visitors', 'SIRE Inspectors', 'Surveyors', 'Service Engineers'];
+  const categories = ['On-signers', 'Off-signers', 'Medical visitors', 'SIRE Inspectors', 'Surveyors', 'Service Engineers', 'Other'];
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -31,11 +52,13 @@
   ])].map(name => `${job.githubPath || jobPath(job)}/${name}`);
   const makeCrew = (data = {}) => ({
     id: id(), change: 'On-signers', name: '', nationality: '', rank: '', dob: '',
-    passport: '', passportExpiry: '', seamanBook: '', status: 'Not started',
-    visa: '', bg: '', immigrationStatus: 'Not started', submitted: '',
+    passport: '', passportIssue: '', passportExpiry: '',
+    seamanBook: '', seamanBookIssue: '', seamanBookExpiry: '', status: 'Not started',
+    otherCategory: '', visaTr: false, visaC: false, visaArrival: false,
+    oktb: false, bgEx: false, immigrationStatus: 'Not started', submitted: '',
     immigrationNotes: '', flights: [], ...data
   });
-  const makeFlight = () => ({ id: id(), number: '', from: '', to: '', departure: '', arrival: '', booking: '' });
+  const makeFlight = () => ({ id: id(), airline: '', number: '', date: '', from: '', to: '', departure: '', arrival: '', booking: '' });
   const makeTransport = () => ({ id: id(), passenger: '', date: '', from: '', to: '', supplier: '', reference: '' });
   const field = (label, value, data, type = 'text') =>
     `<label class="hf-field"><span>${label}</span><input type="${type}" ${data} value="${escapeHtml(value)}"></label>`;
@@ -46,9 +69,20 @@
     const key = button.dataset.jobId || `${button.dataset.name}|${button.dataset.port}|${button.closest('.day')?.querySelector('.num')?.textContent || ''}`;
     if (!jobs.has(key)) {
       const oceanPride = button.dataset.name === 'MT Ocean Pride';
+      const saved = savedJobs[key] || {};
+      const day = String(button.closest('.day')?.querySelector('.num')?.textContent || '22').padStart(2, '0');
       jobs.set(key, {
-        name: button.dataset.name, port: button.dataset.port, status: button.dataset.status,
+        key, name: button.dataset.name, port: button.dataset.port, status: button.dataset.status,
         jobNo: oceanPride ? 'GAC-260922-001' : '',
+        eta: oceanPride ? `2026-09-${day}T08:00` : '',
+        etb: oceanPride ? `2026-09-${day}T12:00` : '',
+        etd: oceanPride ? '2026-09-24T18:00' : '',
+        principal: oceanPride ? 'Ocean Shipping Ltd.' : '',
+        ...Object.fromEntries(savedFields.map(field => [field, Object.prototype.hasOwnProperty.call(saved, field) ? String(saved[field] ?? '') : (oceanPride ? ({
+          jobNo: 'GAC-260922-001', eta: `2026-09-${day}T08:00`,
+          etb: `2026-09-${day}T12:00`, etd: '2026-09-24T18:00',
+          principal: 'Ocean Shipping Ltd.'
+        })[field] : '')])),
         services: oceanPride ? [
           makeService('Port clearance', 'Operations', 'Done'),
           makeService('Crew change', '2 crew members · Immigration documents', 'Pending'),
@@ -56,8 +90,8 @@
           makeService('CTM', 'Prefund verification', 'Action needed')
         ] : [],
         crew: oceanPride ? [
-          makeCrew({ name: 'John Smith', nationality: 'Filipino', rank: 'Master', change: 'Off-signers', passport: 'P1234567', status: 'Docs pending' }),
-          makeCrew({ name: 'Raj Kumar', nationality: 'Indian', rank: '2nd Engineer', change: 'On-signers', passport: 'N7654321', status: 'Submitted' })
+          makeCrew({ name: 'Sample crew member A', nationality: 'Filipino', rank: 'Master', change: 'Off-signers', status: 'Docs pending' }),
+          makeCrew({ name: 'Sample crew member B', nationality: 'Indian', rank: '2nd Engineer', change: 'On-signers', status: 'Submitted' })
         ] : [],
         groupOpen: Object.fromEntries(categories.map(category => [category, category === 'On-signers' || category === 'Off-signers'])),
         personOpen: {},
@@ -87,7 +121,7 @@
   const createdJobsPanel = document.createElement('div');
   createdJobsPanel.className = 'panel';
   createdJobsPanel.style.marginTop = '18px';
-  createdJobsPanel.innerHTML = '<div class="panel-head"><h2>Jobs created this session</h2><span class="small">Demo data resets on reload</span></div><div id="hfCreatedJobs"></div>';
+  createdJobsPanel.innerHTML = '<div class="panel-head"><h2>Jobs saved in this browser</h2><span class="small">Job details only; crew data resets on reload</span></div><div id="hfCreatedJobs"></div>';
   document.querySelector('#operations').appendChild(createdJobsPanel);
   const createdJobs = createdJobsPanel.querySelector('#hfCreatedJobs');
   function renderCreatedJobs() {
@@ -96,6 +130,17 @@
     ).join('') || '<p class="small">No jobs created yet.</p>';
     createdJobs.querySelectorAll('.job').forEach(button => button.addEventListener('click', () => openJob(button)));
   }
+  Object.entries(savedJobs).filter(([key, job]) => key.startsWith('created-') && job && job.name)
+    .forEach(([key, saved]) => jobs.set(key, {
+      key, name: saved.name, port: saved.port || '', status: saved.status || 'Planned',
+      jobNo: saved.jobNo || '', eta: saved.eta || '', etb: saved.etb || '',
+      etd: saved.etd || '', principal: saved.principal || '',
+      githubPath: saved.githubPath || '',
+      services: Array.isArray(saved.services) ? saved.services.map(service =>
+        makeService(String(service.name || 'General'), '', String(service.status || 'Pending'))) : [],
+      crew: [], groupOpen: Object.fromEntries(categories.map(category => [category, true])),
+      personOpen: {}, cars: [], boats: [], checklist: [false, false, false, false]
+    }));
   renderCreatedJobs();
 
   document.querySelector('#entryForm').addEventListener('submit', event => {
@@ -107,36 +152,42 @@
     const eta = String(data.get('eta') || '');
     const principal = String(data.get('principal') || '').trim();
     if (!name || !eta || !principal) return;
-    const jobId = 'created-' + id();
+    const jobId = 'created-' + Date.now().toString(36) + '-' + id();
     const date = new Date(eta);
-    const jobNo = `HF-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}-${jobId.slice(8).padStart(3, '0')}`;
+    const jobNo = `HF-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}-${String(Object.keys(savedJobs).filter(key => key.startsWith('created-')).length + 1).padStart(3, '0')}`;
     jobs.set(jobId, {
-      name, eta, principal, imo: String(data.get('imo') || '').trim(),
+      key: jobId, name, eta, etb: '', etd: '', principal, imo: String(data.get('imo') || '').trim(),
       port: String(data.get('port') || ''), notes: String(data.get('notes') || '').trim(),
       status: 'Planned', jobNo, githubPath: jobPath({ name, eta, jobNo }),
       services: [makeService(String(data.get('service') || 'General'), '', 'Pending')],
       crew: [], groupOpen: Object.fromEntries(categories.map(category => [category, true])),
       personOpen: {}, cars: [], boats: [], checklist: [false, false, false, false]
     });
+    const saved = persistJob(jobs.get(jobId));
     renderCreatedJobs();
     event.currentTarget.reset();
     document.querySelector('#modal').classList.remove('open');
-    notify('Job created in this session');
+    notify(saved ? 'Job saved in this browser' : 'Job created for this session; browser storage unavailable');
   }, true);
 
   function renderJob() {
     jobDrawer.innerHTML = `
       <button type="button" class="close" data-action="close-job" aria-label="Close job details">×</button>
       <h2>${escapeHtml(activeJob.name)}</h2>
-      <div class="meta">${escapeHtml(activeJob.port)}${activeJob.eta ? ' · ' + escapeHtml(activeJob.eta.replace('T', ' ')) : ' · PTTLNG LMPT1'}</div>
-      <label class="hf-field hf-job-number"><span>Job No.</span><input id="hfJobNo" aria-label="Job number" placeholder="Enter job number" value="${escapeHtml(activeJob.jobNo)}" ${activeJob.githubPath ? 'readonly' : ''}></label>
+      <div class="meta">${escapeHtml(activeJob.port)}${activeJob.eta ? ' · ' + escapeHtml(activeJob.eta.replace('T', ' ')) : ''}</div>
       <span class="tag green">${escapeHtml(activeJob.status)}</span>
-      <div class="detail-grid">
-        <div class="detail"><label>ETA / ETB</label><b>${escapeHtml(activeJob.eta ? activeJob.eta.replace('T', ' ') : '22 Sep · 08:00 / 12:00')}</b></div>
-        <div class="detail"><label>ETD</label><b>${activeJob.githubPath ? 'Not set' : '24 Sep · 18:00'}</b></div>
-        <div class="detail"><label>PIC</label><b>${activeJob.githubPath ? 'Not assigned' : 'Thanaphon'}</b></div>
-        <div class="detail"><label>Principal</label><b>${escapeHtml(activeJob.principal || 'Ocean Shipping Ltd.')}</b></div>
-      </div>
+      <form id="hfJobDetailsForm" class="hf-job-details-form">
+        <div class="hf-job-details-grid">
+          ${field('Job No.', activeJob.jobNo, 'name="jobNo" required')}
+          ${field('ETA', activeJob.eta, 'name="eta"', 'datetime-local')}
+          ${field('ETB', activeJob.etb, 'name="etb"', 'datetime-local')}
+          ${field('ETD', activeJob.etd, 'name="etd"', 'datetime-local')}
+          ${field('Principal', activeJob.principal, 'name="principal"')}
+          <div class="hf-field"><span>PIC</span><b>${activeJob.key.startsWith('created-') ? 'Not assigned' : 'Thanaphon'}</b></div>
+        </div>
+        <div class="hf-actions"><button type="submit" class="primary">Save job details</button></div>
+        <p class="small">Job details are saved in this browser. Crew identity data is not saved after reload.</p>
+      </form>
       <div class="panel-head"><h3>Services</h3><button type="button" class="secondary" data-action="add-service">+ Add</button></div>
       <div id="hfServices">${activeJob.services.length ? activeJob.services.map(service => `
         <div class="hf-service-row">
@@ -156,16 +207,13 @@
       </form>
       ${activeJob.eta ? `<h3>Planned GitHub folders</h3><p class="small">Path preview only. No files have been synced.</p><code>${escapeHtml(activeJob.githubPath || jobPath(activeJob))}</code><ul>${servicePaths(activeJob).map(path => `<li><code>${escapeHtml(path)}</code></li>`).join('')}</ul>` : ''}
       <h3>Tasks, documents & timeline</h3>
-      ${activeJob.githubPath ? '<p class="small">No tasks or documents have been recorded for this job.</p>' : `
+      ${activeJob.key.startsWith('created-') ? '<p class="small">No tasks or documents have been recorded for this job.</p>' : `
       <div class="line-item"><b>Tasks: 8 / 11 complete</b><span>Visa confirmation overdue · Supplier follow-up due 23 Sep</span></div>
       <div class="line-item"><b>Documents: 7 / 8 received</b><span>Missing: immigration confirmation</span></div>
       <div class="line-item"><b>Latest activity</b><span>22 Sep 14:05 — ETA amended by Thanaphon</span></div>`}
     `;
   }
 
-  jobDrawer.addEventListener('input', event => {
-    if (event.target.id === 'hfJobNo') activeJob.jobNo = event.target.value;
-  });
   jobDrawer.addEventListener('click', event => {
     const button = event.target.closest('[data-action]');
     if (!button) return;
@@ -178,7 +226,9 @@
       case 'delete-service':
         if (service && window.confirm(`Delete service “${service.name}” from this job?`)) {
           activeJob.services = activeJob.services.filter(item => item !== service);
+          if (activeJob.key.startsWith('created-')) persistJob(activeJob);
           renderJob();
+          renderCreatedJobs();
         }
         break;
       case 'open-service':
@@ -197,6 +247,27 @@
     }
   });
   jobDrawer.addEventListener('submit', event => {
+    if (event.target.id === 'hfJobDetailsForm') {
+      event.preventDefault();
+      const data = new FormData(event.target);
+      const jobNo = String(data.get('jobNo') || '').trim();
+      if (!jobNo) return;
+      const eta = String(data.get('eta') || '');
+      const etb = String(data.get('etb') || '');
+      const etd = String(data.get('etd') || '');
+      if ((eta && etb && etb < eta) || (eta && etd && etd < eta) || (etb && etd && etd < etb)) {
+        notify('ETB and ETD must be after ETA');
+        return;
+      }
+      for (const field of savedFields) activeJob[field] = String(data.get(field) || '').trim();
+      activeJob.jobNo = jobNo;
+      if (activeJob.githubPath) activeJob.githubPath = jobPath(activeJob);
+      const saved = persistJob(activeJob);
+      renderJob();
+      renderCreatedJobs();
+      notify(saved ? 'Job details saved in this browser' : 'Job details updated for this session; browser storage unavailable');
+      return;
+    }
     if (event.target.id !== 'hfServiceForm') return;
     event.preventDefault();
     const data = new FormData(event.target);
@@ -205,6 +276,7 @@
     if (editingService === 'new') activeJob.services.push(makeService(name, String(data.get('note') || '').trim(), String(data.get('status'))));
     else Object.assign(editingService, { name, note: String(data.get('note') || '').trim(), status: String(data.get('status')) });
     editingService = null;
+    if (activeJob.key.startsWith('created-')) persistJob(activeJob);
     renderJob();
     renderCreatedJobs();
   });
@@ -215,28 +287,40 @@
     select(crew[property], options, `data-kind="crew" data-id="${crew.id}" data-field="${property}" aria-label="${escapeHtml(property)} for ${escapeHtml(crew.name || 'new person')}"`);
   const recordInput = (kind, record, property, type = 'text') =>
     `<input type="${type}" data-kind="${kind}" data-id="${record.id}" data-field="${property}" aria-label="${escapeHtml(property)}" value="${escapeHtml(record[property])}">`;
+  const flightInput = (flight, property, placeholder, maxLength) =>
+    `<input type="text" data-kind="flight" data-id="${flight.id}" data-field="${property}" aria-label="${escapeHtml(property)}" placeholder="${placeholder}" maxlength="${maxLength}" value="${escapeHtml(flight[property])}">`;
+  const crewCheck = (crew, property, label) =>
+    `<label class="hf-visa-option"><input type="checkbox" data-kind="crew" data-id="${crew.id}" data-field="${property}" ${crew[property] ? 'checked' : ''}><span>${label}</span></label>`;
 
   function flightTable(crew) {
     return `<div class="hf-subhead"><b>Flights for ${escapeHtml(crew.name || 'this person')}</b><button type="button" class="secondary" data-action="add-flight" data-id="${crew.id}">+ Add flight</button></div>
-      <table class="table hf-nested-table"><thead><tr><th>No.</th><th>Flight No.</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>Booking ref.</th><th></th></tr></thead><tbody>
-      ${crew.flights.length ? crew.flights.map((flight, index) => `<tr><td>${index + 1}</td><td>${recordInput('flight', flight, 'number')}</td><td>${recordInput('flight', flight, 'from')}</td><td>${recordInput('flight', flight, 'to')}</td><td>${recordInput('flight', flight, 'departure', 'datetime-local')}</td><td>${recordInput('flight', flight, 'arrival', 'datetime-local')}</td><td>${recordInput('flight', flight, 'booking')}</td><td><button type="button" class="hf-plain hf-danger" data-action="delete-flight" data-id="${flight.id}" data-person="${crew.id}" aria-label="Remove flight ${index + 1}">×</button></td></tr>`).join('') : '<tr><td colspan="8" class="small">No flights added for this person.</td></tr>'}
-      </tbody></table>`;
+      <div class="table-wrap"><table class="table hf-nested-table"><thead><tr><th>No.</th><th>Airline</th><th>Flight No.</th><th>Date</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>Booking ref.</th><th></th></tr></thead><tbody>
+      ${crew.flights.length ? crew.flights.map((flight, index) => `<tr><td>${index + 1}</td><td>${flightInput(flight, 'airline', '6E', 3)}</td><td>${flightInput(flight, 'number', '1347', 6)}</td><td>${flightInput(flight, 'date', '17SEP', 7)}</td><td>${flightInput(flight, 'from', 'DEL', 3)}</td><td>${flightInput(flight, 'to', 'BKK', 3)}</td><td>${flightInput(flight, 'departure', '0650', 4)}</td><td>${flightInput(flight, 'arrival', '1250', 4)}</td><td>${recordInput('flight', flight, 'booking')}</td><td><button type="button" class="hf-plain hf-danger" data-action="delete-flight" data-id="${flight.id}" data-person="${crew.id}" aria-label="Remove flight ${index + 1}">×</button></td></tr>`).join('') : '<tr><td colspan="10" class="small">No flights added for this person.</td></tr>'}
+      </tbody></table></div>`;
   }
   function personDetails(crew) {
-    return `<tr class="hf-person-details"><td colspan="10"><div class="hf-person-grid">
+    return `<tr class="hf-person-details"><td colspan="9"><div class="hf-person-grid">
       <div><h4>Details & Immigration · ${escapeHtml(crew.name || 'New person')}</h4><div class="hf-immigration-grid">
         <label>Category ${crewSelect(crew, 'change', categories)}</label>
-        <label>Visa / permission ${crewInput(crew, 'visa')}</label><label>BG / OKTB ${crewInput(crew, 'bg')}</label>
+        ${crew.change === 'Other' ? `<label>Other category <input type="text" data-kind="crew" data-id="${crew.id}" data-field="otherCategory" placeholder="Type category" value="${escapeHtml(crew.otherCategory)}"></label>` : ''}
+        <fieldset class="hf-visa-options"><legend>Visa / permission</legend>
+          ${crewCheck(crew, 'visaTr', 'VISA-TR')}
+          ${crewCheck(crew, 'visaC', 'VISA-C')}
+          ${crewCheck(crew, 'visaArrival', 'VISA-ARRIVAL')}
+          ${crewCheck(crew, 'oktb', 'OKTB')}
+          ${crewCheck(crew, 'bgEx', 'BG. EX')}
+        </fieldset>
         <label>Status ${crewSelect(crew, 'immigrationStatus', ['Not started', 'Documents pending', 'Submitted', 'Approved', 'Completed'])}</label>
-        <label>Submitted date ${crewInput(crew, 'submitted', 'date')}</label><label class="hf-wide">Notes ${crewInput(crew, 'immigrationNotes')}</label>
+        <label>Submitted date ${crewInput(crew, 'submitted', 'date')}</label>
+        <label>Notes ${crewInput(crew, 'immigrationNotes')}</label>
       </div></div><div class="hf-flight-area">${flightTable(crew)}</div></div></td></tr>`;
   }
   function crewTable(change) {
     const list = activeJob.crew.filter(crew => crew.change === change);
     const open = activeJob.groupOpen[change];
     return `<section class="hf-crew-group"><div class="hf-group-head"><button type="button" class="hf-group-toggle" data-action="toggle-group" data-change="${escapeHtml(change)}" aria-expanded="${Boolean(open)}"><span class="hf-chevron">${open ? '▾' : '▸'}</span>${escapeHtml(change)} <span class="small">(${list.length})</span></button><button type="button" class="secondary" data-action="add-crew" data-change="${escapeHtml(change)}">+ Add</button></div>
-      ${open ? `<div class="table-wrap"><table class="table hf-crew-table"><thead><tr><th>No.</th><th>Name · Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Seaman Book</th><th>Passport</th><th>PP. Exp.</th><th>Details</th><th></th></tr></thead>
-      <tbody>${list.length ? list.map((crew, index) => `<tr><td>${index + 1}</td><td>${crewInput(crew, 'name')}</td><td>${crewInput(crew, 'nationality')}</td><td>${crewInput(crew, 'rank')}</td><td>${crewInput(crew, 'dob', 'date')}</td><td>${crewInput(crew, 'seamanBook')}</td><td>${crewInput(crew, 'passport')}</td><td>${crewInput(crew, 'passportExpiry', 'date')}</td><td><button type="button" class="hf-plain" data-action="toggle-person" data-id="${crew.id}" aria-expanded="${Boolean(activeJob.personOpen[crew.id])}">${activeJob.personOpen[crew.id] ? 'Hide' : 'Flight / Immigration'}</button></td><td><button type="button" class="hf-plain hf-danger" data-action="delete-crew" data-id="${crew.id}" aria-label="Remove ${escapeHtml(crew.name || 'person ' + (index + 1))}">×</button></td></tr>${activeJob.personOpen[crew.id] ? personDetails(crew) : ''}`).join('') : '<tr><td colspan="10" class="small">No people in this group yet.</td></tr>'}</tbody></table></div>` : ''}</section>`;
+      ${open ? `<div class="table-wrap"><table class="table hf-crew-table"><thead><tr><th>No.</th><th>Name · Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Seaman Book · dates</th><th>Passport · dates</th><th>Details</th><th></th></tr></thead>
+      <tbody>${list.length ? list.map((crew, index) => `<tr><td>${index + 1}</td><td>${crewInput(crew, 'name')}${crew.change === 'Other' && crew.otherCategory ? `<small>${escapeHtml(crew.otherCategory)}</small>` : ''}</td><td>${crewInput(crew, 'nationality')}</td><td>${crewInput(crew, 'rank')}</td><td>${crewInput(crew, 'dob', 'date')}</td><td><div class="hf-document-fields">${crewInput(crew, 'seamanBook')}<div class="hf-date-pair"><label>Issue ${crewInput(crew, 'seamanBookIssue', 'date')}</label><label>Expiry ${crewInput(crew, 'seamanBookExpiry', 'date')}</label></div></div></td><td><div class="hf-document-fields">${crewInput(crew, 'passport')}<div class="hf-date-pair"><label>Issue ${crewInput(crew, 'passportIssue', 'date')}</label><label>Expiry ${crewInput(crew, 'passportExpiry', 'date')}</label></div></div></td><td><button type="button" class="hf-plain" data-action="toggle-person" data-id="${crew.id}" aria-expanded="${Boolean(activeJob.personOpen[crew.id])}">${activeJob.personOpen[crew.id] ? 'Hide' : 'Flight / Immigration'}</button></td><td><button type="button" class="hf-plain hf-danger" data-action="delete-crew" data-id="${crew.id}" aria-label="Remove ${escapeHtml(crew.name || 'person ' + (index + 1))}">×</button></td></tr>${activeJob.personOpen[crew.id] ? personDetails(crew) : ''}`).join('') : '<tr><td colspan="9" class="small">No people in this group yet.</td></tr>'}</tbody></table></div>` : ''}</section>`;
   }
   function transportTable(kind, title) {
     const list = kind === 'car' ? activeJob.cars : activeJob.boats;
@@ -309,7 +393,7 @@
     if (!kind || !recordId || !field) return;
     const list = kind === 'crew' ? activeJob.crew : kind === 'car' ? activeJob.cars : kind === 'boat' ? activeJob.boats : activeJob.crew.flatMap(person => person.flights);
     const record = list.find(item => item.id === recordId);
-    if (record) record[field] = event.target.value;
+    if (record) record[field] = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
   }
   detailDrawer.addEventListener('input', updateRecord);
   detailDrawer.addEventListener('change', event => {
