@@ -28,13 +28,16 @@
   let activeService;
   let activeTab = 'crew';
   let editingService = null;
+  let auth = { configured: false, authenticated: false };
+  let syncMessage = 'Checking GitHub access…';
+  const loadedCrew = new Set();
   let nextId = 1;
   const categories = ['On-signers', 'Off-signers', 'Medical visitors', 'SIRE Inspectors', 'Surveyors', 'Service Engineers', 'Other'];
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   })[char]);
-  const id = () => String(nextId++);
+  const id = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + '-' + String(nextId++);
   const makeService = (name, note, status) => ({ id: id(), name, note, status });
   const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
   const folderName = value => String(value || '').trim().replace(/[\\/<>:"|?*\x00-\x1f]/g, ' ')
@@ -55,10 +58,10 @@
     passport: '', passportIssue: '', passportExpiry: '',
     seamanBook: '', seamanBookIssue: '', seamanBookExpiry: '', status: 'Not started',
     otherCategory: '', visaTr: false, visaC: false, visaArrival: false,
-    oktb: false, bgEx: false, immigrationStatus: 'Not started', submitted: '',
-    immigrationNotes: '', flights: [], ...data
+    oktb: false, bg: false, ex: false, immigrationStatus: 'Not started',
+    immigrationNotes: '', attachments: {}, flights: [], ...data
   });
-  const makeFlight = () => ({ id: id(), airline: '', number: '', date: '', from: '', to: '', departure: '', arrival: '', booking: '' });
+  const makeFlight = () => ({ id: id(), airline: '', number: '', date: '', from: '', to: '', departure: '', arrival: '', booking: '', attachments: {} });
   const makeTransport = () => ({ id: id(), passenger: '', date: '', from: '', to: '', supplier: '', reference: '' });
   const field = (label, value, data, type = 'text') =>
     `<label class="hf-field"><span>${label}</span><input type="${type}" ${data} value="${escapeHtml(value)}"></label>`;
@@ -238,6 +241,7 @@
           activeTab = 'crew';
           renderCrew();
           detailDrawer.classList.add('open');
+          loadCrew();
         } else {
           editingService = service;
           renderJob();
@@ -295,32 +299,37 @@
   function flightTable(crew) {
     return `<div class="hf-subhead"><b>Flights for ${escapeHtml(crew.name || 'this person')}</b><button type="button" class="secondary" data-action="add-flight" data-id="${crew.id}">+ Add flight</button></div>
       <div class="table-wrap"><table class="table hf-nested-table"><thead><tr><th>No.</th><th>Airline</th><th>Flight No.</th><th>Date</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>Booking ref.</th><th></th></tr></thead><tbody>
-      ${crew.flights.length ? crew.flights.map((flight, index) => `<tr><td>${index + 1}</td><td>${flightInput(flight, 'airline', '6E', 3)}</td><td>${flightInput(flight, 'number', '1347', 6)}</td><td>${flightInput(flight, 'date', '17SEP', 7)}</td><td>${flightInput(flight, 'from', 'DEL', 3)}</td><td>${flightInput(flight, 'to', 'BKK', 3)}</td><td>${flightInput(flight, 'departure', '0650', 4)}</td><td>${flightInput(flight, 'arrival', '1250', 4)}</td><td>${recordInput('flight', flight, 'booking')}</td><td><button type="button" class="hf-plain hf-danger" data-action="delete-flight" data-id="${flight.id}" data-person="${crew.id}" aria-label="Remove flight ${index + 1}">×</button></td></tr>`).join('') : '<tr><td colspan="10" class="small">No flights added for this person.</td></tr>'}
+      ${crew.flights.length ? crew.flights.map((flight, index) => `<tr><td>${index + 1}</td><td>${flightInput(flight, 'airline', '6E', 3)}</td><td>${flightInput(flight, 'number', '1347', 6)}</td><td>${flightInput(flight, 'date', '17SEP', 7)}</td><td>${flightInput(flight, 'from', 'DEL', 3)}</td><td>${flightInput(flight, 'to', 'BKK', 3)}</td><td>${flightInput(flight, 'departure', '0650', 4)}</td><td>${flightInput(flight, 'arrival', '1250', 4)}</td><td>${recordInput('flight', flight, 'booking')}${attachmentControl(flight, 'flight', 'Flight', crew.id)}</td><td><button type="button" class="hf-plain hf-danger" data-action="delete-flight" data-id="${flight.id}" data-person="${crew.id}" aria-label="Remove flight ${index + 1}">×</button></td></tr>`).join('') : '<tr><td colspan="10" class="small">No flights added for this person.</td></tr>'}
       </tbody></table></div>`;
+  }
+  function attachmentControl(record, type, label, personId = '') {
+    const file = record.attachments?.[type];
+    return `<div class="hf-attachment"><button type="button" class="secondary" data-action="attach" data-id="${record.id}" data-person="${personId || record.id}" data-type="${type}">+ Attach file</button>${file ? `<span title="${escapeHtml(file.path || '')}">${escapeHtml(file.name)}</span>` : ''}</div>`;
   }
   function personDetails(crew) {
     return `<tr class="hf-person-details"><td colspan="9"><div class="hf-person-grid">
       <div><h4>Details & Immigration · ${escapeHtml(crew.name || 'New person')}</h4><div class="hf-immigration-grid">
-        <label>Category ${crewSelect(crew, 'change', categories)}</label>
-        ${crew.change === 'Other' ? `<label>Other category <input type="text" data-kind="crew" data-id="${crew.id}" data-field="otherCategory" placeholder="Type category" value="${escapeHtml(crew.otherCategory)}"></label>` : ''}
+        <label class="hf-category-field">Category ${crewSelect(crew, 'change', categories)}</label>
         <fieldset class="hf-visa-options"><legend>Visa / permission</legend>
           ${crewCheck(crew, 'visaTr', 'VISA-TR')}
           ${crewCheck(crew, 'visaC', 'VISA-C')}
           ${crewCheck(crew, 'visaArrival', 'VISA-ARRIVAL')}
           ${crewCheck(crew, 'oktb', 'OKTB')}
-          ${crewCheck(crew, 'bgEx', 'BG. EX')}
+          ${crewCheck(crew, 'bg', 'BG.')}
+          ${crewCheck(crew, 'ex', 'EX')}
+          ${attachmentControl(crew, 'visa', 'Visa / permission')}
         </fieldset>
-        <label>Status ${crewSelect(crew, 'immigrationStatus', ['Not started', 'Documents pending', 'Submitted', 'Approved', 'Completed'])}</label>
-        <label>Submitted date ${crewInput(crew, 'submitted', 'date')}</label>
-        <label>Notes ${crewInput(crew, 'immigrationNotes')}</label>
+        <label class="hf-status-field">Status ${crewSelect(crew, 'immigrationStatus', ['Not started', 'Documents pending', 'Submitted', 'Approved', 'Completed'])}</label>
+        ${crew.change === 'Other' ? `<label class="hf-other-field">Other category <input type="text" data-kind="crew" data-id="${crew.id}" data-field="otherCategory" placeholder="Type category" value="${escapeHtml(crew.otherCategory)}"></label>` : ''}
+        <label class="hf-notes-field">Notes ${crewInput(crew, 'immigrationNotes')}</label>
       </div></div><div class="hf-flight-area">${flightTable(crew)}</div></div></td></tr>`;
   }
   function crewTable(change) {
     const list = activeJob.crew.filter(crew => crew.change === change);
     const open = activeJob.groupOpen[change];
     return `<section class="hf-crew-group"><div class="hf-group-head"><button type="button" class="hf-group-toggle" data-action="toggle-group" data-change="${escapeHtml(change)}" aria-expanded="${Boolean(open)}"><span class="hf-chevron">${open ? '▾' : '▸'}</span>${escapeHtml(change)} <span class="small">(${list.length})</span></button><button type="button" class="secondary" data-action="add-crew" data-change="${escapeHtml(change)}">+ Add</button></div>
-      ${open ? `<div class="table-wrap"><table class="table hf-crew-table"><thead><tr><th>No.</th><th>Name · Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Seaman Book · dates</th><th>Passport · dates</th><th>Details</th><th></th></tr></thead>
-      <tbody>${list.length ? list.map((crew, index) => `<tr><td>${index + 1}</td><td>${crewInput(crew, 'name')}${crew.change === 'Other' && crew.otherCategory ? `<small>${escapeHtml(crew.otherCategory)}</small>` : ''}</td><td>${crewInput(crew, 'nationality')}</td><td>${crewInput(crew, 'rank')}</td><td>${crewInput(crew, 'dob', 'date')}</td><td><div class="hf-document-fields">${crewInput(crew, 'seamanBook')}<div class="hf-date-pair"><label>Issue ${crewInput(crew, 'seamanBookIssue', 'date')}</label><label>Expiry ${crewInput(crew, 'seamanBookExpiry', 'date')}</label></div></div></td><td><div class="hf-document-fields">${crewInput(crew, 'passport')}<div class="hf-date-pair"><label>Issue ${crewInput(crew, 'passportIssue', 'date')}</label><label>Expiry ${crewInput(crew, 'passportExpiry', 'date')}</label></div></div></td><td><button type="button" class="hf-plain" data-action="toggle-person" data-id="${crew.id}" aria-expanded="${Boolean(activeJob.personOpen[crew.id])}">${activeJob.personOpen[crew.id] ? 'Hide' : 'Flight / Immigration'}</button></td><td><button type="button" class="hf-plain hf-danger" data-action="delete-crew" data-id="${crew.id}" aria-label="Remove ${escapeHtml(crew.name || 'person ' + (index + 1))}">×</button></td></tr>${activeJob.personOpen[crew.id] ? personDetails(crew) : ''}`).join('') : '<tr><td colspan="9" class="small">No people in this group yet.</td></tr>'}</tbody></table></div>` : ''}</section>`;
+      ${open ? `<div class="table-wrap"><table class="table hf-crew-table"><thead><tr><th>No.</th><th>Name · Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Passport · dates</th><th>Seaman Book · dates</th><th>Details</th><th></th></tr></thead>
+      <tbody>${list.length ? list.map((crew, index) => `<tr><td>${index + 1}</td><td>${crewInput(crew, 'name')}${crew.change === 'Other' && crew.otherCategory ? `<small>${escapeHtml(crew.otherCategory)}</small>` : ''}</td><td>${crewInput(crew, 'nationality')}</td><td>${crewInput(crew, 'rank')}</td><td>${crewInput(crew, 'dob', 'date')}</td><td><div class="hf-document-fields">${crewInput(crew, 'passport')}<div class="hf-date-pair"><label>Issue ${crewInput(crew, 'passportIssue', 'date')}</label><label>Expiry ${crewInput(crew, 'passportExpiry', 'date')}</label></div>${attachmentControl(crew, 'passport', 'Passport')}</div></td><td><div class="hf-document-fields">${crewInput(crew, 'seamanBook')}<div class="hf-date-pair"><label>Issue ${crewInput(crew, 'seamanBookIssue', 'date')}</label><label>Expiry ${crewInput(crew, 'seamanBookExpiry', 'date')}</label></div>${attachmentControl(crew, 'seamanBook', 'Seaman Book')}</div></td><td><button type="button" class="hf-plain" data-action="toggle-person" data-id="${crew.id}" aria-expanded="${Boolean(activeJob.personOpen[crew.id])}">${activeJob.personOpen[crew.id] ? 'Hide' : 'Flight / Immigration'}</button></td><td><button type="button" class="hf-plain hf-danger" data-action="delete-crew" data-id="${crew.id}" aria-label="Remove ${escapeHtml(crew.name || 'person ' + (index + 1))}">×</button></td></tr>${activeJob.personOpen[crew.id] ? personDetails(crew) : ''}`).join('') : '<tr><td colspan="9" class="small">No people in this group yet.</td></tr>'}</tbody></table></div>` : ''}</section>`;
   }
   function transportTable(kind, title) {
     const list = kind === 'car' ? activeJob.cars : activeJob.boats;
@@ -342,14 +351,118 @@
       <h2>${escapeHtml(activeService.name)}</h2>
       <div class="meta">Crew members and visitors · ${escapeHtml(activeJob.port)} · PIC: Thanaphon</div>
       <div class="tabs hf-tabs" role="tablist" aria-label="Crew change sections">${[['crew', 'Crew members and Visitors'], ['travel', 'Travel'], ['checklist', 'Checklist']].map(([key, label]) => `<button type="button" role="tab" aria-selected="${activeTab === key}" class="tab ${activeTab === key ? 'active' : ''}" data-action="tab" data-tab="${key}">${label}</button>`).join('')}</div>
+      ${activeTab === 'crew' ? `<div class="hf-save-bar"><span role="status">${escapeHtml(syncMessage)}</span><div>${auth.authenticated || !auth.configured ? '' : '<a class="secondary hf-sign-in" href="/api/auth?mode=start">Sign in with GitHub</a>'}<button type="button" class="primary" data-action="save-crew" ${auth.authenticated ? '' : 'disabled'}>Save crew data</button></div></div>` : ''}
       <div role="tabpanel" class="hf-tab-panel">${activeTab === 'crew' ? categories.map(crewTable).join('') : activeTab === 'travel' ? travelTable() : checklist()}</div>
-      <p class="hf-demo-note">Demo only — details are kept in this page until it is refreshed. Do not enter real personal documents here.</p>
+      <p class="hf-demo-note">Crew data and attachments are saved in the private GitHub job documents repository after you select Save.</p>
     `;
   }
+  const attachmentInput = document.createElement('input');
+  attachmentInput.type = 'file';
+  attachmentInput.accept = '.pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png';
+  attachmentInput.hidden = true;
+  document.body.appendChild(attachmentInput);
+  let attachmentTarget = null;
+  function jobPayload() {
+    return { name: activeJob.name, jobNo: activeJob.jobNo, eta: activeJob.eta };
+  }
+  async function api(path, options) {
+    const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw Error(body.error || `Request failed (${response.status})`);
+    return body;
+  }
+  async function loadCrew() {
+    const job = activeJob, service = activeService;
+    try {
+      auth = await api('/api/auth?mode=status');
+      if (!auth.authenticated) {
+        syncMessage = auth.configured ? 'Sign in as primoxy-dev to load and save crew data.' : 'Private GitHub storage needs server configuration.';
+        renderCrew();
+        return;
+      }
+      const key = `${job.key}:${service.name}`;
+      if (loadedCrew.has(key)) { syncMessage = 'Crew records loaded from GitHub.'; renderCrew(); return; }
+      syncMessage = 'Loading crew records from GitHub…';
+      renderCrew();
+      const query = new URLSearchParams({ vessel: job.name, jobNo: job.jobNo, eta: job.eta, service: service.name });
+      const data = await api('/api/crew?' + query);
+      if (activeJob !== job || activeService !== service) return;
+      job.crew = data.crew;
+      loadedCrew.add(key);
+      job.crew.forEach(person => {
+        if (!person.attachments) person.attachments = {};
+        if (!Array.isArray(person.flights)) person.flights = [];
+        person.flights.forEach(flight => { if (!flight.attachments) flight.attachments = {}; });
+      });
+      syncMessage = 'Crew records loaded from GitHub.';
+      renderCrew();
+    } catch (error) {
+      syncMessage = error.message;
+      renderCrew();
+    }
+  }
+  async function saveCrew() {
+    if (!auth.authenticated) return;
+    syncMessage = 'Saving crew records…';
+    renderCrew();
+    try {
+      const result = await api('/api/crew', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job: jobPayload(), service: activeService.name, crew: activeJob.crew })
+      });
+      syncMessage = `Saved to private GitHub: ${result.path}`;
+      renderCrew();
+    } catch (error) {
+      syncMessage = 'Save failed: ' + error.message;
+      renderCrew();
+    }
+  }
+  function selectAttachment(button) {
+    if (!auth.authenticated) { syncMessage = 'Sign in as primoxy-dev before attaching files.'; renderCrew(); return; }
+    const person = activeJob.crew.find(item => item.id === button.dataset.person);
+    if (!person) return;
+    const record = button.dataset.type === 'flight' ? person.flights.find(item => item.id === button.dataset.id) : person;
+    if (!record) return;
+    attachmentTarget = { person, record, type: button.dataset.type };
+    attachmentInput.value = '';
+    attachmentInput.click();
+  }
+  attachmentInput.addEventListener('change', async () => {
+    const file = attachmentInput.files?.[0];
+    const target = attachmentTarget;
+    if (!file || !target) return;
+    if (file.size > 5 * 1024 * 1024) { syncMessage = 'File must be smaller than 5 MB.'; renderCrew(); return; }
+    syncMessage = `Uploading ${file.name}…`;
+    renderCrew();
+    try {
+      const contentBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(Error('Cannot read the selected file'));
+        reader.readAsDataURL(file);
+      });
+      const data = await api('/api/attachment', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job: jobPayload(), service: activeService.name, person: target.person,
+          personId: target.person.id, recordId: target.record.id,
+          type: target.type, filename: file.name, mimeType: file.type, contentBase64
+        })
+      });
+      target.record.attachments ||= {};
+      target.record.attachments[target.type] = data.attachment;
+      await saveCrew();
+    } catch (error) {
+      syncMessage = 'Upload failed: ' + error.message;
+      renderCrew();
+    }
+  });
   detailDrawer.addEventListener('click', event => {
     const button = event.target.closest('[data-action]');
     if (!button) return;
     if (button.dataset.action === 'close-crew') detailDrawer.classList.remove('open');
+    if (button.dataset.action === 'save-crew') saveCrew();
+    if (button.dataset.action === 'attach') selectAttachment(button);
     if (button.dataset.action === 'tab') { activeTab = button.dataset.tab; renderCrew(); }
     if (button.dataset.action === 'toggle-group') {
       activeJob.groupOpen[button.dataset.change] = !activeJob.groupOpen[button.dataset.change];
