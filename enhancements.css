@@ -84,3 +84,15 @@
 .hf-check input { accent-color: var(--teal); width: 17px; height: 17px; }
 .hf-demo-note { color: var(--muted); font-size: 11px; margin-top: 24px; }
 
+
+.hf-immigration-grid { grid-template-columns: minmax(145px, 0.8fr) minmax(550px, 3fr) minmax(150px, 0.8fr); align-items: end; }
+.hf-visa-options { grid-column: auto; align-self: stretch; gap: 8px 12px; }
+.hf-visa-options .hf-attachment { margin-left: auto; }
+.hf-other-field, .hf-notes-field { grid-column: 1 / -1; }
+.hf-attachment { display: flex; align-items: center; gap: 7px; margin-top: 5px; font-size: 11px; overflow-wrap: anywhere; }
+.hf-attachment .secondary { font-size: 11px; white-space: nowrap; padding: 5px 7px; }
+.hf-save-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; margin-top: 12px; border-radius: 8px; background: #edf3f8; font-size: 12px; }
+.hf-save-bar > div { display: flex; align-items: center; gap: 8px; }
+.hf-save-bar .hf-sign-in { display: inline-block; text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 8px; background: white; color: var(--ink); }
+.hf-save-bar button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 1000px) { .hf-immigration-grid { grid-template-columns: 1fr; } .hf-visa-options, .hf-other-field, .hf-notes-field { grid-column: 1; } .hf-save-bar { flex-direction: column; align-items: stretch; } }
