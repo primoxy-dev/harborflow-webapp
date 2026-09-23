@@ -20,13 +20,13 @@
 
 ### ตัวอย่างขั้นตอน Crew Change
 
-เปิดหน้า **Operations** → คลิกชื่อเรือในปฏิทิน → แก้ **Job No.** ได้ → เพิ่ม/แก้ไข/ลบ **Service** → คลิก **Crew change**
+เปิดหน้า **Operations** → คลิกชื่อเรือในปฏิทิน → แก้ **Job No., ETA, ETB, ETD, Principal** แล้วกด **Save job details** → เพิ่ม/แก้ไข/ลบ **Service** → คลิก **Crew change**
 
-หน้ารายละเอียด Crew Change เปิดเต็มจอ มี 3 แท็บ: **Crew members and Visitors, Travel, Checklist** กลุ่มรายชื่อ On-signers, Off-signers, Medical visitors, SIRE Inspectors, Surveyors และ Service Engineers พับ/ขยายได้ แต่ละกลุ่มเพิ่มและลบคนในตารางได้ กด **Flight / Immigration** ที่แถวของบุคคลเพื่อกรอกข้อมูล Immigration และเพิ่ม/ลบเที่ยวบินของคนนั้น ส่วนแท็บ Travel มีตารางการใช้รถและเรือที่เพิ่ม/ลบรายการได้
+หน้ารายละเอียด Crew Change เปิดเต็มจอ มี 3 แท็บ: **Crew members and Visitors, Travel, Checklist** กลุ่มรายชื่อ On-signers, Off-signers, Medical visitors, SIRE Inspectors, Surveyors, Service Engineers และ Other พับ/ขยายได้ แต่ละกลุ่มเพิ่มและลบคนในตารางได้ กด **Flight / Immigration** ที่แถวของบุคคลเพื่อกรอกข้อมูล Immigration และเพิ่ม/ลบเที่ยวบินของคนนั้น ส่วนแท็บ Travel มีตารางการใช้รถและเรือที่เพิ่ม/ลบรายการได้
 
 ## สถานะการพัฒนา
 
-เว็บนี้เป็น **interactive front-end prototype** พร้อมข้อมูลสาธิต ยังไม่มีฐานข้อมูล การเข้าสู่ระบบ การเก็บข้อมูลถาวร หรือการกำหนดสิทธิ์จริง การกด Save, Approve, Sync และ Generate Report หลายจุดเป็นเพียงการแสดงผลสาธิต ข้อมูลที่แก้ใน Job, Service และ Crew Change จะหายเมื่อรีโหลดหน้าเว็บ
+เว็บนี้เป็น **interactive front-end prototype** พร้อมข้อมูลสาธิต ยังไม่มีฐานข้อมูล การเข้าสู่ระบบ การเก็บข้อมูลถาวร หรือการกำหนดสิทธิ์จริง การกด Approve, Sync และ Generate Report หลายจุดเป็นเพียงการแสดงผลสาธิต เฉพาะข้อมูล Job ที่ไม่ใช่ข้อมูลลูกเรือจะเก็บใน localStorage ของเบราว์เซอร์นี้หลังบันทึก ส่วนข้อมูล Crew Change รวมถึงหมายเลขเอกสาร วันที่เอกสาร Visa และเที่ยวบินยังอยู่ในหน่วยความจำและจะหายเมื่อรีโหลด
 
 ข้อมูลราคา ข่าว จำนวนงาน และหมายเลขเอกสารบนหน้าเว็บเป็นตัวอย่าง ยังไม่ได้เชื่อม Excel บน GitHub, ระบบ Finance, Email หรือ ERP และยังสร้าง PDF/Excel/PowerPoint จริงไม่ได้
 
@@ -34,7 +34,7 @@
 
 ## Create Job และโครงสร้างเอกสาร (งานระหว่างพัฒนา)
 
-ปุ่ม **Create job** เพิ่ม Job ในรายการ **Jobs created this session** และเปิดรายละเอียดเพื่อเพิ่ม Service ได้แล้ว ข้อมูลยังอยู่ในหน่วยความจำของเบราว์เซอร์เท่านั้นและหายเมื่อรีโหลด หน้า Job แสดง **Planned GitHub folders** เป็นตัวอย่าง path; ยังไม่มีการสร้างไฟล์หรือโฟลเดอร์บน GitHub
+ปุ่ม **Create job** เพิ่ม Job ในรายการ **Jobs saved in this browser** และเปิดรายละเอียดเพื่อเพิ่ม Service ได้แล้ว ข้อมูล Job และชื่อ Service ของ Job ที่สร้างใหม่เก็บเฉพาะใน localStorage ของเบราว์เซอร์นี้ ไม่มีการ sync ข้ามเครื่องหรือบัญชี หน้า Job แสดง **Planned GitHub folders** เป็นตัวอย่าง path; ยังไม่มีการสร้างไฟล์หรือโฟลเดอร์บน GitHub
 
 รูปแบบ path ที่เตรียมไว้:
 
@@ -46,7 +46,7 @@ Jobs/2026/09. SEP/10. SHION - HF-20260910-001/
 
 ชื่อโฟลเดอร์ถูกตัดอักขระที่ใช้เป็นตัวคั่น path และมี Job No. ต่อท้ายเพื่อแยกงานของเรือลำเดียวกันในวันเดียวกัน Service ที่เพิ่มใน Job จะปรากฏในรายการ path ตัวอย่าง ส่วน `General` มีไว้เสมอ
 
-เอกสารงานจริงควรอยู่ใน **private repository แยกจาก source code สาธารณะ** การทำให้ Sync ใช้งานจริงต้องมีฐานข้อมูล Job, ระบบ Login/สิทธิ์, และ API ฝั่ง server ที่รับรองสิทธิ์ผู้ใช้ก่อนเขียน GitHub โดยเก็บ GitHub credential เป็น secret ฝั่ง server เท่านั้น ไม่ฝัง token ใน `index.html` หรือ `enhancements.js` และไม่ส่งเอกสารส่วนบุคคลไป repository สาธารณะ
+เอกสารงานจริงควรอยู่ใน [private repository `primoxy-dev/harborflow-job-documents`](https://github.com/primoxy-dev/harborflow-job-documents) ที่แยกจาก source code สาธารณะ การทำให้ Sync ใช้งานจริงต้องมีฐานข้อมูล Job, ระบบ Login/สิทธิ์, และ API ฝั่ง server ที่รับรองสิทธิ์ผู้ใช้ก่อนเขียน GitHub โดยเก็บ GitHub credential เป็น secret ฝั่ง server เท่านั้น ไม่ฝัง token ใน `index.html` หรือ `enhancements.js` และไม่ส่งเอกสารส่วนบุคคลไป repository สาธารณะ
 
 ## งานที่ต้องทำก่อนใช้งานจริง
 
