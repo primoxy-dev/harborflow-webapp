@@ -6,8 +6,12 @@
 .hf-field input:focus, .hf-field select:focus, .hf-crew-table input:focus, .hf-crew-table select:focus {
   border-color: var(--teal); outline: 2px solid #107a7222;
 }
-.hf-job-number { margin: 14px 0 10px; }
-.hf-job-number input { font-weight: 600; }
+.hf-job-details-form { margin: 14px 0 22px; padding: 14px; background: var(--page); border-radius: 8px; }
+.hf-job-details-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.hf-job-details-grid .hf-field input { min-width: 0; }
+.hf-job-details-grid .hf-field b { padding: 9px 0; color: var(--ink); font-size: 12px; }
+.hf-job-details-form .hf-actions { margin-top: 12px; }
+.hf-job-details-form .small { margin: 9px 0 0; }
 .hf-service-row { display: flex; align-items: center; gap: 7px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .hf-service-open { flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; color: var(--ink); padding: 2px 0; }
 .hf-service-open b, .hf-service-open small { display: block; }
@@ -27,15 +31,21 @@
 .service-drawer { left: 0; right: 0; width: 100vw; max-width: none; height: 100vh; padding: 24px 32px; box-shadow: none; }
 .service-drawer > .close { float: right; }
 .service-drawer h2 { margin: 5px 0; }
-.hf-crew-table { width: 100%; min-width: 1050px; table-layout: fixed; }
+.hf-crew-table { width: 100%; min-width: 1450px; table-layout: fixed; }
 .hf-crew-table th { white-space: nowrap; }
 .hf-crew-table td { vertical-align: middle; padding: 7px 6px; }
 .hf-crew-table th { padding: 0 6px 8px; }
 .hf-crew-table th:nth-child(1) { width: 42px; }
-.hf-crew-table th:nth-child(2) { width: 17%; }
-.hf-crew-table th:nth-child(5), .hf-crew-table th:nth-child(8) { width: 135px; }
-.hf-crew-table th:nth-child(9) { width: 130px; }
-.hf-crew-table th:nth-child(10) { width: 35px; }
+.hf-crew-table th:nth-child(2) { width: 14%; }
+.hf-crew-table th:nth-child(3), .hf-crew-table th:nth-child(4) { width: 11%; }
+.hf-crew-table th:nth-child(5) { width: 135px; }
+.hf-crew-table th:nth-child(6), .hf-crew-table th:nth-child(7) { width: 260px; }
+.hf-crew-table th:nth-child(8) { width: 120px; }
+.hf-crew-table th:nth-child(9) { width: 35px; }
+.hf-document-fields { display: grid; gap: 5px; }
+.hf-date-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.hf-date-pair label { display: grid; gap: 2px; color: var(--muted); font-size: 10px; }
+.hf-crew-table td small { display: block; color: var(--muted); }
 .hf-crew-table input, .hf-crew-table input[type="date"] { min-width: 0; padding: 6px; }
 .hf-crew-table td:first-child { font-weight: 600; }
 .hf-group-head { background: #edf3f8; padding: 7px 10px; border-radius: 6px; }
@@ -44,13 +54,20 @@
 .hf-crew-group { margin-bottom: 11px; }
 .hf-person-details td { background: #f7fafc; padding: 14px !important; }
 .hf-person-grid h4 { margin: 0 0 9px; }
-.hf-immigration-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.hf-immigration-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
 .hf-immigration-grid label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; }
 .hf-immigration-grid input, .hf-immigration-grid select { width: 100%; min-width: 0; padding: 7px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.hf-visa-options { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 6px; }
+.hf-visa-options legend { color: var(--muted); font-size: 11px; padding: 0 5px; }
+.hf-immigration-grid .hf-visa-option { display: flex; align-items: center; gap: 5px; color: var(--ink); font-size: 11px; }
+.hf-immigration-grid input[type="checkbox"] { width: 16px; height: 16px; min-width: 16px; accent-color: var(--teal); }
 .hf-subhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px; }
-.hf-nested-table { width: 100%; table-layout: fixed; }
+.hf-nested-table { width: 100%; min-width: 1100px; table-layout: fixed; }
 .hf-nested-table th:first-child { width: 40px; }
-.hf-nested-table th:nth-child(5), .hf-nested-table th:nth-child(6) { width: 175px; }
+.hf-nested-table th:nth-child(2) { width: 70px; }
+.hf-nested-table th:nth-child(3), .hf-nested-table th:nth-child(4) { width: 95px; }
+.hf-nested-table th:nth-child(5), .hf-nested-table th:nth-child(6) { width: 75px; }
+.hf-nested-table th:nth-child(7), .hf-nested-table th:nth-child(8) { width: 100px; }
 .hf-nested-table th:last-child { width: 35px; }
 .hf-nested-table td { padding: 6px !important; }
 .hf-nested-table input { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--line); border-radius: 6px; }
@@ -61,7 +78,8 @@
 .hf-transport-table th:last-child { width: 35px; }
 .hf-transport-table td { padding: 7px 6px; }
 .hf-transport-table input { width: 100%; min-width: 0; padding: 7px; border: 1px solid var(--line); border-radius: 6px; }
-@media (max-width: 1100px) { .service-drawer { padding: 18px; } .hf-crew-table { min-width: 1050px; } }
+@media (max-width: 1100px) { .service-drawer { padding: 18px; } .hf-crew-table { min-width: 1450px; } }
+@media (max-width: 650px) { .hf-job-details-grid, .hf-immigration-grid { grid-template-columns: 1fr; } }
 .hf-check { display: flex; gap: 10px; align-items: center; padding: 13px 5px; border-bottom: 1px solid var(--line); }
 .hf-check input { accent-color: var(--teal); width: 17px; height: 17px; }
 .hf-demo-note { color: var(--muted); font-size: 11px; margin-top: 24px; }
