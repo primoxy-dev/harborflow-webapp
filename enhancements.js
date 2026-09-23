@@ -71,10 +71,10 @@
 
   // Clone calendar buttons to replace the original read-only demo click handlers.
   function openJob(button) {
-      activeJob = getJob(button);
-      editingService = null;
-      renderJob();
-      jobDrawer.classList.add('open');
+    activeJob = getJob(button);
+    editingService = null;
+    renderJob();
+    jobDrawer.classList.add('open');
   }
   document.querySelectorAll('.job').forEach(original => {
     const button = original.cloneNode(true);
@@ -129,7 +129,7 @@
       <button type="button" class="close" data-action="close-job" aria-label="Close job details">×</button>
       <h2>${escapeHtml(activeJob.name)}</h2>
       <div class="meta">${escapeHtml(activeJob.port)}${activeJob.eta ? ' · ' + escapeHtml(activeJob.eta.replace('T', ' ')) : ' · PTTLNG LMPT1'}</div>
-      <label class="hf-field hf-job-number"><span>Job No.</span><input id="hfJobNo" aria-label="Job number" placeholder="Enter job number" value="${escapeHtml(activeJob.jobNo)}"></label>
+      <label class="hf-field hf-job-number"><span>Job No.</span><input id="hfJobNo" aria-label="Job number" placeholder="Enter job number" value="${escapeHtml(activeJob.jobNo)}" ${activeJob.githubPath ? 'readonly' : ''}></label>
       <span class="tag green">${escapeHtml(activeJob.status)}</span>
       <div class="detail-grid">
         <div class="detail"><label>ETA / ETB</label><b>${escapeHtml(activeJob.eta ? activeJob.eta.replace('T', ' ') : '22 Sep · 08:00 / 12:00')}</b></div>
