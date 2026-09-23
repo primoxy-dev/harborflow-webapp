@@ -8,6 +8,7 @@
   let activeTab = 'crew';
   let editingService = null;
   let nextId = 1;
+  const categories = ['On-signers', 'Off-signers', 'Medical visitors', 'SIRE Inspectors', 'Surveyors', 'Service Engineers'];
 
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -15,11 +16,13 @@
   const id = () => String(nextId++);
   const makeService = (name, note, status) => ({ id: id(), name, note, status });
   const makeCrew = (data = {}) => ({
-    id: id(), change: 'Sign-on', name: '', nationality: '', rank: '', dob: '',
-    passport: '', seamanBook: '', status: 'Not started', flight: '', arrival: '',
-    pickup: '', hotel: '', visa: '', bg: '', immigrationStatus: 'Not started',
-    submitted: '', immigrationNotes: '', ...data
+    id: id(), change: 'On-signers', name: '', nationality: '', rank: '', dob: '',
+    passport: '', passportExpiry: '', seamanBook: '', status: 'Not started',
+    visa: '', bg: '', immigrationStatus: 'Not started', submitted: '',
+    immigrationNotes: '', flights: [], ...data
   });
+  const makeFlight = () => ({ id: id(), number: '', from: '', to: '', departure: '', arrival: '', booking: '' });
+  const makeTransport = () => ({ id: id(), passenger: '', date: '', from: '', to: '', supplier: '', reference: '' });
   const field = (label, value, data, type = 'text') =>
     `<label class="hf-field"><span>${label}</span><input type="${type}" ${data} value="${escapeHtml(value)}"></label>`;
   const select = (value, options, data) =>
@@ -39,9 +42,13 @@
           makeService('CTM', 'Prefund verification', 'Action needed')
         ] : [],
         crew: oceanPride ? [
-          makeCrew({ name: 'John Smith', nationality: 'Filipino', rank: 'Master', change: 'Sign-off', passport: 'P1234567', status: 'Docs pending' }),
-          makeCrew({ name: 'Raj Kumar', nationality: 'Indian', rank: '2nd Engineer', change: 'Sign-on', passport: 'N7654321', status: 'Submitted' })
+          makeCrew({ name: 'John Smith', nationality: 'Filipino', rank: 'Master', change: 'Off-signers', passport: 'P1234567', status: 'Docs pending' }),
+          makeCrew({ name: 'Raj Kumar', nationality: 'Indian', rank: '2nd Engineer', change: 'On-signers', passport: 'N7654321', status: 'Submitted' })
         ] : [],
+        groupOpen: Object.fromEntries(categories.map(category => [category, category === 'On-signers' || category === 'Off-signers'])),
+        personOpen: {},
+        cars: [],
+        boats: [],
         checklist: [false, false, false, false]
       });
     }
@@ -143,20 +150,42 @@
   });
 
   const crewInput = (crew, property, type = 'text') =>
-    `<input type="${type}" data-crew-id="${crew.id}" data-field="${property}" aria-label="${escapeHtml(property)} for ${escapeHtml(crew.name || 'new crew member')}" value="${escapeHtml(crew[property])}">`;
+    `<input type="${type}" data-kind="crew" data-id="${crew.id}" data-field="${property}" aria-label="${escapeHtml(property)} for ${escapeHtml(crew.name || 'new person')}" value="${escapeHtml(crew[property])}">`;
   const crewSelect = (crew, property, options) =>
-    select(crew[property], options, `data-crew-id="${crew.id}" data-field="${property}" aria-label="${escapeHtml(property)} for ${escapeHtml(crew.name || 'new crew member')}"`);
+    select(crew[property], options, `data-kind="crew" data-id="${crew.id}" data-field="${property}" aria-label="${escapeHtml(property)} for ${escapeHtml(crew.name || 'new person')}"`);
+  const recordInput = (kind, record, property, type = 'text') =>
+    `<input type="${type}" data-kind="${kind}" data-id="${record.id}" data-field="${property}" aria-label="${escapeHtml(property)}" value="${escapeHtml(record[property])}">`;
+
+  function flightTable(crew) {
+    return `<div class="hf-subhead"><b>Flights for ${escapeHtml(crew.name || 'this person')}</b><button type="button" class="secondary" data-action="add-flight" data-id="${crew.id}">+ Add flight</button></div>
+      <table class="table hf-nested-table"><thead><tr><th>No.</th><th>Flight No.</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>Booking ref.</th><th></th></tr></thead><tbody>
+      ${crew.flights.length ? crew.flights.map((flight, index) => `<tr><td>${index + 1}</td><td>${recordInput('flight', flight, 'number')}</td><td>${recordInput('flight', flight, 'from')}</td><td>${recordInput('flight', flight, 'to')}</td><td>${recordInput('flight', flight, 'departure', 'datetime-local')}</td><td>${recordInput('flight', flight, 'arrival', 'datetime-local')}</td><td>${recordInput('flight', flight, 'booking')}</td><td><button type="button" class="hf-plain hf-danger" data-action="delete-flight" data-id="${flight.id}" data-person="${crew.id}" aria-label="Remove flight ${index + 1}">×</button></td></tr>`).join('') : '<tr><td colspan="8" class="small">No flights added for this person.</td></tr>'}
+      </tbody></table>`;
+  }
+  function personDetails(crew) {
+    return `<tr class="hf-person-details"><td colspan="10"><div class="hf-person-grid">
+      <div><h4>Details & Immigration · ${escapeHtml(crew.name || 'New person')}</h4><div class="hf-immigration-grid">
+        <label>Category ${crewSelect(crew, 'change', categories)}</label>
+        <label>Visa / permission ${crewInput(crew, 'visa')}</label><label>BG / OKTB ${crewInput(crew, 'bg')}</label>
+        <label>Status ${crewSelect(crew, 'immigrationStatus', ['Not started', 'Documents pending', 'Submitted', 'Approved', 'Completed'])}</label>
+        <label>Submitted date ${crewInput(crew, 'submitted', 'date')}</label><label class="hf-wide">Notes ${crewInput(crew, 'immigrationNotes')}</label>
+      </div></div><div class="hf-flight-area">${flightTable(crew)}</div></div></td></tr>`;
+  }
   function crewTable(change) {
     const list = activeJob.crew.filter(crew => crew.change === change);
-    return `<section class="hf-crew-group"><div class="hf-group-head"><h3>${change} <span class="small">(${list.length})</span></h3><button type="button" class="secondary" data-action="add-crew" data-change="${change}">+ Add row</button></div>
-      <div class="table-wrap"><table class="table hf-crew-table"><thead><tr><th>No.</th><th>Name</th><th>Nationality</th><th>Rank</th><th>Change</th><th>Date of birth</th><th>Passport No.</th><th>Seaman Book No.</th><th>Status</th><th>Remove</th></tr></thead>
-      <tbody>${list.length ? list.map((crew, index) => `<tr><td>${index + 1}</td><td>${crewInput(crew, 'name')}</td><td>${crewInput(crew, 'nationality')}</td><td>${crewInput(crew, 'rank')}</td><td>${crewSelect(crew, 'change', ['Sign-on', 'Sign-off'])}</td><td>${crewInput(crew, 'dob', 'date')}</td><td>${crewInput(crew, 'passport')}</td><td>${crewInput(crew, 'seamanBook')}</td><td>${crewSelect(crew, 'status', ['Not started', 'Docs pending', 'Submitted', 'Confirmed', 'Completed'])}</td><td><button type="button" class="hf-plain hf-danger" data-action="delete-crew" data-id="${crew.id}" aria-label="Remove crew member ${escapeHtml(crew.name || String(index + 1))}">×</button></td></tr>`).join('') : '<tr><td colspan="10" class="small">No crew members in this change type.</td></tr>'}</tbody></table></div></section>`;
+    const open = activeJob.groupOpen[change];
+    return `<section class="hf-crew-group"><div class="hf-group-head"><button type="button" class="hf-group-toggle" data-action="toggle-group" data-change="${escapeHtml(change)}" aria-expanded="${Boolean(open)}"><span class="hf-chevron">${open ? '▾' : '▸'}</span>${escapeHtml(change)} <span class="small">(${list.length})</span></button><button type="button" class="secondary" data-action="add-crew" data-change="${escapeHtml(change)}">+ Add</button></div>
+      ${open ? `<div class="table-wrap"><table class="table hf-crew-table"><thead><tr><th>No.</th><th>Name · Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Seaman Book</th><th>Passport</th><th>PP. Exp.</th><th>Details</th><th></th></tr></thead>
+      <tbody>${list.length ? list.map((crew, index) => `<tr><td>${index + 1}</td><td>${crewInput(crew, 'name')}</td><td>${crewInput(crew, 'nationality')}</td><td>${crewInput(crew, 'rank')}</td><td>${crewInput(crew, 'dob', 'date')}</td><td>${crewInput(crew, 'seamanBook')}</td><td>${crewInput(crew, 'passport')}</td><td>${crewInput(crew, 'passportExpiry', 'date')}</td><td><button type="button" class="hf-plain" data-action="toggle-person" data-id="${crew.id}" aria-expanded="${Boolean(activeJob.personOpen[crew.id])}">${activeJob.personOpen[crew.id] ? 'Hide' : 'Flight / Immigration'}</button></td><td><button type="button" class="hf-plain hf-danger" data-action="delete-crew" data-id="${crew.id}" aria-label="Remove ${escapeHtml(crew.name || 'person ' + (index + 1))}">×</button></td></tr>${activeJob.personOpen[crew.id] ? personDetails(crew) : ''}`).join('') : '<tr><td colspan="10" class="small">No people in this group yet.</td></tr>'}</tbody></table></div>` : ''}</section>`;
+  }
+  function transportTable(kind, title) {
+    const list = kind === 'car' ? activeJob.cars : activeJob.boats;
+    return `<section class="hf-transport"><div class="hf-group-head"><h3>${title} <span class="small">(${list.length})</span></h3><button type="button" class="secondary" data-action="add-transport" data-kind="${kind}">+ Add ${kind === 'car' ? 'car' : 'boat'} trip</button></div>
+      <div class="table-wrap"><table class="table hf-transport-table"><thead><tr><th>No.</th><th>Person / Passengers</th><th>Date & time</th><th>From</th><th>To</th><th>${kind === 'car' ? 'Driver / Vehicle' : 'Boat / Supplier'}</th><th>Reference / Notes</th><th></th></tr></thead><tbody>
+      ${list.length ? list.map((record, index) => `<tr><td>${index + 1}</td><td>${recordInput(kind, record, 'passenger')}</td><td>${recordInput(kind, record, 'date', 'datetime-local')}</td><td>${recordInput(kind, record, 'from')}</td><td>${recordInput(kind, record, 'to')}</td><td>${recordInput(kind, record, 'supplier')}</td><td>${recordInput(kind, record, 'reference')}</td><td><button type="button" class="hf-plain hf-danger" data-action="delete-transport" data-kind="${kind}" data-id="${record.id}" aria-label="Remove ${kind} trip ${index + 1}">×</button></td></tr>`).join('') : `<tr><td colspan="8" class="small">No ${kind} trips added.</td></tr>`}</tbody></table></div></section>`;
   }
   function travelTable() {
-    return `<div class="hf-group-head"><h3>Travel arrangements</h3></div><div class="table-wrap"><table class="table hf-crew-table"><thead><tr><th>Crew member</th><th>Change</th><th>Flight</th><th>Arrival / Departure</th><th>Pickup / Transport</th><th>Hotel</th></tr></thead><tbody>${activeJob.crew.map(crew => `<tr><td>${escapeHtml(crew.name || 'New crew member')}</td><td>${escapeHtml(crew.change)}</td><td>${crewInput(crew, 'flight')}</td><td>${crewInput(crew, 'arrival', 'datetime-local')}</td><td>${crewInput(crew, 'pickup')}</td><td>${crewInput(crew, 'hotel')}</td></tr>`).join('') || '<tr><td colspan="6">Add crew members first.</td></tr>'}</tbody></table></div>`;
-  }
-  function immigrationTable() {
-    return `<div class="hf-group-head"><h3>Immigration</h3></div><div class="table-wrap"><table class="table hf-crew-table"><thead><tr><th>Crew member</th><th>Change</th><th>Visa / permission</th><th>BG / OKTB</th><th>Status</th><th>Submitted date</th><th>Notes</th></tr></thead><tbody>${activeJob.crew.map(crew => `<tr><td>${escapeHtml(crew.name || 'New crew member')}</td><td>${escapeHtml(crew.change)}</td><td>${crewInput(crew, 'visa')}</td><td>${crewInput(crew, 'bg')}</td><td>${crewSelect(crew, 'immigrationStatus', ['Not started', 'Documents pending', 'Submitted', 'Approved', 'Completed'])}</td><td>${crewInput(crew, 'submitted', 'date')}</td><td>${crewInput(crew, 'immigrationNotes')}</td></tr>`).join('') || '<tr><td colspan="7">Add crew members first.</td></tr>'}</tbody></table></div>`;
+    return `<p class="small">Flight details are recorded under each person in Crew members and Visitors. Record road and boat transfers below.</p>${transportTable('car', 'Car / Transport')}${transportTable('boat', 'Boat / Launch')}`;
   }
   const checks = ['Passport and seaman book verified', 'Flight / hotel confirmed', 'Immigration submitted', 'Transport / launch boat arranged'];
   function checklist() {
@@ -167,10 +196,10 @@
       <button type="button" class="close" data-action="close-crew" aria-label="Close service details">×</button>
       <div class="meta">Job / ${escapeHtml(activeJob.name)} / Service</div>
       <h2>${escapeHtml(activeService.name)}</h2>
-      <div class="meta">Sign-on & Sign-off · ${escapeHtml(activeJob.port)} · PIC: Thanaphon</div>
-      <div class="tabs hf-tabs" role="tablist" aria-label="Crew change sections">${[['crew', 'Crew members'], ['travel', 'Travel'], ['immigration', 'Immigration'], ['checklist', 'Checklist']].map(([key, label]) => `<button type="button" role="tab" aria-selected="${activeTab === key}" class="tab ${activeTab === key ? 'active' : ''}" data-action="tab" data-tab="${key}">${label}</button>`).join('')}</div>
-      <div role="tabpanel" class="hf-tab-panel">${activeTab === 'crew' ? crewTable('Sign-on') + crewTable('Sign-off') : activeTab === 'travel' ? travelTable() : activeTab === 'immigration' ? immigrationTable() : checklist()}</div>
-      <p class="hf-demo-note">Demo only — crew details are kept in this page until it is refreshed. Do not enter real personal documents here.</p>
+      <div class="meta">Crew members and visitors · ${escapeHtml(activeJob.port)} · PIC: Thanaphon</div>
+      <div class="tabs hf-tabs" role="tablist" aria-label="Crew change sections">${[['crew', 'Crew members and Visitors'], ['travel', 'Travel'], ['checklist', 'Checklist']].map(([key, label]) => `<button type="button" role="tab" aria-selected="${activeTab === key}" class="tab ${activeTab === key ? 'active' : ''}" data-action="tab" data-tab="${key}">${label}</button>`).join('')}</div>
+      <div role="tabpanel" class="hf-tab-panel">${activeTab === 'crew' ? categories.map(crewTable).join('') : activeTab === 'travel' ? travelTable() : checklist()}</div>
+      <p class="hf-demo-note">Demo only — details are kept in this page until it is refreshed. Do not enter real personal documents here.</p>
     `;
   }
   detailDrawer.addEventListener('click', event => {
@@ -178,30 +207,57 @@
     if (!button) return;
     if (button.dataset.action === 'close-crew') detailDrawer.classList.remove('open');
     if (button.dataset.action === 'tab') { activeTab = button.dataset.tab; renderCrew(); }
+    if (button.dataset.action === 'toggle-group') {
+      activeJob.groupOpen[button.dataset.change] = !activeJob.groupOpen[button.dataset.change];
+      renderCrew();
+    }
+    if (button.dataset.action === 'toggle-person') {
+      activeJob.personOpen[button.dataset.id] = !activeJob.personOpen[button.dataset.id];
+      renderCrew();
+    }
     if (button.dataset.action === 'add-crew') {
       const crew = makeCrew({ change: button.dataset.change });
       activeJob.crew.push(crew);
+      activeJob.groupOpen[button.dataset.change] = true;
       renderCrew();
-      detailDrawer.querySelector(`[data-crew-id="${crew.id}"][data-field="name"]`)?.focus();
+      detailDrawer.querySelector(`[data-kind="crew"][data-id="${crew.id}"][data-field="name"]`)?.focus();
     }
     if (button.dataset.action === 'delete-crew') {
       activeJob.crew = activeJob.crew.filter(crew => crew.id !== button.dataset.id);
       renderCrew();
     }
-  });
-  detailDrawer.addEventListener('input', event => {
-    const { crewId, field } = event.target.dataset;
-    if (!crewId || !field) return;
-    const crew = activeJob.crew.find(item => item.id === crewId);
-    if (crew) crew[field] = event.target.value;
-  });
-  detailDrawer.addEventListener('change', event => {
-    const { crewId, field } = event.target.dataset;
-    if (crewId && field) {
-      const crew = activeJob.crew.find(item => item.id === crewId);
-      if (crew) crew[field] = event.target.value;
+    if (button.dataset.action === 'add-flight') {
+      const crew = activeJob.crew.find(person => person.id === button.dataset.id);
+      if (crew) { crew.flights.push(makeFlight()); renderCrew(); }
     }
-    if (event.target.dataset.field === 'change') renderCrew();
+    if (button.dataset.action === 'delete-flight') {
+      const crew = activeJob.crew.find(person => person.id === button.dataset.person);
+      if (crew) { crew.flights = crew.flights.filter(flight => flight.id !== button.dataset.id); renderCrew(); }
+    }
+    if (button.dataset.action === 'add-transport') {
+      (button.dataset.kind === 'car' ? activeJob.cars : activeJob.boats).push(makeTransport());
+      renderCrew();
+    }
+    if (button.dataset.action === 'delete-transport') {
+      const list = button.dataset.kind === 'car' ? activeJob.cars : activeJob.boats;
+      const index = list.findIndex(record => record.id === button.dataset.id);
+      if (index !== -1) { list.splice(index, 1); renderCrew(); }
+    }
+  });
+  function updateRecord(event) {
+    const { kind, id: recordId, field } = event.target.dataset;
+    if (!kind || !recordId || !field) return;
+    const list = kind === 'crew' ? activeJob.crew : kind === 'car' ? activeJob.cars : kind === 'boat' ? activeJob.boats : activeJob.crew.flatMap(person => person.flights);
+    const record = list.find(item => item.id === recordId);
+    if (record) record[field] = event.target.value;
+  }
+  detailDrawer.addEventListener('input', updateRecord);
+  detailDrawer.addEventListener('change', event => {
+    updateRecord(event);
+    if (event.target.dataset.field === 'change') {
+      activeJob.groupOpen[event.target.value] = true;
+      renderCrew();
+    }
     if (event.target.dataset.check !== undefined) {
       activeJob.checklist[Number(event.target.dataset.check)] = event.target.checked;
       renderCrew();
