@@ -431,7 +431,7 @@
     const file = attachmentInput.files?.[0];
     const target = attachmentTarget;
     if (!file || !target) return;
-    if (file.size > 5 * 1024 * 1024) { syncMessage = 'File must be smaller than 5 MB.'; renderCrew(); return; }
+    if (file.size > 3 * 1024 * 1024) { syncMessage = 'File must be smaller than 3 MB.'; renderCrew(); return; }
     syncMessage = `Uploading ${file.name}…`;
     renderCrew();
     try {
