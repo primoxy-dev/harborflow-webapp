@@ -1,8 +1,8 @@
-import { authorized, categoryName, configReady, jobPath, json, putFile, safeName, sameOrigin } from '../lib/harborflow.mjs';
+import { nodeHandler, authorized, categoryName, configReady, jobPath, json, putFile, safeName, sameOrigin } from '../lib/harborflow.mjs';
 
 const folders = { passport: 'Passport', seamanBook: 'Seaman Book', flight: 'Flight', visa: 'Visa - permission' };
 const mime = { 'application/pdf': '.pdf', 'image/jpeg': '.jpg', 'image/png': '.png' };
-export default async function handler(request) {
+async function route(request) {
   if (!configReady()) return json({ error: 'Private GitHub storage is not configured' }, 503);
   if (!authorized(request)) return json({ error: 'Sign in as primoxy-dev to attach documents' }, 401);
   if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
@@ -31,3 +31,5 @@ export default async function handler(request) {
     return json({ error: error.message || 'Could not attach file' }, error instanceof SyntaxError ? 400 : 500);
   }
 }
+
+export default nodeHandler(route);
