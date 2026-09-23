@@ -26,7 +26,7 @@
 
 ## Crew records and private documents
 
-The Crew members and Visitors tab saves records in the private repository `primoxy-dev/harborflow-job-documents`. Select **Sign in with GitHub** as `primoxy-dev`, edit the fields, and select **Save crew data**. Passport, Seaman Book, Flight and Visa / permission accept PDF, JPEG or PNG attachments up to 5 MB. The displayed filename confirms the attachment was uploaded and its crew record saved.
+The Crew members and Visitors tab saves records in the private repository `primoxy-dev/harborflow-job-documents`. Select **Sign in with GitHub** as `primoxy-dev`, edit the fields, and select **Save crew data**. Passport, Seaman Book, Flight and Visa / permission accept PDF, JPEG or PNG attachments up to 3 MB. The displayed filename confirms the attachment was uploaded and its crew record saved.
 
 Records and attachments use this path:
 
