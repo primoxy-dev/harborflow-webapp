@@ -15,6 +15,20 @@
   })[char]);
   const id = () => String(nextId++);
   const makeService = (name, note, status) => ({ id: id(), name, note, status });
+  const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const folderName = value => String(value || '').trim().replace(/[\\/<>:"|?*\x00-\x1f]/g, ' ')
+    .replace(/\s+/g, ' ').replace(/^\.+|\.+$/g, '').slice(0, 80) || 'Unnamed';
+  function jobPath(job) {
+    const date = new Date(job.eta);
+    if (Number.isNaN(date.getTime())) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `Jobs/${year}/${month}. ${monthNames[date.getMonth()]}/${day}. ${folderName(job.name)} - ${folderName(job.jobNo)}`;
+  }
+  const servicePaths = job => [...new Set([
+    ...job.services.map(service => folderName(service.name)), 'General'
+  ])].map(name => `${job.githubPath || jobPath(job)}/${name}`);
   const makeCrew = (data = {}) => ({
     id: id(), change: 'On-signers', name: '', nationality: '', rank: '', dob: '',
     passport: '', passportExpiry: '', seamanBook: '', status: 'Not started',
@@ -29,7 +43,7 @@
     `<select ${data}>${options.map(option => `<option value="${escapeHtml(option)}" ${value === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select>`;
 
   function getJob(button) {
-    const key = `${button.dataset.name}|${button.dataset.port}`;
+    const key = button.dataset.jobId || `${button.dataset.name}|${button.dataset.port}|${button.closest('.day')?.querySelector('.num')?.textContent || ''}`;
     if (!jobs.has(key)) {
       const oceanPride = button.dataset.name === 'MT Ocean Pride';
       jobs.set(key, {
@@ -56,29 +70,72 @@
   }
 
   // Clone calendar buttons to replace the original read-only demo click handlers.
-  document.querySelectorAll('.job').forEach(original => {
-    const button = original.cloneNode(true);
-    original.replaceWith(button);
-    button.addEventListener('click', () => {
+  function openJob(button) {
       activeJob = getJob(button);
       editingService = null;
       renderJob();
       jobDrawer.classList.add('open');
+  }
+  document.querySelectorAll('.job').forEach(original => {
+    const button = original.cloneNode(true);
+    original.replaceWith(button);
+    button.addEventListener('click', () => {
+      openJob(button);
     });
   });
+
+  const createdJobsPanel = document.createElement('div');
+  createdJobsPanel.className = 'panel';
+  createdJobsPanel.style.marginTop = '18px';
+  createdJobsPanel.innerHTML = '<div class="panel-head"><h2>Jobs created this session</h2><span class="small">Demo data resets on reload</span></div><div id="hfCreatedJobs"></div>';
+  document.querySelector('#operations').appendChild(createdJobsPanel);
+  const createdJobs = createdJobsPanel.querySelector('#hfCreatedJobs');
+  function renderCreatedJobs() {
+    createdJobs.innerHTML = [...jobs.entries()].filter(([key]) => key.startsWith('created-')).map(([key, job]) =>
+      `<button type="button" class="job blue" data-job-id="${escapeHtml(key)}" data-name="${escapeHtml(job.name)}" data-port="${escapeHtml(job.port)}" data-status="${escapeHtml(job.status)}"><b>${escapeHtml(job.name)}</b><small>${escapeHtml(job.port)} · ${escapeHtml(job.eta.replace('T', ' '))} · ${escapeHtml(job.services.map(service => service.name).join(', '))}</small></button>`
+    ).join('') || '<p class="small">No jobs created yet.</p>';
+    createdJobs.querySelectorAll('.job').forEach(button => button.addEventListener('click', () => openJob(button)));
+  }
+  renderCreatedJobs();
+
+  document.querySelector('#entryForm').addEventListener('submit', event => {
+    if (document.querySelector('#modalTitle').textContent !== 'Create new job') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const data = new FormData(event.currentTarget);
+    const name = String(data.get('vessel') || '').trim();
+    const eta = String(data.get('eta') || '');
+    const principal = String(data.get('principal') || '').trim();
+    if (!name || !eta || !principal) return;
+    const jobId = 'created-' + id();
+    const date = new Date(eta);
+    const jobNo = `HF-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}-${jobId.slice(8).padStart(3, '0')}`;
+    jobs.set(jobId, {
+      name, eta, principal, imo: String(data.get('imo') || '').trim(),
+      port: String(data.get('port') || ''), notes: String(data.get('notes') || '').trim(),
+      status: 'Planned', jobNo, githubPath: jobPath({ name, eta, jobNo }),
+      services: [makeService(String(data.get('service') || 'General'), '', 'Pending')],
+      crew: [], groupOpen: Object.fromEntries(categories.map(category => [category, true])),
+      personOpen: {}, cars: [], boats: [], checklist: [false, false, false, false]
+    });
+    renderCreatedJobs();
+    event.currentTarget.reset();
+    document.querySelector('#modal').classList.remove('open');
+    notify('Job created in this session');
+  }, true);
 
   function renderJob() {
     jobDrawer.innerHTML = `
       <button type="button" class="close" data-action="close-job" aria-label="Close job details">×</button>
       <h2>${escapeHtml(activeJob.name)}</h2>
-      <div class="meta">${escapeHtml(activeJob.port)} · PTTLNG LMPT1</div>
+      <div class="meta">${escapeHtml(activeJob.port)}${activeJob.eta ? ' · ' + escapeHtml(activeJob.eta.replace('T', ' ')) : ' · PTTLNG LMPT1'}</div>
       <label class="hf-field hf-job-number"><span>Job No.</span><input id="hfJobNo" aria-label="Job number" placeholder="Enter job number" value="${escapeHtml(activeJob.jobNo)}"></label>
       <span class="tag green">${escapeHtml(activeJob.status)}</span>
       <div class="detail-grid">
-        <div class="detail"><label>ETA / ETB</label><b>22 Sep · 08:00 / 12:00</b></div>
-        <div class="detail"><label>ETD</label><b>24 Sep · 18:00</b></div>
-        <div class="detail"><label>PIC</label><b>Thanaphon</b></div>
-        <div class="detail"><label>Principal</label><b>Ocean Shipping Ltd.</b></div>
+        <div class="detail"><label>ETA / ETB</label><b>${escapeHtml(activeJob.eta ? activeJob.eta.replace('T', ' ') : '22 Sep · 08:00 / 12:00')}</b></div>
+        <div class="detail"><label>ETD</label><b>${activeJob.githubPath ? 'Not set' : '24 Sep · 18:00'}</b></div>
+        <div class="detail"><label>PIC</label><b>${activeJob.githubPath ? 'Not assigned' : 'Thanaphon'}</b></div>
+        <div class="detail"><label>Principal</label><b>${escapeHtml(activeJob.principal || 'Ocean Shipping Ltd.')}</b></div>
       </div>
       <div class="panel-head"><h3>Services</h3><button type="button" class="secondary" data-action="add-service">+ Add</button></div>
       <div id="hfServices">${activeJob.services.length ? activeJob.services.map(service => `
@@ -97,10 +154,12 @@
         <label class="hf-field"><span>Status</span>${select(editingService && editingService !== 'new' ? editingService.status : 'Pending', ['Pending', 'Confirmed', 'Action needed', 'In progress', 'Done'], 'name="status"')}</label>
         <div class="hf-actions"><button type="button" class="secondary" data-action="cancel-service">Cancel</button><button type="submit" class="primary">Save service</button></div>
       </form>
+      ${activeJob.eta ? `<h3>Planned GitHub folders</h3><p class="small">Path preview only. No files have been synced.</p><code>${escapeHtml(activeJob.githubPath || jobPath(activeJob))}</code><ul>${servicePaths(activeJob).map(path => `<li><code>${escapeHtml(path)}</code></li>`).join('')}</ul>` : ''}
       <h3>Tasks, documents & timeline</h3>
+      ${activeJob.githubPath ? '<p class="small">No tasks or documents have been recorded for this job.</p>' : `
       <div class="line-item"><b>Tasks: 8 / 11 complete</b><span>Visa confirmation overdue · Supplier follow-up due 23 Sep</span></div>
       <div class="line-item"><b>Documents: 7 / 8 received</b><span>Missing: immigration confirmation</span></div>
-      <div class="line-item"><b>Latest activity</b><span>22 Sep 14:05 — ETA amended by Thanaphon</span></div>
+      <div class="line-item"><b>Latest activity</b><span>22 Sep 14:05 — ETA amended by Thanaphon</span></div>`}
     `;
   }
 
@@ -147,6 +206,7 @@
     else Object.assign(editingService, { name, note: String(data.get('note') || '').trim(), status: String(data.get('status')) });
     editingService = null;
     renderJob();
+    renderCreatedJobs();
   });
 
   const crewInput = (crew, property, type = 'text') =>
