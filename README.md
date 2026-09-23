@@ -22,7 +22,7 @@
 
 เปิดหน้า **Operations** → คลิกชื่อเรือในปฏิทิน → แก้ **Job No.** ได้ → เพิ่ม/แก้ไข/ลบ **Service** → คลิก **Crew change**
 
-หน้า Crew Change มี 4 แท็บที่ใช้งานได้: **Crew members, Travel, Immigration, Checklist** ตารางลูกเรือแยก Sign-on และ Sign-off พร้อมลำดับแถว กด **+ Add row** ในแต่ละตารางเพื่อเพิ่มคน แก้ข้อมูลในเซลล์ได้โดยตรง และกด × เพื่อลบแถว การเปลี่ยนประเภท Change จะย้ายแถวไปยังตารางที่ตรงกัน
+หน้ารายละเอียด Crew Change เปิดเต็มจอ มี 3 แท็บ: **Crew members and Visitors, Travel, Checklist** กลุ่มรายชื่อ On-signers, Off-signers, Medical visitors, SIRE Inspectors, Surveyors และ Service Engineers พับ/ขยายได้ แต่ละกลุ่มเพิ่มและลบคนในตารางได้ กด **Flight / Immigration** ที่แถวของบุคคลเพื่อกรอกข้อมูล Immigration และเพิ่ม/ลบเที่ยวบินของคนนั้น ส่วนแท็บ Travel มีตารางการใช้รถและเรือที่เพิ่ม/ลบรายการได้
 
 ## สถานะการพัฒนา
 
