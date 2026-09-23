@@ -1,0 +1,37 @@
+.hf-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
+.hf-field input, .hf-field select, .hf-crew-table input, .hf-crew-table select {
+  width: 100%; min-width: 105px; border: 1px solid var(--line); border-radius: 6px;
+  padding: 8px; color: var(--ink); background: #fff;
+}
+.hf-field input:focus, .hf-field select:focus, .hf-crew-table input:focus, .hf-crew-table select:focus {
+  border-color: var(--teal); outline: 2px solid #107a7222;
+}
+.hf-job-number { margin: 14px 0 10px; }
+.hf-job-number input { font-weight: 600; }
+.hf-service-row { display: flex; align-items: center; gap: 7px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.hf-service-open { flex: 1; min-width: 0; text-align: left; border: 0; background: transparent; color: var(--ink); padding: 2px 0; }
+.hf-service-open b, .hf-service-open small { display: block; }
+.hf-service-open small { margin-top: 3px; color: var(--muted); font-size: 11px; }
+.hf-service-open:hover b { color: var(--teal); text-decoration: underline; }
+.hf-plain { border: 0; background: transparent; color: var(--teal); padding: 5px; font-size: 12px; }
+.hf-danger { color: var(--red); font-size: 18px; }
+.hf-editor { margin: 14px 0 20px; padding: 14px; background: var(--page); border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 10px; }
+.hf-editor[hidden] { display: none; }
+.hf-editor h3 { margin: 0; font-size: 13px; }
+.hf-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.hf-tabs { margin-top: 20px; flex-wrap: wrap; }
+.hf-tab-panel { padding-bottom: 10px; }
+.hf-group-head { display: flex; justify-content: space-between; align-items: center; margin: 21px 0 8px; gap: 10px; }
+.hf-group-head h3 { margin: 0; font-size: 14px; }
+.hf-crew-group { margin-bottom: 25px; }
+.hf-crew-table { min-width: 1000px; }
+.hf-crew-table th { white-space: nowrap; }
+.hf-crew-table td { vertical-align: middle; }
+.hf-crew-table input[type="date"] { min-width: 125px; }
+.hf-crew-table input[type="datetime-local"] { min-width: 180px; }
+.hf-crew-table select { min-width: 115px; }
+.hf-crew-table td:first-child { font-weight: 600; }
+.hf-check { display: flex; gap: 10px; align-items: center; padding: 13px 5px; border-bottom: 1px solid var(--line); }
+.hf-check input { accent-color: var(--teal); width: 17px; height: 17px; }
+.hf-demo-note { color: var(--muted); font-size: 11px; margin-top: 24px; }
+
