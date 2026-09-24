@@ -26,7 +26,7 @@
 
 ### Terminal Restriction and Contact list
 
-Open **Knowledge base** → **Terminal Restriction and Contact list** to add, edit or delete terminals and contacts. Click a service cell to cycle **— Unverified → ✓ Allowed → ✕ Restricted**. Record the source and last-verified date before operational use. The terminal and contact table is private and shared across devices through GitHub. Sign in with the authorized GitHub account; edits save automatically. The owner `primoxy-dev` can manage viewer/editor access, but the initial access list is empty. Changes use revisions to prevent another device silently overwriting them. If the previous browser-only table exists, the owner may import it when the shared table is empty. New rows still need Add terminal or Add contact confirmation.
+Open **Knowledge base** → **Terminal Restriction and Contact list** to add, edit or delete terminals and contacts. Click a service cell to cycle **— Unverified → ✓ Allowed → ✕ Restricted**. Record the source and last-verified date before operational use. The terminal and contact table is private and shared across devices through GitHub. Anyone can view this table and its contacts without signing in. The owner and named editors sign in with GitHub to make changes; edits save automatically. The owner `primoxy-dev` can manage named viewer/editor roles, but the initial access list is empty. Public viewers do not need an entry on that list. Changes use revisions to prevent another device silently overwriting them. If the previous browser-only table exists, the owner may import it when the shared table is empty. New rows still need Add terminal or Add contact confirmation.
 
 ## Crew records and private documents
 
@@ -54,9 +54,9 @@ Add these environment variables to the Vercel project before using personal data
 - `HARBORFLOW_SESSION_SECRET`: a long random secret for signed, eight-hour login cookies.
 - `GITHUB_DOCUMENTS_TOKEN`: fine-grained GitHub token restricted to `primoxy-dev/harborflow-job-documents` with **Contents: Read and write**.
 
-Create the OAuth App in the `primoxy-dev` GitHub account. Set its callback URL to `https://YOUR-VERCEL-HOST/api/auth?mode=callback`. Use the exact host where this app will run. Configure the four variables for that deployment environment and redeploy. The API rejects writes until all variables exist. `primoxy-dev` owns the Knowledge base and is the only permitted user initially. The owner may invite GitHub usernames as view-only or editor from the Knowledge base sharing panel. Crew records and attachments remain owner-only, regardless of Knowledge base role.
+Create the OAuth App in the `primoxy-dev` GitHub account. Set its callback URL to `https://YOUR-VERCEL-HOST/api/auth?mode=callback`. Use the exact host where this app will run. Configure the four variables for that deployment environment and redeploy. The API rejects writes until all variables exist. `primoxy-dev` owns the Knowledge base and is the only editor initially. Anyone can view the terminal table and contact list without login. The owner may grant named GitHub users view-only or editor access from the Knowledge base sharing panel; only editors can modify data. Crew records and attachments remain owner-only, regardless of Knowledge base role.
 
-The public source repository contains no GitHub credential, crew document, terminal table, or sharing list. The shared Knowledge base and ACL are stored in the private documents repository. Job metadata is still stored in this browser. Other dashboard sections remain sample UI.
+The public source repository contains no GitHub credential, crew document, terminal table, or sharing list. The shared Knowledge base and ACL are stored in the private documents repository, but the terminal table and contact list are exposed through a public read-only API. Do not put confidential contact details in that table. Job metadata is still stored in this browser. Other dashboard sections remain sample UI.
 
 ## งานที่ต้องทำก่อนใช้งานจริง
 
