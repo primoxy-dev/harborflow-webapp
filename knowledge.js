@@ -4,6 +4,7 @@
   if (!section) return;
 
   const storageKey = 'harborflow-terminal-knowledge-v1';
+  const publicCacheKey = 'harborflow-terminal-public-cache-v1';
   const services = [
     ['crew', 'Crew change'], ['supt', 'Supt.'], ['sire', 'SIRE inspector'],
     ['class', 'Class surveyor'], ['engineer', 'Service engineer'],
@@ -24,21 +25,28 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   })[char]);
   let legacyDraft = null;
-  let importPending = false;
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
     if (saved && Array.isArray(saved.terminals) && Array.isArray(saved.contacts) && saved.updated) legacyDraft = saved;
   } catch { /* Browser storage is optional; the server is authoritative. */ }
   let state = initialState();
-  let loaded = false, loading = false, remoteEmpty = false, role = null, login = null;
-  let revision = null, changeNumber = 0, savedNumber = 0, saving = false, conflict = false;
-  let saveTimer = null, syncMessage = 'Loading the shared table…';
+  let loaded = false, loading = false, remoteEmpty = false, login = null, stale = false, staleExpiresAt = 0;
+  let grants = { restrictionEdit: false, contactView: false, contactEdit: false, administrator: false };
+  let contactsLoaded = false, contactsError = '';
+  const sync = Object.fromEntries(['restrictions', 'contacts'].map(area => [area, { revision: null, changeNumber: 0, savedNumber: 0, saving: false, conflict: false, timer: null }]));
+  let syncMessage = 'Loading the shared table…';
   let accessUsers = [], accessRevision = null, accessOpen = false, accessMessage = '';
+  let pendingProfile = null;
+  let proposals = [], proposalRevision = null, proposalsOpen = false, proposalMessage = '';
+  let historyOpen = false, historyArea = 'restrictions', historyRows = [], historyMessage = '';
+  const proposalTargets = {};
+  const conflictReview = { restrictions: null, contacts: null };
   let activeSubtab = 'restrictions';
   let editingTerminal = null;
   let editingContact = null;
 
-  const canEdit = () => loaded && role === 'editor' && !conflict;
+  const canEdit = (area = activeSubtab) => loaded && !stale && (area === 'contacts' ? grants.contactEdit : grants.restrictionEdit) && !sync[area].conflict;
+  const hasPending = () => Object.values(sync).some(item => item.changeNumber !== item.savedNumber);
   async function api(path, options) {
     const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options });
     const body = await response.json().catch(() => ({}));
@@ -47,27 +55,56 @@
   }
   async function loadShared(force = false) {
     if (loading || (loaded && !force)) return;
-    if (saving) { syncMessage = 'Wait for the current save to finish before reloading.'; showStorageStatus(); return; }
-    if (force && changeNumber !== savedNumber && !confirm('Unsaved changes may be lost. Reload shared data?')) return;
+    if (Object.values(sync).some(item => item.saving)) { syncMessage = 'Wait for the current save to finish before reloading.'; showStorageStatus(); return; }
+    if (force && hasPending() && !confirm('Unsaved changes may be lost. Reload shared data?')) return;
     loading = true;
     syncMessage = 'Loading shared Knowledge base…';
     render();
     try {
-      const result = await api('/api/knowledge');
-      state = result.data || initialState();
-      remoteEmpty = !result.data;
-      revision = result.revision;
-      role = result.role;
+      const result = await api('/api/knowledge?area=restrictions');
+      state.terminals = result.revision ? result.data.terminals : initialState().terminals;
+      state.updated = result.data.updated || '';
+      remoteEmpty = !result.revision;
+      sync.restrictions.revision = result.revision;
       login = result.login;
+      grants = result.grants;
+      stale = false;
+      staleExpiresAt = 0;
+      contactsLoaded = false;
+      contactsError = '';
+      state.contacts = [];
+      try { localStorage.setItem(publicCacheKey, JSON.stringify({ terminals: state.terminals, updated: state.updated, cachedAt: Date.now() })); } catch { /* Public cache is optional. */ }
+      if (grants.contactView) {
+        try {
+          const privateResult = await api('/api/knowledge?area=contacts');
+          state.contacts = privateResult.data.contacts;
+          sync.contacts.revision = privateResult.revision;
+          contactsLoaded = true;
+        } catch (error) { contactsError = error.message; }
+      }
       loaded = true;
-      conflict = false;
+      Object.values(sync).forEach(item => { item.conflict = false; item.changeNumber = item.savedNumber = 0; });
       editingTerminal = editingContact = null;
-      changeNumber = savedNumber = 0;
-      syncMessage = `Shared data loaded · ${role === 'editor' ? 'Can edit' : 'Public view only'}`;
-      if (login === 'primoxy-dev') await loadAccess();
+      syncMessage = `Shared data loaded · ${grants.restrictionEdit ? 'Can edit restrictions' : 'Public view only'}`;
+      if (grants.administrator) await loadAccess();
+      if (login && (grants.restrictionEdit || grants.contactView)) await loadProposals();
     } catch (error) {
       syncMessage = error.message;
-      if (!loaded) { role = null; login = null; }
+      if (!loaded) {
+        login = null;
+        grants = { restrictionEdit: false, contactView: false, contactEdit: false, administrator: false };
+        try {
+          const cached = JSON.parse(localStorage.getItem(publicCacheKey) || 'null');
+          if (cached && Array.isArray(cached.terminals) && Date.now() - cached.cachedAt <= 86400000) {
+            state.terminals = cached.terminals;
+            state.contacts = [];
+            state.updated = cached.updated || '';
+            loaded = stale = true;
+            staleExpiresAt = cached.cachedAt + 86400000;
+            syncMessage = `Offline public copy from ${new Date(cached.cachedAt).toLocaleString()}. Confirm with the terminal before use.`;
+          }
+        } catch { /* No public cache available. */ }
+      }
     } finally {
       loading = false;
       render();
@@ -80,6 +117,105 @@
       accessRevision = result.revision;
       accessMessage = '';
     } catch (error) { accessMessage = `Could not load sharing list: ${error.message}`; }
+  }
+  async function loadProposals() {
+    try {
+      const result = await api('/api/knowledge?mode=proposals');
+      proposals = result.proposals || [];
+      proposalRevision = result.revision;
+      proposalMessage = '';
+    } catch (error) { proposalMessage = `Could not load import proposals: ${error.message}`; }
+  }
+  async function submitPrevious(area) {
+    const key = area === 'contacts' ? 'contacts' : 'terminals';
+    const rows = legacyDraft?.[key] || [];
+    if (!rows.length) return;
+    if (!confirm(`Send ${rows.length} ${area} entries privately for the owner's row-by-row review? Nothing will publish yet.`)) return;
+    proposalMessage = 'Submitting private proposal…';
+    render();
+    try {
+      await api('/api/knowledge?mode=proposals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ area, rows }) });
+      await loadProposals();
+      proposalMessage = 'Proposal submitted. The owner must approve entries one by one.';
+    } catch (error) { proposalMessage = error.message; }
+    render();
+  }
+  async function decideProposal(button) {
+    const proposal = proposals.find(item => item.id === button.dataset.proposalId);
+    const area = proposal?.area;
+    if (!proposal || login !== 'primoxy-dev') return;
+    const action = button.dataset.decision;
+    const targetId = proposalTargets[`${proposal.id}:${button.dataset.rowId}`] || '';
+    if (action === 'replace' && !targetId) { proposalMessage = 'Choose an existing row to replace.'; render(); return; }
+    if (!confirm(`${action} this ${area} import entry?`)) return;
+    proposalMessage = 'Recording decision…';
+    render();
+    try {
+      await api('/api/knowledge?mode=decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ proposalId: proposal.id, rowId: button.dataset.rowId, action, targetId, proposalRevision, dataRevision: sync[area].revision }) });
+      await loadProposals();
+      await loadShared(true);
+      proposalMessage = 'Decision saved.';
+    } catch (error) { proposalMessage = error.message; }
+    render();
+  }
+  async function loadHistory(area = activeSubtab) {
+    historyArea = area;
+    historyMessage = 'Loading history…';
+    render();
+    try {
+      const result = await api(`/api/knowledge?mode=history&area=${area}`);
+      historyRows = result.history || [];
+      historyMessage = historyRows.length ? '' : 'No recorded changes yet.';
+    } catch (error) { historyRows = []; historyMessage = error.message; }
+    render();
+  }
+  async function restoreChange(id) {
+    if (login !== 'primoxy-dev' || !confirm('Restore this change’s previous values? This will create a new revision.')) return;
+    try {
+      await api(`/api/knowledge?mode=restore&area=${historyArea}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ changeId: id, revision: sync[historyArea].revision }) });
+      await loadShared(true);
+      await loadHistory(historyArea);
+    } catch (error) { historyMessage = error.message; render(); }
+  }
+  async function reviewConflict(area = activeSubtab) {
+    try {
+      const result = await api(`/api/knowledge?area=${area}`);
+      const key = area === 'contacts' ? 'contacts' : 'terminals';
+      const localRows = state[key], remoteRows = result.data[key];
+      const local = new Map(localRows.map(row => [row.id, row]));
+      const remote = new Map(remoteRows.map(row => [row.id, row]));
+      const ids = [...new Set([...local.keys(), ...remote.keys()])].filter(id => JSON.stringify(local.get(id) || null) !== JSON.stringify(remote.get(id) || null));
+      if (!ids.length) {
+        sync[area].revision = result.revision;
+        sync[area].savedNumber = sync[area].changeNumber;
+        sync[area].conflict = false;
+        syncMessage = 'Both devices now have the same information.';
+        render();
+        return;
+      }
+      conflictReview[area] = { revision: result.revision, local, working: remote, ids, resolved: new Set() };
+      render();
+    } catch (error) { syncMessage = error.message; showStorageStatus(); }
+  }
+  function resolveConflict(area, id, choice) {
+    const review = conflictReview[area];
+    if (!review || !review.ids.includes(id)) return;
+    if (choice === 'local') {
+      const row = review.local.get(id);
+      if (row) review.working.set(id, row);
+      else review.working.delete(id);
+    }
+    review.resolved.add(id);
+    if (review.resolved.size === review.ids.length) {
+      const item = sync[area];
+      state[area === 'contacts' ? 'contacts' : 'terminals'] = [...review.working.values()];
+      item.revision = review.revision;
+      item.conflict = false;
+      item.changeNumber = item.savedNumber + 1;
+      conflictReview[area] = null;
+      saveShared(area);
+    }
+    render();
   }
   async function updateAccess(users) {
     const previous = accessUsers;
@@ -100,42 +236,40 @@
     }
     render();
   }
-  function persist() {
-    if (!canEdit()) return;
+  function persist(area = activeSubtab) {
+    if (!canEdit(area)) return;
     state.updated = new Date().toISOString();
-    changeNumber += 1;
+    const item = sync[area];
+    item.changeNumber += 1;
     syncMessage = 'Changes pending…';
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveShared, 650);
+    clearTimeout(item.timer);
+    item.timer = setTimeout(() => saveShared(area), 650);
     showStorageStatus();
   }
-  async function saveShared() {
-    if (!canEdit() || saving || changeNumber === savedNumber) return;
-    saving = true;
-    const sentNumber = changeNumber;
+  async function saveShared(area = activeSubtab) {
+    const item = sync[area];
+    if (!canEdit(area) || item.saving || item.changeNumber === item.savedNumber) return;
+    item.saving = true;
+    const sentNumber = item.changeNumber;
     syncMessage = 'Saving shared table…';
     showStorageStatus();
     try {
-      const result = await api('/api/knowledge', {
+      const result = await api(`/api/knowledge?area=${area}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ revision, terminals: state.terminals, contacts: state.contacts })
+        body: JSON.stringify({ revision: item.revision, [area === 'contacts' ? 'contacts' : 'terminals']: state[area === 'contacts' ? 'contacts' : 'terminals'] })
       });
-      revision = result.revision;
-      remoteEmpty = false;
-      savedNumber = sentNumber;
-      syncMessage = changeNumber === savedNumber ? 'Saved for everyone' : 'Saving newer changes…';
-      if (changeNumber === savedNumber && importPending) {
-        legacyDraft = null;
-        importPending = false;
-      }
+      item.revision = result.revision;
+      if (area === 'restrictions') remoteEmpty = false;
+      item.savedNumber = sentNumber;
+      syncMessage = item.changeNumber === item.savedNumber ? 'Saved for everyone' : 'Saving newer changes…';
     } catch (error) {
-      conflict = error.status === 409;
-      syncMessage = conflict ? 'Another device changed this table. Reload to review before editing again.' : `Save failed: ${error.message}`;
-      if (conflict) render();
+      item.conflict = error.status === 409;
+      syncMessage = item.conflict ? 'Another device changed this table. Reload to review before editing again.' : `Save failed: ${error.message}`;
+      if (item.conflict) render();
     } finally {
-      saving = false;
+      item.saving = false;
       showStorageStatus();
-      if (changeNumber !== savedNumber && !conflict && !syncMessage.startsWith('Save failed')) saveTimer = setTimeout(saveShared, 100);
+      if (item.changeNumber !== item.savedNumber && !item.conflict && !syncMessage.startsWith('Save failed')) item.timer = setTimeout(() => saveShared(area), 100);
     }
   }
   function showStorageStatus() {
@@ -143,7 +277,7 @@
     if (!element) return;
     element.textContent = syncMessage;
     const retry = module.querySelector('[data-kb-action="retry-save"]');
-    if (retry) retry.disabled = changeNumber === savedNumber || saving || conflict;
+    if (retry) retry.disabled = !hasPending() || Object.values(sync).some(item => item.saving || item.conflict);
   }
 
   // Keep existing Knowledge base cards available as the Articles tab.
@@ -174,6 +308,7 @@
     const row = state.terminals.find(item => item.id === editingTerminal) || { port: '', terminal: '', note: '', source: '', verified: '' };
     return `<form id="kbTerminalForm" class="kb-form">
       <h3>${editingTerminal === 'new' ? 'Add terminal' : 'Edit terminal'}</h3>
+      <p class="kb-public-warning">Public information: every field in this form, including Notes and Source, can be read by anyone without signing in.</p>
       <div class="kb-form-grid">${input('port', 'Port', row.port, 'text', true)}${input('terminal', 'Terminal', row.terminal, 'text', true)}${input('source', 'Source / circular', row.source)}${input('verified', 'Last verified', row.verified, 'date')}${input('note', 'General conditions / contact note', row.note)}</div>
       <div class="kb-form-actions">${editingTerminal === 'new' ? '<button type="button" class="secondary" data-kb-action="cancel-terminal">Cancel</button><button type="submit" class="primary">Add terminal</button>' : '<span class="small" id="kbEditStatus" role="status">Changes sync automatically for the team</span><button type="button" class="secondary" data-kb-action="cancel-terminal">Close</button>'}</div>
     </form>`;
@@ -212,23 +347,56 @@
       </tbody></table></div>`;
   }
   function accessPanel() {
-    if (login !== 'primoxy-dev') return '';
-    return `<div class="kb-access"><div class="kb-toolbar"><div><b>Share Knowledge base</b><p class="small">Anyone with this website link can view the terminal table and contacts without signing in. Only the owner and GitHub users granted edit access can change them. Crew documents remain owner-only.</p></div><button type="button" class="secondary" data-kb-action="toggle-access">${accessOpen ? 'Hide access' : 'Manage access'}</button></div>
-      ${accessOpen ? `<p class="small">Public view link: <a href="/">${escapeHtml(location.origin + '/')}</a>. Named editors must sign in with their listed GitHub username. View-only entries can sign in, but sign-in is not required to view.</p>
-        <form id="kbAccessForm" class="kb-access-form"><label>GitHub username <input name="login" required pattern="[A-Za-z0-9-]{1,39}" autocomplete="off"></label><label>Permission <select name="role"><option value="viewer">View only</option><option value="editor">Can edit</option></select></label><button type="submit" class="primary">Add person</button></form>
-        <div class="kb-access-users">${accessUsers.length ? accessUsers.map(user => `<div><span>${escapeHtml(user.login)}</span><select data-kb-access-role="${escapeHtml(user.login)}" aria-label="Permission for ${escapeHtml(user.login)}"><option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>View only</option><option value="editor" ${user.role === 'editor' ? 'selected' : ''}>Can edit</option></select><button type="button" class="kb-link kb-delete" data-kb-action="remove-access" data-login="${escapeHtml(user.login)}">Remove</button></div>`).join('') : '<span class="small">No named users added. Public viewing is already enabled.</span>'}</div>
+    if (!grants.administrator) return '';
+    const grantLabels = [['restrictionEdit', 'Edit restrictions'], ['contactView', 'View contacts'], ['contactEdit', 'Edit contacts']];
+    return `<div class="kb-access"><div class="kb-toolbar"><div><b>Share Knowledge base</b><p class="small">Terminal restrictions are public. Contacts require named access. Knowledge permissions never grant crew access.</p></div><button type="button" class="secondary" data-kb-action="toggle-access">${accessOpen ? 'Hide access' : 'Manage access'}</button></div>
+      ${accessOpen ? `<p class="small">Verify the exact GitHub profile before confirming a grant. Contact editors also receive Contact-view access.</p>
+        <form id="kbProfileForm" class="kb-access-form"><label>GitHub username <input name="login" required pattern="[A-Za-z0-9-]{1,39}" autocomplete="off"></label><button type="submit" class="secondary">Check profile</button></form>
+        ${pendingProfile ? `<div class="kb-profile"><img src="${escapeHtml(pendingProfile.avatarUrl || '')}" alt="" width="36" height="36"><a href="${escapeHtml(pendingProfile.url || '')}" target="_blank" rel="noopener noreferrer">${escapeHtml(pendingProfile.login)}</a><span>GitHub ID ${pendingProfile.id}</span></div>
+        <form id="kbAccessForm" class="kb-access-form"><span>Confirm permissions for ${escapeHtml(pendingProfile.login)}</span>${grantLabels.map(([key, label]) => `<label><input type="checkbox" name="${key}"> ${label}</label>`).join('')}${login === 'primoxy-dev' ? '<label><input type="checkbox" name="administrator"> Knowledge Base Administrator</label>' : ''}<button type="submit" class="primary">Confirm access</button></form>` : ''}
+        <div class="kb-access-users">${accessUsers.length ? accessUsers.map(user => {
+          const protectedUser = login !== 'primoxy-dev' && (user.administrator || user.login === login);
+          return `<div class="kb-access-user"><b>${escapeHtml(user.login)}</b>${grantLabels.map(([key, label]) => `<label><input type="checkbox" data-kb-access-grant="${key}" data-login="${escapeHtml(user.login)}" ${user.grants?.[key] ? 'checked' : ''} ${protectedUser ? 'disabled' : ''}> ${label}</label>`).join('')}${login === 'primoxy-dev' ? `<label><input type="checkbox" data-kb-access-grant="administrator" data-login="${escapeHtml(user.login)}" ${user.administrator ? 'checked' : ''}> Administrator</label>` : ''}<button type="button" class="kb-link kb-delete" data-kb-action="remove-access" data-login="${escapeHtml(user.login)}" ${protectedUser ? 'disabled' : ''}>Remove</button></div>`;
+        }).join('') : '<span class="small">No named users added.</span>'}</div>
         <p class="small" role="status">${escapeHtml(accessMessage)}</p>` : ''}</div>`;
+  }
+  function proposalPanel() {
+    if (!proposalsOpen) return '';
+    const pending = proposals.filter(item => item.rows?.some(row => row.decision === 'pending'));
+    return `<div class="kb-panel"><h3>Private import proposals</h3><p class="small">Nothing here becomes shared until the owner approves individual entries.</p>
+      ${legacyDraft && grants.restrictionEdit ? '<button type="button" class="secondary" data-kb-action="propose-restrictions">Send this browser’s previous terminals for review</button>' : ''}
+      ${legacyDraft?.contacts?.length && grants.contactView ? '<button type="button" class="secondary" data-kb-action="propose-contacts">Send this browser’s previous contacts for review</button>' : ''}
+      <p class="small" role="status">${escapeHtml(proposalMessage)}</p>
+      ${pending.length ? pending.map(proposal => `<div class="kb-proposal"><h4>${escapeHtml(proposal.area)} · submitted by ${escapeHtml(proposal.submittedBy)} · ${escapeHtml(proposal.submittedAt)}</h4>${proposal.rows.filter(row => row.decision === 'pending').map(item => {
+        const key = `${proposal.id}:${item.id}`;
+        const existing = state[proposal.area === 'contacts' ? 'contacts' : 'terminals'];
+        const selected = proposalTargets[key] || '';
+        const target = existing.find(row => row.id === selected);
+        return `<div class="kb-proposal-row"><b>Proposed entry</b><pre>${escapeHtml(JSON.stringify(item.row, null, 2))}</pre>${login === 'primoxy-dev' ? `<label>Existing row to replace <select data-kb-proposal-target="${escapeHtml(key)}"><option value="">Choose a row</option>${existing.map(row => `<option value="${escapeHtml(row.id)}" ${selected === row.id ? 'selected' : ''}>${escapeHtml(row.terminal || row.name)} · ${escapeHtml(row.port)}</option>`).join('')}</select></label>${target ? `<b>Current entry</b><pre>${escapeHtml(JSON.stringify(target, null, 2))}</pre>` : ''}<div class="kb-proposal-actions"><button type="button" class="secondary" data-kb-action="decide-proposal" data-decision="add" data-proposal-id="${escapeHtml(proposal.id)}" data-row-id="${escapeHtml(item.id)}">Approve as new</button><button type="button" class="secondary" data-kb-action="decide-proposal" data-decision="replace" data-proposal-id="${escapeHtml(proposal.id)}" data-row-id="${escapeHtml(item.id)}">Replace selected</button><button type="button" class="secondary" data-kb-action="decide-proposal" data-decision="reject" data-proposal-id="${escapeHtml(proposal.id)}" data-row-id="${escapeHtml(item.id)}">Reject</button></div>` : '<span class="small">Awaiting owner review</span>'}</div>`;
+      }).join('')}</div>`).join('') : '<p class="small">No pending proposals.</p>'}</div>`;
+  }
+  function historyPanel() {
+    if (!historyOpen) return '';
+    return `<div class="kb-panel"><h3>Knowledge change history · ${escapeHtml(historyArea)}</h3><p class="small" role="status">${escapeHtml(historyMessage)}</p>
+      ${historyRows.map(entry => `<div class="kb-history-row"><b>${escapeHtml(entry.at)} · ${escapeHtml(entry.actor)} · ${entry.count} changed row(s)</b>${entry.changes ? `<details><summary>Review before and after</summary><pre>${escapeHtml(JSON.stringify(entry.changes, null, 2))}</pre></details>` : '<p class="small">Details hidden by your permissions.</p>'}${login === 'primoxy-dev' && entry.changes ? `<button type="button" class="secondary" data-kb-action="restore-change" data-change-id="${escapeHtml(entry.id)}">Restore previous values</button>` : ''}</div>`).join('')}</div>`;
+  }
+  function conflictPanel(area = activeSubtab) {
+    const review = conflictReview[area];
+    if (!sync[area].conflict) return '';
+    if (!review) return '<div class="kb-panel"><b>Another device changed this information.</b> <button type="button" class="secondary" data-kb-action="review-conflict">Compare rows</button></div>';
+    return `<div class="kb-panel"><h3>Resolve changed rows one by one</h3><p class="small">There is no whole-table overwrite. Choose the current shared row or reapply your row for each difference.</p>${review.ids.map(id => `<div class="kb-conflict-row"><b>${escapeHtml(id)}</b><div class="kb-compare"><div><b>Current shared</b><pre>${escapeHtml(JSON.stringify(review.working.get(id) || null, null, 2))}</pre></div><div><b>Your unsaved row</b><pre>${escapeHtml(JSON.stringify(review.local.get(id) || null, null, 2))}</pre></div></div>${review.resolved.has(id) ? '<span>Resolved</span>' : `<button type="button" class="secondary" data-kb-action="resolve-conflict" data-choice="remote" data-id="${escapeHtml(id)}">Keep shared</button><button type="button" class="secondary" data-kb-action="resolve-conflict" data-choice="local" data-id="${escapeHtml(id)}">Reapply mine</button>`}</div>`).join('')}</div>`;
   }
   function render() {
     module.innerHTML = `<div class="kb-heading"><div><h2>Terminal Restriction and Contact list</h2><p>Reference matrix for service access and terminal contacts</p></div><span id="kbStorageStatus" class="small"></span></div>
       ${!loaded ? `<div class="kb-auth-card"><p>${escapeHtml(syncMessage)}</p><button type="button" class="secondary" data-kb-action="refresh">Try again</button></div>` : `
-      <div class="kb-alert">Public view · ${role === 'editor' ? `${escapeHtml(login || '')} can edit` : 'Sign in only if you have edit permission'}. Confirm the current terminal circular and record its source and verification date before operational use.</div>
-      ${role !== 'editor' ? '<div class="kb-sync-actions"><a class="primary kb-sign-in" href="/api/auth?mode=start">Sign in to edit</a></div>' : ''}
-      <div class="kb-sync-actions"><button type="button" class="secondary" data-kb-action="refresh">Reload latest</button>${role === 'editor' ? '<button type="button" class="secondary" data-kb-action="retry-save">Save now</button>' : ''}${remoteEmpty && legacyDraft && canEdit() && changeNumber === savedNumber ? '<button type="button" class="secondary" data-kb-action="import-local">Import this browser’s previous table</button>' : ''}</div>
+      <div class="kb-alert">${stale ? 'Stale public copy · confirm with the terminal before use' : 'Public terminal restrictions'} · ${escapeHtml(login || 'Guest')}. Contact details require named sign-in access. Confirm the current terminal circular before operational use.</div>
+      ${!login ? '<div class="kb-sync-actions"><a class="primary kb-sign-in" href="/api/auth?mode=start">Sign in for granted access</a></div>' : ''}
+      <div class="kb-sync-actions"><button type="button" class="secondary" data-kb-action="refresh">Reload latest</button>${canEdit() ? '<button type="button" class="secondary" data-kb-action="retry-save">Save now</button>' : ''}${login ? '<button type="button" class="secondary" data-kb-action="toggle-history">History</button>' : ''}${login && (grants.restrictionEdit || grants.contactView) ? '<button type="button" class="secondary" data-kb-action="toggle-proposals">Import review</button>' : ''}</div>
       ${accessPanel()}
+      ${proposalPanel()}${historyPanel()}${conflictPanel()}
       <div class="kb-subtabs"><button type="button" class="tab ${activeSubtab === 'restrictions' ? 'active' : ''}" data-kb-subtab="restrictions">Terminal restrictions</button><button type="button" class="tab ${activeSubtab === 'contacts' ? 'active' : ''}" data-kb-subtab="contacts">Contact list</button></div>
       ${activeSubtab === 'restrictions' ? `<div class="kb-toolbar"><div class="kb-legend"><span class="kb-key kb-yes">✓ Allowed</span><span class="kb-key kb-no">✕ Restricted</span><span class="kb-key kb-unknown">— Unverified</span><span class="small">${canEdit() ? 'Click a cell to cycle its status.' : 'Sign in with edit access to change cells.'}</span></div>${canEdit() ? '<button type="button" class="primary" data-kb-action="add-terminal">+ Add terminal</button>' : ''}</div>${canEdit() ? terminalForm() : ''}${matrix()}`
-        : `<div class="kb-toolbar"><span class="small">Keep contacts current; confirm before use.</span>${canEdit() ? '<button type="button" class="primary" data-kb-action="add-contact">+ Add contact</button>' : ''}</div>${canEdit() ? contactForm() : ''}${contacts()}`}`}`;
+        : !grants.contactView ? '<div class="kb-auth-card">Contact list is private. Ask the owner for named access, then sign in with GitHub.</div>' : !contactsLoaded ? `<div class="kb-auth-card">${escapeHtml(contactsError || 'Loading private contacts…')} <button type="button" data-kb-action="refresh">Retry</button></div>` : `<div class="kb-toolbar"><span class="small">Keep contacts current; confirm before use.</span>${canEdit() ? '<button type="button" class="primary" data-kb-action="add-contact">+ Add contact</button>' : ''}</div>${canEdit() ? contactForm() : ''}${contacts()}`}`}`;
     showStorageStatus();
   }
   module.addEventListener('click', event => {
@@ -242,19 +410,18 @@
     if (!button) return;
     const { kbAction: action, id: rowId } = button.dataset;
     if (action === 'refresh') { loadShared(true); return; }
-    if (action === 'retry-save') { clearTimeout(saveTimer); saveShared(); return; }
-    if (action === 'toggle-access' && login === 'primoxy-dev') { accessOpen = !accessOpen; render(); return; }
-    if (action === 'remove-access' && login === 'primoxy-dev') {
+    if (action === 'retry-save') { clearTimeout(sync[activeSubtab].timer); saveShared(activeSubtab); return; }
+    if (action === 'toggle-proposals') { proposalsOpen = !proposalsOpen; if (proposalsOpen) loadProposals().then(render); render(); return; }
+    if (action === 'propose-restrictions') { submitPrevious('restrictions'); return; }
+    if (action === 'propose-contacts') { submitPrevious('contacts'); return; }
+    if (action === 'decide-proposal') { decideProposal(button); return; }
+    if (action === 'toggle-history') { historyOpen = !historyOpen; if (historyOpen) loadHistory(); render(); return; }
+    if (action === 'restore-change') { restoreChange(button.dataset.changeId); return; }
+    if (action === 'review-conflict') { reviewConflict(); return; }
+    if (action === 'resolve-conflict') { resolveConflict(activeSubtab, rowId, button.dataset.choice); return; }
+    if (action === 'toggle-access' && grants.administrator) { accessOpen = !accessOpen; render(); return; }
+    if (action === 'remove-access' && grants.administrator) {
       if (confirm(`Remove Knowledge base access for ${button.dataset.login}?`)) updateAccess(accessUsers.filter(item => item.login !== button.dataset.login));
-      return;
-    }
-    if (action === 'import-local') {
-      if (!canEdit() || !remoteEmpty || !legacyDraft) return;
-      if (!confirm('Import this browser’s previous table to the shared Knowledge base? Everyone with access will see it.')) return;
-      state = legacyDraft;
-      importPending = true;
-      persist();
-      render();
       return;
     }
     if (!canEdit()) return;
@@ -328,22 +495,49 @@
     status.textContent = 'Syncing automatically for everyone…';
   });
   module.addEventListener('change', event => {
-    const user = event.target.dataset.kbAccessRole;
-    if (user && login === 'primoxy-dev') updateAccess(accessUsers.map(item => item.login === user ? { ...item, role: event.target.value } : item));
+    const proposalTarget = event.target.dataset.kbProposalTarget;
+    if (proposalTarget) { proposalTargets[proposalTarget] = event.target.value; render(); return; }
+    const key = event.target.dataset.kbAccessGrant;
+    const user = event.target.dataset.login;
+    if (!key || !user || !grants.administrator) return;
+    updateAccess(accessUsers.map(item => {
+      if (item.login !== user) return item;
+      if (key === 'administrator') return { ...item, administrator: event.target.checked };
+      const next = { ...item.grants, [key]: event.target.checked };
+      if (key === 'contactEdit' && event.target.checked) next.contactView = true;
+      if (key === 'contactView' && !event.target.checked) next.contactEdit = false;
+      return { ...item, grants: next };
+    }));
   });
   module.addEventListener('submit', event => {
+    if (event.target.id === 'kbProfileForm') {
+      event.preventDefault();
+      if (!grants.administrator) return;
+      const candidate = String(new FormData(event.target).get('login') || '').trim().toLowerCase();
+      if (!/^[a-z0-9-]{1,39}$/.test(candidate)) return;
+      pendingProfile = null;
+      accessMessage = 'Checking GitHub profile…';
+      render();
+      api(`/api/knowledge?mode=profile&login=${encodeURIComponent(candidate)}`).then(profile => {
+        pendingProfile = profile;
+        accessMessage = 'Check this profile carefully, choose permissions, then confirm.';
+        render();
+      }).catch(error => { accessMessage = error.message; render(); });
+      return;
+    }
     if (event.target.id === 'kbAccessForm') {
       event.preventDefault();
-      if (login !== 'primoxy-dev') return;
+      if (!grants.administrator || !pendingProfile) return;
       const form = new FormData(event.target);
-      const user = String(form.get('login') || '').trim().toLowerCase();
-      const permission = String(form.get('role') || 'viewer');
-      if (!/^[a-z0-9-]{1,39}$/.test(user) || user === 'primoxy-dev' || !['viewer', 'editor'].includes(permission) || accessUsers.some(item => item.login === user)) {
-        accessMessage = 'Enter a new valid GitHub username.';
+      const user = pendingProfile.login;
+      const proposed = { login: user, githubId: pendingProfile.id, grants: { restrictionEdit: form.has('restrictionEdit'), contactView: form.has('contactView') || form.has('contactEdit'), contactEdit: form.has('contactEdit') }, administrator: login === 'primoxy-dev' && form.has('administrator') };
+      if (user === 'primoxy-dev' || accessUsers.some(item => item.login === user) || !Object.values(proposed.grants).some(Boolean) && !proposed.administrator) {
+        accessMessage = 'Choose at least one permission for a new GitHub user.';
         render();
         return;
       }
-      updateAccess([...accessUsers, { login: user, role: permission }]);
+      pendingProfile = null;
+      updateAccess([...accessUsers, proposed]);
       return;
     }
     const terminalFormSubmitted = event.target.id === 'kbTerminalForm';
@@ -381,10 +575,17 @@
     }
   } catch { /* Session storage is optional. */ }
   setInterval(() => {
-    if (!module.hidden && loaded && !saving && changeNumber === savedNumber && editingTerminal === null && editingContact === null && !accessOpen) loadShared(true);
+    if (stale && Date.now() > staleExpiresAt) {
+      loaded = stale = false;
+      state.terminals = [];
+      syncMessage = 'The public offline copy expired. Reload when connected; confirm directly with the terminal.';
+      render();
+      return;
+    }
+    if (!module.hidden && loaded && !hasPending() && !Object.values(sync).some(item => item.saving) && editingTerminal === null && editingContact === null && !accessOpen) loadShared(true);
   }, 60000);
   window.addEventListener('beforeunload', event => {
-    if (loaded && changeNumber !== savedNumber) { event.preventDefault(); event.returnValue = ''; }
+    if (loaded && hasPending()) { event.preventDefault(); event.returnValue = ''; }
   });
 })();
 
