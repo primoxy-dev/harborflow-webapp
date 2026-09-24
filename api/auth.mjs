@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { nodeHandler, authorized, configReady, cookie, json, knowledgeRole, origin, sameOrigin, sessionCookie, sessionLogin, sign, stateCookie, validSigned } from '../lib/harborflow.mjs';
+import { permission as operationsPermission } from '../lib/operations.mjs';
 
 async function route(request) {
   const url = new URL(request.url);
@@ -37,7 +38,7 @@ async function route(request) {
     const userResponse = await fetch('https://api.github.com/user', { headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token.access_token}`, 'X-GitHub-Api-Version': '2022-11-28' } });
     const user = await userResponse.json();
     const login = String(user.login || '').toLowerCase();
-    if (!userResponse.ok || !/^[a-z0-9-]{1,39}$/.test(login) || !(await knowledgeRole(login))) return json({ error: 'This GitHub account has not been granted access' }, 403);
+    if (!userResponse.ok || !/^[a-z0-9-]{1,39}$/.test(login) || !(await knowledgeRole(login) || await operationsPermission(login))) return json({ error: 'This GitHub account has not been granted access' }, 403);
     const expiry = Date.now() + 8 * 60 * 60 * 1000;
     const payload = `${login}.${expiry}`;
     return new Response(null, { status: 302, headers: { Location: '/', 'Set-Cookie': sessionCookie(`${payload}.${sign(payload)}`, 28800), 'Cache-Control': 'no-store' } });
@@ -46,4 +47,5 @@ async function route(request) {
 }
 
 export default nodeHandler(route);
+
 
