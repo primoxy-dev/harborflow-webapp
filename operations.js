@@ -105,7 +105,7 @@
       return `<div class="hfo-stats">${months.join('')}</div>`;
     }
     const first=state.view==='month' ? startOfWeek(start) : start, days=state.view==='month' ? 42 : 7;
-    return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-muted">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>matchesDate(j,d)); return `<div class="hfo-cell"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill" data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft')}</b><br><small>${escape(j.data.port||'No port')} · ${escape(j.data.status)}</small></button>`).join('')}</div>`;}).join('')}</div>`;
+    return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-muted">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); return `<div class="hfo-cell"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill" data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft')}</b><br><small>${escape(j.data.port||'No port')} · ${escape(j.data.status)}</small></button>`).join('')}</div>`;}).join('')}</div>`;
   }
   function renderHome() {
     document.getElementById('title').textContent='Operations · Trial';
