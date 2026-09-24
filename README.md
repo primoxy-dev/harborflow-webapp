@@ -26,7 +26,7 @@
 
 ### Terminal Restriction and Contact list
 
-Open **Knowledge base** → **Terminal Restriction and Contact list** to add, edit or delete terminals and contacts. Click a service cell to cycle **— Unverified → ✓ Allowed → ✕ Restricted**. Record the source and last-verified date before operational use. This module stores changes only in the current browser; it is not shared with the team.
+Open **Knowledge base** → **Terminal Restriction and Contact list** to add, edit or delete terminals and contacts. Click a service cell to cycle **— Unverified → ✓ Allowed → ✕ Restricted**. Record the source and last-verified date before operational use. This module stores changes only in the current browser; it is not shared with the team. Existing terminal and contact edits, plus permission-cell changes, save automatically as you edit. New rows still need Add terminal or Add contact confirmation.
 
 ## Crew records and private documents
 
