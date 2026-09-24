@@ -32,7 +32,7 @@
   let state = initialState();
   let loaded = false, loading = false, remoteEmpty = false, role = null, login = null;
   let revision = null, changeNumber = 0, savedNumber = 0, saving = false, conflict = false;
-  let saveTimer = null, syncMessage = 'Sign in with GitHub to load the shared table.';
+  let saveTimer = null, syncMessage = 'Loading the shared table…';
   let accessUsers = [], accessRevision = null, accessOpen = false, accessMessage = '';
   let activeSubtab = 'restrictions';
   let editingTerminal = null;
@@ -63,7 +63,7 @@
       conflict = false;
       editingTerminal = editingContact = null;
       changeNumber = savedNumber = 0;
-      syncMessage = `Shared data loaded · ${role === 'editor' ? 'Can edit' : 'View only'}`;
+      syncMessage = `Shared data loaded · ${role === 'editor' ? 'Can edit' : 'Public view only'}`;
       if (login === 'primoxy-dev') await loadAccess();
     } catch (error) {
       syncMessage = error.message;
@@ -92,7 +92,7 @@
         body: JSON.stringify({ users, revision: accessRevision })
       });
       accessRevision = result.revision;
-      accessMessage = 'Access list saved. Invited people can sign in now.';
+      accessMessage = 'Access list saved. Editors can sign in to make changes.';
     } catch (error) {
       accessUsers = previous;
       accessMessage = `Sharing failed: ${error.message}`;
@@ -213,16 +213,17 @@
   }
   function accessPanel() {
     if (login !== 'primoxy-dev') return '';
-    return `<div class="kb-access"><div class="kb-toolbar"><div><b>Share Knowledge base</b><p class="small">Only GitHub users listed here can view or edit this table. Crew documents remain owner-only.</p></div><button type="button" class="secondary" data-kb-action="toggle-access">${accessOpen ? 'Hide access' : 'Manage access'}</button></div>
-      ${accessOpen ? `<p class="small">Share this website link: <a href="/">${escapeHtml(location.origin + '/')}</a>. Invitees must sign in with their listed GitHub username.</p>
+    return `<div class="kb-access"><div class="kb-toolbar"><div><b>Share Knowledge base</b><p class="small">Anyone with this website link can view the terminal table and contacts without signing in. Only the owner and GitHub users granted edit access can change them. Crew documents remain owner-only.</p></div><button type="button" class="secondary" data-kb-action="toggle-access">${accessOpen ? 'Hide access' : 'Manage access'}</button></div>
+      ${accessOpen ? `<p class="small">Public view link: <a href="/">${escapeHtml(location.origin + '/')}</a>. Named editors must sign in with their listed GitHub username. View-only entries can sign in, but sign-in is not required to view.</p>
         <form id="kbAccessForm" class="kb-access-form"><label>GitHub username <input name="login" required pattern="[A-Za-z0-9-]{1,39}" autocomplete="off"></label><label>Permission <select name="role"><option value="viewer">View only</option><option value="editor">Can edit</option></select></label><button type="submit" class="primary">Add person</button></form>
-        <div class="kb-access-users">${accessUsers.length ? accessUsers.map(user => `<div><span>${escapeHtml(user.login)}</span><select data-kb-access-role="${escapeHtml(user.login)}" aria-label="Permission for ${escapeHtml(user.login)}"><option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>View only</option><option value="editor" ${user.role === 'editor' ? 'selected' : ''}>Can edit</option></select><button type="button" class="kb-link kb-delete" data-kb-action="remove-access" data-login="${escapeHtml(user.login)}">Remove</button></div>`).join('') : '<span class="small">No one else has access yet.</span>'}</div>
+        <div class="kb-access-users">${accessUsers.length ? accessUsers.map(user => `<div><span>${escapeHtml(user.login)}</span><select data-kb-access-role="${escapeHtml(user.login)}" aria-label="Permission for ${escapeHtml(user.login)}"><option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>View only</option><option value="editor" ${user.role === 'editor' ? 'selected' : ''}>Can edit</option></select><button type="button" class="kb-link kb-delete" data-kb-action="remove-access" data-login="${escapeHtml(user.login)}">Remove</button></div>`).join('') : '<span class="small">No named users added. Public viewing is already enabled.</span>'}</div>
         <p class="small" role="status">${escapeHtml(accessMessage)}</p>` : ''}</div>`;
   }
   function render() {
     module.innerHTML = `<div class="kb-heading"><div><h2>Terminal Restriction and Contact list</h2><p>Reference matrix for service access and terminal contacts</p></div><span id="kbStorageStatus" class="small"></span></div>
-      ${!loaded ? `<div class="kb-auth-card"><p>${escapeHtml(syncMessage)}</p><a class="primary kb-sign-in" href="/api/auth?mode=start">Sign in with GitHub</a><button type="button" class="secondary" data-kb-action="refresh">Try again</button><p class="small">Access is private. The owner can grant view-only or edit permission after signing in.</p></div>` : `
-      <div class="kb-alert">Shared private data · ${escapeHtml(login || '')} · ${role === 'editor' ? 'Can edit' : 'View only'}. Confirm the current terminal circular and record its source and verification date before operational use.</div>
+      ${!loaded ? `<div class="kb-auth-card"><p>${escapeHtml(syncMessage)}</p><button type="button" class="secondary" data-kb-action="refresh">Try again</button></div>` : `
+      <div class="kb-alert">Public view · ${role === 'editor' ? `${escapeHtml(login || '')} can edit` : 'Sign in only if you have edit permission'}. Confirm the current terminal circular and record its source and verification date before operational use.</div>
+      ${role !== 'editor' ? '<div class="kb-sync-actions"><a class="primary kb-sign-in" href="/api/auth?mode=start">Sign in to edit</a></div>' : ''}
       <div class="kb-sync-actions"><button type="button" class="secondary" data-kb-action="refresh">Reload latest</button>${role === 'editor' ? '<button type="button" class="secondary" data-kb-action="retry-save">Save now</button>' : ''}${remoteEmpty && legacyDraft && canEdit() && changeNumber === savedNumber ? '<button type="button" class="secondary" data-kb-action="import-local">Import this browser’s previous table</button>' : ''}</div>
       ${accessPanel()}
       <div class="kb-subtabs"><button type="button" class="tab ${activeSubtab === 'restrictions' ? 'active' : ''}" data-kb-subtab="restrictions">Terminal restrictions</button><button type="button" class="tab ${activeSubtab === 'contacts' ? 'active' : ''}" data-kb-subtab="contacts">Contact list</button></div>
