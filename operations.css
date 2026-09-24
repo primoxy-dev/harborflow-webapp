@@ -2,3 +2,5 @@
 
 
 .hfo-imo-results{display:flex;flex-wrap:wrap;gap:6px}.hfo-imo-results:empty{display:none}
+
+.hfo-trend{display:block;margin-top:5px;font-size:12px;font-weight:600}.hfo-trend.up{color:#0e7265}.hfo-trend.down{color:#a65b00}.hfo-trend.flat{color:#64748b}.hfo-stat .hfo-muted{display:block;margin-top:3px;font-size:10px}

@@ -77,34 +77,56 @@
     } catch (e) { state.grant = null; state.jobs = []; state.services = []; state.people = []; state.trips = []; state.openJobId = null; state.openServiceId = null; state.modal = null; state.sync = ''; state.error = e.message; render(); }
   }
   function metrics() {
-    const now = Date.now(), active = state.jobs.filter(j => !['Completed','Cancelled'].includes(j.data.status));
+    const now = Date.now();
     const completed = state.services.filter(s => !s.removed_at && s.data.status === 'Completed' && s.data.baselineDue);
     const onTime = completed.filter(s => s.data.actualEnd && Date.parse(s.data.actualEnd) <= Date.parse(s.data.baselineDue));
     const overdue = state.services.filter(s => !s.removed_at && !['Completed','Cancelled'].includes(s.data.status) && s.data.plannedEnd && Date.parse(s.data.plannedEnd) < now);
+    const [start, end] = period();
+    const previousStart = new Date(start);
+    previousStart.setDate(previousStart.getDate() - 1);
+    const [priorStart, priorEnd] = periodFor(state.view, previousStart);
+    const currentCalls = countHusbandryCalls(start, end);
+    const priorCalls = countHusbandryCalls(priorStart, priorEnd);
+    const change = currentCalls - priorCalls;
+    const previous = { week: 'previous week', month: 'previous month', quarter: 'previous quarter', year: 'previous year' }[state.view];
+    const percentage = priorCalls ? ' (' + (change > 0 ? '+' : '') + Math.round(change / priorCalls * 100) + '%)' : change ? ' (from 0)' : ' (0%)';
+    const trend = (change > 0 ? '↑ +' : change < 0 ? '↓ ' : '→ ') + change + percentage + ' vs ' + previous;
     return [
-      ['Port calls',state.jobs.length],['Active jobs',active.length],
-      ['On-time services',completed.length ? Math.round(onTime.length/completed.length*100)+'%' : 'No data'],
-      ['Overdue services',overdue.length]
+      ['Husbandry calls', currentCalls, trend, change > 0 ? 'up' : change < 0 ? 'down' : 'flat'],
+      ['On-time services', completed.length ? Math.round(onTime.length / completed.length * 100) + '%' : 'No data'],
+      ['Overdue services', overdue.length]
     ];
   }
-  function startOfWeek(date) { const d=new Date(date); d.setHours(0,0,0,0); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d; }
-  function shift(delta) { const d=new Date(state.anchor); if (state.view === 'week') d.setDate(d.getDate()+7*delta); else if (state.view === 'month') d.setMonth(d.getMonth()+delta); else if (state.view === 'quarter') d.setMonth(d.getMonth()+3*delta); else d.setFullYear(d.getFullYear()+delta); state.anchor=d; render(); }
-  function period() {
-    const d=new Date(state.anchor), year=d.getFullYear(), month=d.getMonth();
-    if (state.view === 'week') { const a=startOfWeek(d), b=new Date(a); b.setDate(a.getDate()+6); return [a,b, a.toLocaleDateString()+' – '+b.toLocaleDateString()]; }
-    if (state.view === 'month') return [new Date(year,month,1),new Date(year,month+1,0),d.toLocaleDateString('en',{month:'long',year:'numeric'})];
-    if (state.view === 'quarter') { const q=Math.floor(month/3); return [new Date(year,q*3,1),new Date(year,q*3+3,0),'Q'+(q+1)+' '+year]; }
-    return [new Date(year,0,1),new Date(year,11,31),String(year)];
+  function startOfWeek(date) { const d = new Date(date); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; }
+  function periodFor(view, anchor) {
+    const d = new Date(anchor), year = d.getFullYear(), month = d.getMonth();
+    if (view === 'week') { const a = startOfWeek(d), b = new Date(a); b.setDate(a.getDate() + 6); return [a, b, a.toLocaleDateString() + ' – ' + b.toLocaleDateString()]; }
+    if (view === 'month') return [new Date(year, month, 1), new Date(year, month + 1, 0), d.toLocaleDateString('en', { month: 'long', year: 'numeric' })];
+    if (view === 'quarter') { const q = Math.floor(month / 3); return [new Date(year, q * 3, 1), new Date(year, q * 3 + 3, 0), 'Q' + (q + 1) + ' ' + year]; }
+    return [new Date(year, 0, 1), new Date(year, 11, 31), String(year)];
   }
-  function localKey(date) { return date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0'); }
+  function period() { return periodFor(state.view, state.anchor); }
+  function shift(delta) {
+    const [start] = period(), d = new Date(start);
+    if (state.view === 'week') d.setDate(d.getDate() + 7 * delta);
+    else if (state.view === 'month') d.setMonth(d.getMonth() + delta);
+    else if (state.view === 'quarter') d.setMonth(d.getMonth() + 3 * delta);
+    else d.setFullYear(d.getFullYear() + delta);
+    state.anchor = d; render();
+  }
+  function localKey(date) { return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0'); }
+  function countHusbandryCalls(start, end) {
+    const first = localKey(start), last = localKey(end);
+    return state.jobs.filter(j => j.data.status !== 'Cancelled' && j.data.eta && dateOnly(j.data.eta) >= first && dateOnly(j.data.eta) <= last).length;
+  }
   function matchesDate(j, date) { const day=localKey(date); return j.data.eta && dateOnly(j.data.eta) <= day && (!j.data.etd || dateOnly(j.data.etd) >= day); }
   function calendar() {
     const [start,end,label]=period();
     if (state.view === 'quarter' || state.view === 'year') {
       const months=[]; let d=new Date(start);
       while (d<=end) { const y=d.getFullYear(), m=d.getMonth(), first=new Date(y,m,1), last=new Date(y,m+1,0);
-        const calls=state.jobs.filter(j=>j.data.eta && dateOnly(j.data.eta)<=localKey(last) && (!j.data.etd || dateOnly(j.data.etd)>=localKey(first)));
-        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Port Calls</p>${calls.map(j=>`<button class="hfo-btn" data-open-job="${j.id}">${escape(j.data.vessel || 'Draft')} · ${escape(j.data.jobNo || 'No Job No.')}</button>`).join(' ')}</div>`);
+        const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && j.data.eta && dateOnly(j.data.eta)<=localKey(last) && (!j.data.etd || dateOnly(j.data.etd)>=localKey(first)));
+        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Husbandry Calls</p>${calls.map(j=>`<button class="hfo-btn" data-open-job="${j.id}">${escape(j.data.vessel || 'Draft')} · ${escape(j.data.jobNo || 'No Job No.')}</button>`).join(' ')}</div>`);
         d.setMonth(d.getMonth()+1);
       }
       return `<div class="hfo-stats">${months.join('')}</div>`;
@@ -119,9 +141,9 @@
       <div class="hfo-banner">ระบบทดลองซิงค์ข้ามเครื่อง · ใช้ข้อมูลสมมติเท่านั้น ห้ามกรอกข้อมูลลูกเรือหรือผู้เยี่ยมจริง</div>
       <div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>
       ${!state.grant ? `<div class="hfo-card"><h2>Operations requires sign-in and a named grant</h2><p>${escape(state.error||'Sign in with an approved GitHub account. No private Job data is stored on this device.')}</p><a class="hfo-btn primary" href="/api/auth?mode=start">Sign in with GitHub</a></div>` :
-      `<div class="hfo-stats">${metrics().map(([label,value])=>`<div class="hfo-card hfo-stat"><span>${label}</span><strong>${value}</strong></div>`).join('')}</div>
-       <div class="hfo-card"><div class="hfo-toolbar"><h2>Port Call Calendar</h2><div class="hfo-row"><button class="hfo-btn" data-shift="-1">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1">›</button><select id="hfoView">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">ETA–ETD range · port local time</p>${calendar()}</div>
-       <div class="hfo-card"><div class="hfo-toolbar"><h2>All Port Calls</h2><span class="hfo-muted">${escape(state.sync)}</span></div><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft Port Call')}</b><small>${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${formatDate(j.data.eta)} – ${formatDate(j.data.etd)}</small></button><span>${escape(j.data.status)}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></div>
+      `<div class="hfo-stats">${metrics().map(([label,value,indicator,trend])=>`<div class="hfo-card hfo-stat"><span>${escape(label)}</span><strong>${escape(value)}</strong>${indicator?`<small class="hfo-trend ${trend}">${escape(indicator)}</small><small class="hfo-muted">By ETA · excludes Cancelled</small>`:''}</div>`).join('')}</div>
+       <div class="hfo-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><button class="hfo-btn" data-shift="-1">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1">›</button><select id="hfoView">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">ETA–ETD range · port local time</p>${calendar()}</div>
+       <div class="hfo-card"><div class="hfo-toolbar"><h2>All Husbandry Calls</h2><span class="hfo-muted">${escape(state.sync)}</span></div><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft Port Call')}</b><small>${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${formatDate(j.data.eta)} – ${formatDate(j.data.etd)}</small></button><span>${escape(j.data.status)}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></div>
        ${isOwner()?'<button class="hfo-btn" data-grants>Manage Operations access</button>':''}`}
     </div>`;
     document.querySelector('.top .actions select').style.display='none';
