@@ -1,0 +1,48 @@
+#knowledge [hidden] { display: none !important; }
+.kb-main-tabs, .kb-subtabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.kb-main-tabs { padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+#kbTerminalModule { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.kb-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.kb-heading h2 { font-size: 20px; margin: 0 0 5px; }
+.kb-heading p { color: var(--muted); font-size: 12px; margin: 0 0 16px; }
+#kbStorageStatus { text-align: right; }
+.kb-alert { background: #fff9e9; border: 1px solid #f2dfab; border-radius: 7px; padding: 10px 12px; color: #745413; font-size: 12px; line-height: 1.45; margin-bottom: 16px; }
+.kb-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+.kb-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.kb-key { border-radius: 5px; padding: 4px 7px; font-size: 11px; font-weight: 600; }
+.kb-yes { background: #d7f1dd; color: #137333; }
+.kb-no { background: #ffe2e2; color: #b42338; }
+.kb-unknown { background: #edf0f4; color: #64748b; }
+.kb-matrix-scroll, .kb-contact-scroll { overflow: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 7px; }
+.kb-matrix { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1500px; font-size: 11px; }
+.kb-matrix th, .kb-matrix td { border-right: 1px solid #d5dde8; border-bottom: 1px solid #d5dde8; padding: 5px; }
+.kb-matrix thead th { background: #f9cf42; color: #172033; text-align: center; font-size: 10px; line-height: 1.25; position: sticky; top: 0; z-index: 2; min-width: 82px; }
+.kb-matrix thead .kb-terminal-col { min-width: 155px; text-align: left; left: 0; z-index: 4; }
+.kb-matrix thead .kb-notes-col { min-width: 210px; }
+.kb-matrix thead .kb-actions-col { min-width: 82px; }
+.kb-port-row th { background: #cdebf7; color: #133f59; text-align: left; font-weight: 700; padding: 7px 10px; }
+.kb-terminal-name { position: sticky; left: 0; z-index: 1; min-width: 155px; background: #fff; text-align: left; font-weight: 600; }
+.kb-matrix tr:nth-child(even) .kb-terminal-name { background: #fafbfc; }
+.kb-status-cell { text-align: center; min-width: 82px; padding: 3px !important; }
+.kb-status { width: 100%; min-height: 31px; border: 1px solid transparent; border-radius: 5px; font-weight: 700; font-size: 16px; cursor: pointer; }
+.kb-status:hover, .kb-status:focus-visible { border-color: #334155; outline: none; }
+.kb-notes { min-width: 210px; max-width: 260px; }
+.kb-notes span, .kb-notes small { display: block; overflow-wrap: anywhere; }
+.kb-notes small { color: var(--muted); margin-top: 3px; }
+.kb-row-actions { white-space: nowrap; }
+.kb-link { border: 0; background: transparent; color: var(--teal); font-size: 11px; padding: 5px; }
+.kb-link:hover { text-decoration: underline; }
+.kb-delete { color: var(--red); }
+.kb-form { border: 1px solid var(--line); background: #f7fafc; border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+.kb-form h3 { font-size: 14px; margin: 0 0 12px; }
+.kb-form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.kb-form-grid label { display: grid; gap: 5px; font-size: 11px; color: var(--muted); }
+.kb-form-grid input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--ink); }
+.kb-form-grid label:last-child { grid-column: span 2; }
+.kb-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.kb-contact-table { min-width: 1150px; }
+.kb-contact-table th { white-space: nowrap; padding-top: 10px; }
+.kb-contact-table td { overflow-wrap: anywhere; }
+@media (max-width: 850px) { .kb-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kb-heading, .kb-toolbar { flex-direction: column; align-items: stretch; } #kbStorageStatus { text-align: left; } }
+@media (max-width: 520px) { .kb-form-grid { grid-template-columns: 1fr; } .kb-form-grid label:last-child { grid-column: auto; } #kbTerminalModule { padding: 12px; } }
+
