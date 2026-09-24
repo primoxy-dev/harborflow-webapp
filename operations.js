@@ -57,14 +57,19 @@
     return body;
   }
   async function refresh() {
-    if (state.busy || state.modal || state.personDraft || state.tripDraft || (document.activeElement?.matches?.('input,textarea,select') && document.activeElement.closest('.hfo-overlay'))) return;
+    if (state.busy) return;
+    const editing = Boolean(state.modal || state.openJobId || state.openServiceId || state.personDraft || state.tripDraft);
     try {
       const next = await api('state', {}, 'GET');
-      state.login = next.login; state.grant = next.grant; state.jobs = next.jobs; state.services = next.services;
+      state.login = next.login; state.grant = next.grant;
       state.sync = 'Synced ' + new Date().toLocaleTimeString();
+      // Keep the original field values in an open editor so a concurrent write
+      // is compared against the user's true base, not silently replaced by polling.
+      if (editing) return;
+      state.jobs = next.jobs; state.services = next.services;
       if (state.openJobId && !job()) { state.openJobId = null; state.openServiceId = null; state.people = []; state.trips = []; }
       render();
-    } catch (e) { state.grant = null; state.sync = ''; state.error = e.message; render(); }
+    } catch (e) { state.grant = null; state.jobs = []; state.services = []; state.people = []; state.trips = []; state.openJobId = null; state.openServiceId = null; state.modal = null; state.sync = ''; state.error = e.message; render(); }
   }
   function metrics() {
     const now = Date.now(), active = state.jobs.filter(j => !['Completed','Cancelled'].includes(j.data.status));
@@ -408,7 +413,7 @@
     if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab='details';state.history=[];state.error='';render();return;}
     if(b.dataset.shift){shift(Number(b.dataset.shift));return;}
     if(b.hasAttribute('data-grants')){state.modal='grants';state.openJobId=null;state.openServiceId=null;render();return;}
-    if(b.hasAttribute('data-close')){state.modal=null;state.openJobId=null;state.openServiceId=null;state.people=[];state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();return;}
+    if(b.hasAttribute('data-close')){state.modal=null;state.openJobId=null;state.openServiceId=null;state.people=[];state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
     if(b.hasAttribute('data-back-job')){state.openServiceId=null;state.people=[];state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];render();return;}
     if(b.hasAttribute('data-add-service')){state.modal='addService';render();return;}
     if(b.dataset.removeService){const reason=prompt('Reason for removing this erroneous Service entry:');if(reason)await perform('removeService',{id:b.dataset.removeService,reason},out=>{const x=state.services.find(s=>s.id===out.service.id);Object.assign(x,out.service);render();});return;}
