@@ -1,4 +1,4 @@
-/* Terminal restriction matrix prototype. Data is local to this browser only. */
+/* Shared terminal restrictions, stored in a private GitHub repository via the API. */
 (() => {
   const section = document.getElementById('knowledge');
   if (!section) return;
@@ -23,31 +23,127 @@
   const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   })[char]);
-  let storedLocally = true;
-  let state;
+  let legacyDraft = null;
+  let importPending = false;
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
-    state = saved && Array.isArray(saved.terminals) && Array.isArray(saved.contacts) ? saved : initialState();
-  } catch {
-    state = initialState();
-    storedLocally = false;
-  }
+    if (saved && Array.isArray(saved.terminals) && Array.isArray(saved.contacts) && saved.updated) legacyDraft = saved;
+  } catch { /* Browser storage is optional; the server is authoritative. */ }
+  let state = initialState();
+  let loaded = false, loading = false, remoteEmpty = false, role = null, login = null;
+  let revision = null, changeNumber = 0, savedNumber = 0, saving = false, conflict = false;
+  let saveTimer = null, syncMessage = 'Sign in with GitHub to load the shared table.';
+  let accessUsers = [], accessRevision = null, accessOpen = false, accessMessage = '';
   let activeSubtab = 'restrictions';
   let editingTerminal = null;
   let editingContact = null;
 
+  const canEdit = () => loaded && role === 'editor' && !conflict;
+  async function api(path, options) {
+    const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(Error(body.error || `Request failed (${response.status})`), { status: response.status });
+    return body;
+  }
+  async function loadShared(force = false) {
+    if (loading || (loaded && !force)) return;
+    if (saving) { syncMessage = 'Wait for the current save to finish before reloading.'; showStorageStatus(); return; }
+    if (force && changeNumber !== savedNumber && !confirm('Unsaved changes may be lost. Reload shared data?')) return;
+    loading = true;
+    syncMessage = 'Loading shared Knowledge base…';
+    render();
+    try {
+      const result = await api('/api/knowledge');
+      state = result.data || initialState();
+      remoteEmpty = !result.data;
+      revision = result.revision;
+      role = result.role;
+      login = result.login;
+      loaded = true;
+      conflict = false;
+      editingTerminal = editingContact = null;
+      changeNumber = savedNumber = 0;
+      syncMessage = `Shared data loaded · ${role === 'editor' ? 'Can edit' : 'View only'}`;
+      if (login === 'primoxy-dev') await loadAccess();
+    } catch (error) {
+      syncMessage = error.message;
+      if (!loaded) { role = null; login = null; }
+    } finally {
+      loading = false;
+      render();
+    }
+  }
+  async function loadAccess() {
+    try {
+      const result = await api('/api/knowledge?mode=access');
+      accessUsers = result.users;
+      accessRevision = result.revision;
+      accessMessage = '';
+    } catch (error) { accessMessage = `Could not load sharing list: ${error.message}`; }
+  }
+  async function updateAccess(users) {
+    const previous = accessUsers;
+    accessUsers = users;
+    accessMessage = 'Saving access list…';
+    render();
+    try {
+      const result = await api('/api/knowledge?mode=access', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ users, revision: accessRevision })
+      });
+      accessRevision = result.revision;
+      accessMessage = 'Access list saved. Invited people can sign in now.';
+    } catch (error) {
+      accessUsers = previous;
+      accessMessage = `Sharing failed: ${error.message}`;
+      if (error.status === 409) await loadAccess();
+    }
+    render();
+  }
   function persist() {
+    if (!canEdit()) return;
     state.updated = new Date().toISOString();
-    try { localStorage.setItem(storageKey, JSON.stringify(state)); storedLocally = true; }
-    catch { storedLocally = false; }
+    changeNumber += 1;
+    syncMessage = 'Changes pending…';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(saveShared, 650);
     showStorageStatus();
+  }
+  async function saveShared() {
+    if (!canEdit() || saving || changeNumber === savedNumber) return;
+    saving = true;
+    const sentNumber = changeNumber;
+    syncMessage = 'Saving shared table…';
+    showStorageStatus();
+    try {
+      const result = await api('/api/knowledge', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ revision, terminals: state.terminals, contacts: state.contacts })
+      });
+      revision = result.revision;
+      remoteEmpty = false;
+      savedNumber = sentNumber;
+      syncMessage = changeNumber === savedNumber ? 'Saved for everyone' : 'Saving newer changes…';
+      if (changeNumber === savedNumber && importPending) {
+        legacyDraft = null;
+        importPending = false;
+      }
+    } catch (error) {
+      conflict = error.status === 409;
+      syncMessage = conflict ? 'Another device changed this table. Reload to review before editing again.' : `Save failed: ${error.message}`;
+      if (conflict) render();
+    } finally {
+      saving = false;
+      showStorageStatus();
+      if (changeNumber !== savedNumber && !conflict && !syncMessage.startsWith('Save failed')) saveTimer = setTimeout(saveShared, 100);
+    }
   }
   function showStorageStatus() {
     const element = document.getElementById('kbStorageStatus');
     if (!element) return;
-    element.textContent = storedLocally
-      ? `Saved in this browser only${state.updated ? ' · ' + new Date(state.updated).toLocaleString() : ''}`
-      : 'Browser storage unavailable; changes last only until refresh';
+    element.textContent = syncMessage;
+    const retry = module.querySelector('[data-kb-action="retry-save"]');
+    if (retry) retry.disabled = changeNumber === savedNumber || saving || conflict;
   }
 
   // Keep existing Knowledge base cards available as the Articles tab.
@@ -68,7 +164,7 @@
     articles.hidden = showTerminal;
     module.hidden = !showTerminal;
     tabbar.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
-    if (showTerminal) render();
+    if (showTerminal) loadShared();
   });
 
   const input = (name, label, value, type = 'text', required = false) =>
@@ -79,7 +175,7 @@
     return `<form id="kbTerminalForm" class="kb-form">
       <h3>${editingTerminal === 'new' ? 'Add terminal' : 'Edit terminal'}</h3>
       <div class="kb-form-grid">${input('port', 'Port', row.port, 'text', true)}${input('terminal', 'Terminal', row.terminal, 'text', true)}${input('source', 'Source / circular', row.source)}${input('verified', 'Last verified', row.verified, 'date')}${input('note', 'General conditions / contact note', row.note)}</div>
-      <div class="kb-form-actions">${editingTerminal === 'new' ? '<button type="button" class="secondary" data-kb-action="cancel-terminal">Cancel</button><button type="submit" class="primary">Add terminal</button>' : '<span class="small" id="kbEditStatus" role="status">Changes save automatically in this browser</span><button type="button" class="secondary" data-kb-action="cancel-terminal">Close</button>'}</div>
+      <div class="kb-form-actions">${editingTerminal === 'new' ? '<button type="button" class="secondary" data-kb-action="cancel-terminal">Cancel</button><button type="submit" class="primary">Add terminal</button>' : '<span class="small" id="kbEditStatus" role="status">Changes sync automatically for the team</span><button type="button" class="secondary" data-kb-action="cancel-terminal">Close</button>'}</div>
     </form>`;
   }
   function contactForm() {
@@ -88,7 +184,7 @@
     return `<form id="kbContactForm" class="kb-form">
       <h3>${editingContact === 'new' ? 'Add contact' : 'Edit contact'}</h3>
       <div class="kb-form-grid">${input('port', 'Port', row.port, 'text', true)}${input('terminal', 'Terminal', row.terminal)}${input('name', 'Contact name', row.name, 'text', true)}${input('role', 'Role / department', row.role)}${input('phone', 'Phone', row.phone, 'tel')}${input('email', 'Email', row.email, 'email')}${input('note', 'Notes', row.note)}</div>
-      <div class="kb-form-actions">${editingContact === 'new' ? '<button type="button" class="secondary" data-kb-action="cancel-contact">Cancel</button><button type="submit" class="primary">Add contact</button>' : '<span class="small" id="kbEditStatus" role="status">Changes save automatically in this browser</span><button type="button" class="secondary" data-kb-action="cancel-contact">Close</button>'}</div>
+      <div class="kb-form-actions">${editingContact === 'new' ? '<button type="button" class="secondary" data-kb-action="cancel-contact">Cancel</button><button type="submit" class="primary">Add contact</button>' : '<span class="small" id="kbEditStatus" role="status">Changes sync automatically for the team</span><button type="button" class="secondary" data-kb-action="cancel-contact">Close</button>'}</div>
     </form>`;
   }
   const statusInfo = status => status === 'yes' ? { icon: '✓', label: 'Allowed', checked: 'true' }
@@ -97,7 +193,7 @@
   function statusCell(row, key, label) {
     const value = row.restrictions?.[key] || 'unknown';
     const info = statusInfo(value);
-    return `<td class="kb-status-cell"><button type="button" role="checkbox" aria-checked="${info.checked}" aria-label="${escapeHtml(row.port)} ${escapeHtml(row.terminal)}: ${escapeHtml(label)} — ${info.label}. Click to change" title="${info.label}; click to change" class="kb-status kb-${value}" data-kb-action="cycle" data-id="${escapeHtml(row.id)}" data-service="${key}">${info.icon}</button></td>`;
+    return `<td class="kb-status-cell"><button type="button" role="checkbox" aria-checked="${info.checked}" aria-label="${escapeHtml(row.port)} ${escapeHtml(row.terminal)}: ${escapeHtml(label)} — ${info.label}" title="${info.label}${canEdit() ? '; click to change' : ''}" class="kb-status kb-${value}" data-kb-action="cycle" data-id="${escapeHtml(row.id)}" data-service="${key}" ${canEdit() ? '' : 'disabled'}>${info.icon}</button></td>`;
   }
   function matrix() {
     const ports = [...new Set(state.terminals.map(row => row.port))].sort((a, b) => {
@@ -106,29 +202,61 @@
       return (knownA < 0 ? 999 : knownA) - (knownB < 0 ? 999 : knownB) || a.localeCompare(b);
     });
     return `<div class="kb-matrix-scroll"><table class="kb-matrix"><thead><tr><th class="kb-terminal-col">Port / Terminal</th>${services.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join('')}<th class="kb-notes-col">Conditions / Source</th><th class="kb-actions-col">Actions</th></tr></thead><tbody>
-      ${ports.map(port => `<tr class="kb-port-row"><th colspan="${services.length + 3}">${escapeHtml(port)}</th></tr>${state.terminals.filter(row => row.port === port).map(row => `<tr><th class="kb-terminal-name">${escapeHtml(row.terminal)}</th>${services.map(([key, label]) => statusCell(row, key, label)).join('')}<td class="kb-notes"><span>${escapeHtml(row.note || '—')}</span><small>${escapeHtml(row.source || 'No source')} · ${row.verified ? 'Verified ' + escapeHtml(row.verified) : 'Unverified'}</small></td><td class="kb-row-actions"><button type="button" class="kb-link" data-kb-action="edit-terminal" data-id="${escapeHtml(row.id)}">Edit</button><button type="button" class="kb-link kb-delete" data-kb-action="delete-terminal" data-id="${escapeHtml(row.id)}">Delete</button></td></tr>`).join('')}`).join('')}
+      ${ports.map(port => `<tr class="kb-port-row"><th colspan="${services.length + 3}">${escapeHtml(port)}</th></tr>${state.terminals.filter(row => row.port === port).map(row => `<tr><th class="kb-terminal-name">${escapeHtml(row.terminal)}</th>${services.map(([key, label]) => statusCell(row, key, label)).join('')}<td class="kb-notes"><span>${escapeHtml(row.note || '—')}</span><small>${escapeHtml(row.source || 'No source')} · ${row.verified ? 'Verified ' + escapeHtml(row.verified) : 'Unverified'}</small></td><td class="kb-row-actions">${canEdit() ? `<button type="button" class="kb-link" data-kb-action="edit-terminal" data-id="${escapeHtml(row.id)}">Edit</button><button type="button" class="kb-link kb-delete" data-kb-action="delete-terminal" data-id="${escapeHtml(row.id)}">Delete</button>` : 'View only'}</td></tr>`).join('')}`).join('')}
       ${ports.length ? '' : `<tr><td colspan="${services.length + 3}">No terminals yet. Select Add terminal.</td></tr>`}
     </tbody></table></div>`;
   }
   function contacts() {
     return `<div class="kb-contact-scroll"><table class="table kb-contact-table"><thead><tr><th>Port</th><th>Terminal</th><th>Contact name</th><th>Role / department</th><th>Phone</th><th>Email</th><th>Notes</th><th>Actions</th></tr></thead><tbody>
-      ${state.contacts.length ? state.contacts.map(row => `<tr><td>${escapeHtml(row.port)}</td><td>${escapeHtml(row.terminal)}</td><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.role)}</td><td>${escapeHtml(row.phone)}</td><td>${escapeHtml(row.email)}</td><td>${escapeHtml(row.note)}</td><td class="kb-row-actions"><button type="button" class="kb-link" data-kb-action="edit-contact" data-id="${escapeHtml(row.id)}">Edit</button><button type="button" class="kb-link kb-delete" data-kb-action="delete-contact" data-id="${escapeHtml(row.id)}">Delete</button></td></tr>`).join('') : '<tr><td colspan="8">No contacts yet. Select Add contact.</td></tr>'}
+      ${state.contacts.length ? state.contacts.map(row => `<tr><td>${escapeHtml(row.port)}</td><td>${escapeHtml(row.terminal)}</td><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.role)}</td><td>${escapeHtml(row.phone)}</td><td>${escapeHtml(row.email)}</td><td>${escapeHtml(row.note)}</td><td class="kb-row-actions">${canEdit() ? `<button type="button" class="kb-link" data-kb-action="edit-contact" data-id="${escapeHtml(row.id)}">Edit</button><button type="button" class="kb-link kb-delete" data-kb-action="delete-contact" data-id="${escapeHtml(row.id)}">Delete</button>` : 'View only'}</td></tr>`).join('') : '<tr><td colspan="8">No contacts yet. Select Add contact.</td></tr>'}
       </tbody></table></div>`;
+  }
+  function accessPanel() {
+    if (login !== 'primoxy-dev') return '';
+    return `<div class="kb-access"><div class="kb-toolbar"><div><b>Share Knowledge base</b><p class="small">Only GitHub users listed here can view or edit this table. Crew documents remain owner-only.</p></div><button type="button" class="secondary" data-kb-action="toggle-access">${accessOpen ? 'Hide access' : 'Manage access'}</button></div>
+      ${accessOpen ? `<p class="small">Share this website link: <a href="/">${escapeHtml(location.origin + '/')}</a>. Invitees must sign in with their listed GitHub username.</p>
+        <form id="kbAccessForm" class="kb-access-form"><label>GitHub username <input name="login" required pattern="[A-Za-z0-9-]{1,39}" autocomplete="off"></label><label>Permission <select name="role"><option value="viewer">View only</option><option value="editor">Can edit</option></select></label><button type="submit" class="primary">Add person</button></form>
+        <div class="kb-access-users">${accessUsers.length ? accessUsers.map(user => `<div><span>${escapeHtml(user.login)}</span><select data-kb-access-role="${escapeHtml(user.login)}" aria-label="Permission for ${escapeHtml(user.login)}"><option value="viewer" ${user.role === 'viewer' ? 'selected' : ''}>View only</option><option value="editor" ${user.role === 'editor' ? 'selected' : ''}>Can edit</option></select><button type="button" class="kb-link kb-delete" data-kb-action="remove-access" data-login="${escapeHtml(user.login)}">Remove</button></div>`).join('') : '<span class="small">No one else has access yet.</span>'}</div>
+        <p class="small" role="status">${escapeHtml(accessMessage)}</p>` : ''}</div>`;
   }
   function render() {
     module.innerHTML = `<div class="kb-heading"><div><h2>Terminal Restriction and Contact list</h2><p>Reference matrix for service access and terminal contacts</p></div><span id="kbStorageStatus" class="small"></span></div>
-      <div class="kb-alert">Terminal names are sample rows. Service permissions are intentionally blank until verified. Check the current terminal circular and record its source and verification date before operational use. Contact information is stored only in this browser.</div>
+      ${!loaded ? `<div class="kb-auth-card"><p>${escapeHtml(syncMessage)}</p><a class="primary kb-sign-in" href="/api/auth?mode=start">Sign in with GitHub</a><button type="button" class="secondary" data-kb-action="refresh">Try again</button><p class="small">Access is private. The owner can grant view-only or edit permission after signing in.</p></div>` : `
+      <div class="kb-alert">Shared private data · ${escapeHtml(login || '')} · ${role === 'editor' ? 'Can edit' : 'View only'}. Confirm the current terminal circular and record its source and verification date before operational use.</div>
+      <div class="kb-sync-actions"><button type="button" class="secondary" data-kb-action="refresh">Reload latest</button>${role === 'editor' ? '<button type="button" class="secondary" data-kb-action="retry-save">Save now</button>' : ''}${remoteEmpty && legacyDraft && canEdit() && changeNumber === savedNumber ? '<button type="button" class="secondary" data-kb-action="import-local">Import this browser’s previous table</button>' : ''}</div>
+      ${accessPanel()}
       <div class="kb-subtabs"><button type="button" class="tab ${activeSubtab === 'restrictions' ? 'active' : ''}" data-kb-subtab="restrictions">Terminal restrictions</button><button type="button" class="tab ${activeSubtab === 'contacts' ? 'active' : ''}" data-kb-subtab="contacts">Contact list</button></div>
-      ${activeSubtab === 'restrictions' ? `<div class="kb-toolbar"><div class="kb-legend"><span class="kb-key kb-yes">✓ Allowed</span><span class="kb-key kb-no">✕ Restricted</span><span class="kb-key kb-unknown">— Unverified</span><span class="small">Click a cell to cycle its status.</span></div><button type="button" class="primary" data-kb-action="add-terminal">+ Add terminal</button></div>${terminalForm()}${matrix()}`
-        : `<div class="kb-toolbar"><span class="small">Keep contacts current; confirm before use.</span><button type="button" class="primary" data-kb-action="add-contact">+ Add contact</button></div>${contactForm()}${contacts()}`}`;
+      ${activeSubtab === 'restrictions' ? `<div class="kb-toolbar"><div class="kb-legend"><span class="kb-key kb-yes">✓ Allowed</span><span class="kb-key kb-no">✕ Restricted</span><span class="kb-key kb-unknown">— Unverified</span><span class="small">${canEdit() ? 'Click a cell to cycle its status.' : 'Sign in with edit access to change cells.'}</span></div>${canEdit() ? '<button type="button" class="primary" data-kb-action="add-terminal">+ Add terminal</button>' : ''}</div>${canEdit() ? terminalForm() : ''}${matrix()}`
+        : `<div class="kb-toolbar"><span class="small">Keep contacts current; confirm before use.</span>${canEdit() ? '<button type="button" class="primary" data-kb-action="add-contact">+ Add contact</button>' : ''}</div>${canEdit() ? contactForm() : ''}${contacts()}`}`}`;
     showStorageStatus();
   }
   module.addEventListener('click', event => {
+    if (event.target.closest('.kb-sign-in')) {
+      try { sessionStorage.setItem('hf-open-knowledge', '1'); } catch { /* No session storage. */ }
+      return;
+    }
     const subtab = event.target.closest('[data-kb-subtab]');
     if (subtab) { activeSubtab = subtab.dataset.kbSubtab; render(); return; }
     const button = event.target.closest('[data-kb-action]');
     if (!button) return;
     const { kbAction: action, id: rowId } = button.dataset;
+    if (action === 'refresh') { loadShared(true); return; }
+    if (action === 'retry-save') { clearTimeout(saveTimer); saveShared(); return; }
+    if (action === 'toggle-access' && login === 'primoxy-dev') { accessOpen = !accessOpen; render(); return; }
+    if (action === 'remove-access' && login === 'primoxy-dev') {
+      if (confirm(`Remove Knowledge base access for ${button.dataset.login}?`)) updateAccess(accessUsers.filter(item => item.login !== button.dataset.login));
+      return;
+    }
+    if (action === 'import-local') {
+      if (!canEdit() || !remoteEmpty || !legacyDraft) return;
+      if (!confirm('Import this browser’s previous table to the shared Knowledge base? Everyone with access will see it.')) return;
+      state = legacyDraft;
+      importPending = true;
+      persist();
+      render();
+      return;
+    }
+    if (!canEdit()) return;
     if (action === 'cycle') {
       const row = state.terminals.find(item => item.id === rowId);
       if (!row) return;
@@ -172,6 +300,7 @@
     if (action === 'add-contact' || action === 'edit-contact') module.querySelector('#kbContactForm [name="port"]')?.focus();
   });
   module.addEventListener('input', event => {
+    if (!canEdit()) return;
     const form = event.target.closest('form');
     const isTerminal = form?.id === 'kbTerminalForm' && editingTerminal && editingTerminal !== 'new';
     const isContact = form?.id === 'kbContactForm' && editingContact && editingContact !== 'new';
@@ -195,13 +324,32 @@
     }
     Object.assign(row, values);
     persist();
-    status.textContent = storedLocally ? 'Saved automatically in this browser' : 'Browser storage unavailable; changes last until refresh';
+    status.textContent = 'Syncing automatically for everyone…';
+  });
+  module.addEventListener('change', event => {
+    const user = event.target.dataset.kbAccessRole;
+    if (user && login === 'primoxy-dev') updateAccess(accessUsers.map(item => item.login === user ? { ...item, role: event.target.value } : item));
   });
   module.addEventListener('submit', event => {
+    if (event.target.id === 'kbAccessForm') {
+      event.preventDefault();
+      if (login !== 'primoxy-dev') return;
+      const form = new FormData(event.target);
+      const user = String(form.get('login') || '').trim().toLowerCase();
+      const permission = String(form.get('role') || 'viewer');
+      if (!/^[a-z0-9-]{1,39}$/.test(user) || user === 'primoxy-dev' || !['viewer', 'editor'].includes(permission) || accessUsers.some(item => item.login === user)) {
+        accessMessage = 'Enter a new valid GitHub username.';
+        render();
+        return;
+      }
+      updateAccess([...accessUsers, { login: user, role: permission }]);
+      return;
+    }
     const terminalFormSubmitted = event.target.id === 'kbTerminalForm';
     const contactFormSubmitted = event.target.id === 'kbContactForm';
     if (!terminalFormSubmitted && !contactFormSubmitted) return;
     event.preventDefault();
+    if (!canEdit()) return;
     const form = new FormData(event.target);
     const value = name => String(form.get(name) || '').trim();
     if (terminalFormSubmitted) {
@@ -223,6 +371,19 @@
     }
     persist();
     render();
+  });
+  try {
+    if (sessionStorage.getItem('hf-open-knowledge') === '1') {
+      sessionStorage.removeItem('hf-open-knowledge');
+      document.querySelector('.nav[data-view="knowledge"]')?.click();
+      tabbar.querySelector('[data-kb-main="terminal"]')?.click();
+    }
+  } catch { /* Session storage is optional. */ }
+  setInterval(() => {
+    if (!module.hidden && loaded && !saving && changeNumber === savedNumber && editingTerminal === null && editingContact === null && !accessOpen) loadShared(true);
+  }, 60000);
+  window.addEventListener('beforeunload', event => {
+    if (loaded && changeNumber !== savedNumber) { event.preventDefault(); event.returnValue = ''; }
   });
 })();
 
