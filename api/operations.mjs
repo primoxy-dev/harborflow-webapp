@@ -197,16 +197,26 @@ async function route(request) {
     if (grant.role !== 'owner') return error('Only owner can create the GitHub folder', 403);
     const job = await loadJob(sql, input.id);
     if (!job) return error('Job not found', 404);
-    if (job.data.documentsPath) return json({ record: job });
-    if (!textField(job.data.vessel) || !textField(job.data.jobNo) || !job.data.eta) return error('Vessel, Job No. and ETA are required');
+    if (!job.data.documentsPath && (!textField(job.data.vessel) || !textField(job.data.jobNo) || !job.data.eta)) return error('Vessel, Job No. and ETA are required');
     if (!process.env.GITHUB_DOCUMENTS_TOKEN) return error('Private GitHub storage is not configured', 503);
     let created;
+    const newServiceFiles = [];
     try {
-      created = await createJobFolder(job.data, job.id);
-      const saved = await patchRow(sql, 'operation_jobs', job.id, 'job', { documentsPath: null }, { documentsPath: created.folder }, login, validateJob);
-      if (!saved.ok) await undoCreatedFile(created.path, created.createdSha);
+      if (!job.data.documentsPath) created = await createJobFolder(job.data, job.id);
+      const folder = job.data.documentsPath || created.folder;
+      const services = await rows(sql, "SELECT DISTINCT data->>'type' AS type FROM operation_services WHERE job_id=$1 AND removed_at IS NULL", [job.id]);
+      for (const service of services) {
+        const serviceFile = await createServiceFolder(folder, service.type);
+        if (serviceFile.createdSha) newServiceFiles.push(serviceFile);
+      }
+      if (job.data.documentsPath) return json({ record: job, foldersSynced: true });
+      const saved = await patchRow(sql, 'operation_jobs', job.id, 'job', { documentsPath: null }, { documentsPath: folder }, login, validateJob);
+      if (!saved.ok) throw Error('Job changed while creating its GitHub folder. Try again.');
       return saved;
     } catch (e) {
+      for (const file of newServiceFiles.reverse()) {
+        try { await undoCreatedFile(file.path, file.createdSha); } catch {}
+      }
       try { if (created) await undoCreatedFile(created.path, created.createdSha); } catch {}
       return error(e.message || 'GitHub folder could not be created', 502);
     }
