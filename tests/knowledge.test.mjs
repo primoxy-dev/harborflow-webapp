@@ -152,6 +152,20 @@ test('a named contact viewer may propose but loses proposal visibility after rev
   const revoked = await call(knowledgeHandler, 'PUT', '/api/knowledge?mode=access', 'primoxy-dev', { revision: granted.body.revision, users: currentAccess.body.users });
   assert.equal(revoked.status, 200);
   const after = await call(knowledgeHandler, 'GET', '/api/knowledge?mode=proposals', 'agent');
-  assert.equal(after.body.proposals.some(item => item.id === submitted.body.proposalId), false);
+  assert.equal(after.status, 403);
+});
+
+test('normal edits cannot forge import approval references', async () => {
+  const current = await call(knowledgeHandler, 'GET', '/api/knowledge', 'primoxy-dev');
+  const row = current.body.data.terminals[0];
+  const saved = await call(knowledgeHandler, 'PUT', '/api/knowledge?area=restrictions', 'primoxy-dev', {
+    revision: current.body.revision,
+    terminals: [{ ...row, importRef: 'forged:approval', note: 'Trial note' }]
+  });
+  assert.equal(saved.status, 200);
+  const publicView = await call(knowledgeHandler, 'GET', '/api/knowledge');
+  assert.equal(publicView.body.data.terminals[0].importRef, undefined);
+  assert.equal(publicView.body.data.terminals[0].note, 'Trial note');
+  assert.equal((await call(knowledgeHandler, 'PUT', '/api/knowledge?area=restrictions', 'primoxy-dev', null)).status, 400);
 });
 
