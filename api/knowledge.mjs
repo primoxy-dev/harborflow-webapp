@@ -61,7 +61,6 @@ async function write(path, body, validate, message) {
 async function route(request) {
   if (!configReady()) return json({ error: 'Private shared storage is not configured' }, 503);
   const login = sessionLogin(request);
-  if (!login) return json({ error: 'Sign in with GitHub to use the shared Knowledge base' }, 401);
   try {
     const accessMode = new URL(request.url).searchParams.get('mode') === 'access';
     if (accessMode) {
@@ -77,12 +76,12 @@ async function route(request) {
       return await write(knowledgeAccessPath, JSON.parse(raw), validateAccess, 'Update Knowledge base access');
     }
     const role = await knowledgeRole(login);
-    if (!role) return json({ error: 'Your GitHub account has not been granted Knowledge base access' }, 403);
     if (request.method === 'GET') {
       const file = await readJson(knowledgePath);
-      return json({ role, login, data: file?.data || null, revision: file?.sha || null });
+      return json({ role: role || 'viewer', login, data: file?.data || null, revision: file?.sha || null });
     }
     if (request.method !== 'PUT') return json({ error: 'Method not allowed' }, 405);
+    if (!login) return json({ error: 'Sign in with GitHub to edit the Knowledge base' }, 401);
     if (role !== 'editor') return json({ error: 'View-only access cannot edit this table' }, 403);
     if (!sameOrigin(request)) return json({ error: 'Invalid origin' }, 403);
     const raw = await request.text();
