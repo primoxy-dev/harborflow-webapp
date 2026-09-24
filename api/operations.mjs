@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { nodeHandler, json, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
+import { nodeHandler, gh, jobPath, json, readJson, safeName, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
 import { OWNER, TRIP_KINDS, canEditJob, canEditService, canPeople, db, fieldConflicts, permission, textField, uuid, validateJob, validateService } from '../lib/operations.mjs';
 
 const jobFields = ['jobNo', 'vessel', 'imo', 'port', 'principal', 'eta', 'etd', 'status', 'pic', 'notes', 'terminalStays', 'completionReason'];
@@ -15,6 +15,29 @@ const clean = (value, keys) => Object.fromEntries(Object.entries(value || {}).fi
 const error = (message, code = 400, extra = {}) => json({ error: message, ...extra }, code);
 const personScope = kind => kind === 'crew' ? 'crew' : 'visitor';
 const rows = (sql, query, params = []) => sql.query(query, params);
+const documentsFolder = data => jobPath({ name: data.vessel, jobNo: data.jobNo, eta: data.eta }, 'General').replace(/\/General$/, '');
+async function createJobFolder(data, id) {
+  const folder = documentsFolder(data);
+  const path = folder + '/General/job.json';
+  const old = await readJson(path);
+  if (old) {
+    if (old.data?.operationJobId !== id) throw Error('GitHub folder is already linked to another Job');
+    return { folder, path, createdSha: null };
+  }
+  const marker = JSON.stringify({ version: 1, operationJobId: id, note: 'Port Call data is stored in HarborFlow Operations.' }, null, 2) + '\n';
+  const result = await gh('PUT', path, { message: 'Create General folder for Port Call ' + id, content: Buffer.from(marker).toString('base64') });
+  return { folder, path, createdSha: result.content?.sha };
+}
+async function createServiceFolder(folder, type) {
+  const servicePath = folder + '/' + safeName(type);
+  if (await gh('GET', servicePath)) return { path: servicePath, createdSha: null };
+  const marker = 'Files for this HarborFlow Service.\n';
+  const result = await gh('PUT', servicePath + '/README.md', { message: 'Create Service folder ' + type, content: Buffer.from(marker).toString('base64') });
+  return { path: servicePath + '/README.md', createdSha: result.content?.sha };
+}
+async function undoCreatedFile(path, sha) {
+  if (sha) await gh('DELETE', path, { message: 'Undo incomplete HarborFlow folder creation', sha });
+}
 
 async function loadJob(sql, id) {
   if (!uuid(id)) return null;
@@ -153,12 +176,40 @@ async function route(request) {
     const data = { jobNo: '', vessel: '', port: '', principal: '', eta: '', etd: '', status: 'Draft', pic: '', ...clean(input.data, jobFields) };
     const invalid = validateJob(data);
     if (invalid) return error(invalid);
+    if (!textField(data.vessel) || !textField(data.jobNo) || !data.eta) return error('Vessel, Job No. and ETA are required to create the GitHub folder');
+    if (!process.env.GITHUB_DOCUMENTS_TOKEN) return error('Private GitHub storage is not configured', 503);
     const id = randomUUID();
+    let created;
+    try {
+      created = await createJobFolder(data, id);
+    } catch (e) { return error(e.message || 'GitHub folder could not be created', 502); }
+    data.documentsPath = created.folder;
     try {
       const [job] = await rows(sql, `WITH inserted AS (INSERT INTO operation_jobs(id,data,created_by) VALUES($1,$2::jsonb,$3) RETURNING *),
         history AS (INSERT INTO operation_events(scope,record_id,action,actor,after_data) SELECT 'job',id::text,'create',$3,data FROM inserted) SELECT * FROM inserted`, [id, JSON.stringify(data), login]);
       return json({ job }, 201);
-    } catch (e) { return e.code === '23505' ? error('Job No. is already used', 409) : error('Job could not be created', 500); }
+    } catch (e) {
+      try { await undoCreatedFile(created.path, created.createdSha); } catch {}
+      return e.code === '23505' ? error('Job No. is already used', 409) : error('Job could not be created', 500);
+    }
+  }
+  if (action === 'syncJobFolder') {
+    if (grant.role !== 'owner') return error('Only owner can create the GitHub folder', 403);
+    const job = await loadJob(sql, input.id);
+    if (!job) return error('Job not found', 404);
+    if (job.data.documentsPath) return json({ record: job });
+    if (!textField(job.data.vessel) || !textField(job.data.jobNo) || !job.data.eta) return error('Vessel, Job No. and ETA are required');
+    if (!process.env.GITHUB_DOCUMENTS_TOKEN) return error('Private GitHub storage is not configured', 503);
+    let created;
+    try {
+      created = await createJobFolder(job.data, job.id);
+      const saved = await patchRow(sql, 'operation_jobs', job.id, 'job', { documentsPath: null }, { documentsPath: created.folder }, login, validateJob);
+      if (!saved.ok) await undoCreatedFile(created.path, created.createdSha);
+      return saved;
+    } catch (e) {
+      try { if (created) await undoCreatedFile(created.path, created.createdSha); } catch {}
+      return error(e.message || 'GitHub folder could not be created', 502);
+    }
   }
   if (action === 'updateJob') {
     const job = await loadJob(sql, input.id);
@@ -181,12 +232,21 @@ async function route(request) {
     const data = { type: 'Other', status: 'Not Started', checklist: [], ...clean(input.data, serviceFields) };
     const invalid = validateService(data);
     if (invalid) return error(invalid);
+    if (!job.data.documentsPath) return error('Create the GitHub Job folder before adding a Service', 409);
+    let serviceFolder;
+    try { serviceFolder = await createServiceFolder(job.data.documentsPath, data.type); }
+    catch (e) { return error(e.message || 'GitHub Service folder could not be created', 502); }
     const id = randomUUID();
-    const [service] = await rows(sql, `WITH counter AS (UPDATE operation_jobs SET next_service_seq=next_service_seq+1 WHERE id=$1 RETURNING next_service_seq-1 AS seq),
-      inserted AS (INSERT INTO operation_services(id,job_id,seq,data,created_by) SELECT $2,$1,seq,$3::jsonb,$4 FROM counter RETURNING *),
-      history AS (INSERT INTO operation_events(scope,record_id,action,actor,after_data) SELECT 'service',id::text,'create',$4,data FROM inserted)
-      SELECT * FROM inserted`, [job.id, id, JSON.stringify(data), login]);
-    return json({ service }, 201);
+    try {
+      const [service] = await rows(sql, `WITH counter AS (UPDATE operation_jobs SET next_service_seq=next_service_seq+1 WHERE id=$1 RETURNING next_service_seq-1 AS seq),
+        inserted AS (INSERT INTO operation_services(id,job_id,seq,data,created_by) SELECT $2,$1,seq,$3::jsonb,$4 FROM counter RETURNING *),
+        history AS (INSERT INTO operation_events(scope,record_id,action,actor,after_data) SELECT 'service',id::text,'create',$4,data FROM inserted)
+        SELECT * FROM inserted`, [job.id, id, JSON.stringify(data), login]);
+      return json({ service }, 201);
+    } catch {
+      try { await undoCreatedFile(serviceFolder.path, serviceFolder.createdSha); } catch {}
+      return error('Service could not be created', 500);
+    }
   }
   if (action === 'updateService') {
     const service = await loadService(sql, input.id);
