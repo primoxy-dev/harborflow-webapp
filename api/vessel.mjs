@@ -1,4 +1,4 @@
-import { nodeHandler, json } from '../lib/harborflow.mjs';
+import { nodeHandler, json, sessionLogin } from '../lib/harborflow.mjs';
 
 const endpoint = 'https://www.wikidata.org/w/api.php';
 const headers = {
@@ -21,6 +21,7 @@ async function wikidata(params) {
 }
 async function route(request) {
   if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+  if (!sessionLogin(request)) return json({ error: 'Sign in required' }, 401);
   const name = (new URL(request.url).searchParams.get('name') || '').trim();
   if (name.length < 3 || name.length > 80) return json({ error: 'Enter at least 3 letters of the vessel name' }, 400);
   try {
