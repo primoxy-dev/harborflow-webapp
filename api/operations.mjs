@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { nodeHandler, json, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
 import { OWNER, TRIP_KINDS, canEditJob, canEditService, canPeople, db, fieldConflicts, permission, textField, uuid, validateJob, validateService } from '../lib/operations.mjs';
 
-const jobFields = ['jobNo', 'vessel', 'imo', 'port', 'principal', 'eta', 'etd', 'status', 'pic', 'notes', 'terminalStays', 'timeZone', 'completionReason'];
+const jobFields = ['jobNo', 'vessel', 'imo', 'port', 'principal', 'eta', 'etd', 'status', 'pic', 'notes', 'terminalStays', 'completionReason'];
 const serviceFields = ['type', 'status', 'description', 'pic', 'supplier', 'plannedStart', 'plannedEnd', 'actualStart', 'actualEnd', 'planConfirmed', 'supplierConfirmed', 'terminalCondition', 'terminalConfirmation', 'restrictionReason', 'details', 'checklist', 'sopVersion', 'baselineDue', 'deadlineReason', 'notes'];
 const personFields = ['kind', 'category', 'name', 'nationality', 'rank', 'dob', 'passport', 'passportExpiry', 'seamanBook', 'immigration', 'flights', 'serviceIds', 'notes'];
 const tripFields = ['kind', 'origin', 'destination', 'plannedDeparture', 'plannedArrival', 'actualDeparture', 'actualArrival', 'provider', 'vehicle', 'purpose', 'status', 'personIds', 'cargo', 'notes'];
