@@ -76,14 +76,20 @@ async function githubProfile(login) {
   return { login, id: user.id, avatarUrl: user.avatar_url, url: user.html_url };
 }
 
-async function save(path, body, validate, actor, label) {
-  if (!Object.hasOwn(body, 'revision') || (typeof body.revision !== 'string' && body.revision !== null)) return json({ error: 'Revision is required' }, 400);
+async function save(path, body, validate, actor, label, allowImportRef = false) {
+  if (!body || typeof body !== 'object' || !Object.hasOwn(body, 'revision') || (typeof body.revision !== 'string' && body.revision !== null)) return json({ error: 'Revision is required' }, 400);
   const current = await readJson(path);
   if ((current?.sha || null) !== body.revision) return json({ error: 'This information changed on another device. Reload and compare before saving.' }, 409);
   const data = validate(body);
   if (path === knowledgePath || path === knowledgeContactsPath) {
     const key = path === knowledgePath ? 'terminals' : 'contacts';
     const before = new Map((current?.data?.[key] || []).map(row => [row.id, row]));
+    if (!allowImportRef) {
+      for (const row of data[key]) {
+        if (before.get(row.id)?.importRef) row.importRef = before.get(row.id).importRef;
+        else delete row.importRef;
+      }
+    }
     const after = new Map(data[key].map(row => [row.id, row]));
     const changes = [...new Set([...before.keys(), ...after.keys()])].flatMap(id => {
       const oldRow = before.get(id) || null, newRow = after.get(id) || null;
@@ -134,6 +140,7 @@ async function accessRoute(request, login, grants) {
 
 async function proposalsRoute(request, login, grants) {
   if (!login) return json({ error: 'Sign in to submit or review imports' }, 401);
+  if (!grants.restrictionEdit && !grants.contactView && login !== owner) return json({ error: 'Relevant data permission required' }, 403);
   const file = await readJson(knowledgeProposalsPath);
   const proposals = Array.isArray(file?.data?.proposals) ? file.data.proposals : [];
   if (request.method === 'GET') return json({ proposals: login === owner ? proposals : proposals.filter(item => item.submittedBy === login && (item.area === 'contacts' ? grants.contactView : grants.restrictionEdit)), revision: file?.sha || null });
@@ -148,6 +155,7 @@ async function proposalsRoute(request, login, grants) {
   if (!Array.isArray(body.rows) || !body.rows.length || body.rows.length > 100) return json({ error: 'Proposal must contain 1–100 rows' }, 400);
   const key = area === 'contacts' ? 'contacts' : 'terminals';
   const validated = area === 'contacts' ? contactsFrom({ contacts: body.rows }) : restrictionsFrom({ terminals: body.rows });
+  for (const row of validated[key]) delete row.importRef;
   if (proposals.length >= 50) return json({ error: 'Proposal queue is full' }, 409);
   const proposal = { id: randomUUID(), area, submittedBy: login, submittedAt: new Date().toISOString(), rows: validated[key].map(row => ({ id: randomUUID(), row, decision: 'pending' })) };
   const saved = await save(knowledgeProposalsPath, { revision: file?.sha || null, proposals: [...proposals, proposal] }, value => ({ version: 1, proposals: value.proposals, updated: new Date().toISOString() }), login, `Submit ${area} import proposal`);
@@ -186,7 +194,7 @@ async function decideRoute(request, login) {
         imported.id = rows[index].id;
         rows[index] = imported;
       }
-      const result = await save(path, { revision: current?.sha || null, [key]: rows }, area === 'contacts' ? contactsFrom : restrictionsFrom, login, `Approve import ${importRef}`);
+      const result = await save(path, { revision: current?.sha || null, [key]: rows }, area === 'contacts' ? contactsFrom : restrictionsFrom, login, `Approve import ${importRef}`, true);
       if (result.status !== 200) return result;
     }
   }
@@ -243,7 +251,7 @@ async function route(request) {
         if (change.before) rows.set(change.id, change.before);
         else rows.delete(change.id);
       }
-      return save(path, { revision: current.sha, [key]: [...rows.values()] }, area === 'contacts' ? contactsFrom : restrictionsFrom, login, `Restore ${area}`);
+      return save(path, { revision: current.sha, [key]: [...rows.values()] }, area === 'contacts' ? contactsFrom : restrictionsFrom, login, `Restore ${area}`, true);
     }
     if (request.method === 'GET') {
       const file = await readJson(path);
