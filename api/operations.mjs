@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { nodeHandler, gh, jobPath, json, readJson, safeName, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
+import { nodeHandler, gh, json, readJson, safeName, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
+import { documentsFolder, moveJobFolder } from '../lib/job-folders.mjs';
 import { OWNER, TRIP_KINDS, canEditJob, canEditService, canPeople, db, fieldConflicts, permission, textField, uuid, validateJob, validateService } from '../lib/operations.mjs';
 
 const jobFields = ['jobNo', 'vessel', 'imo', 'port', 'principal', 'eta', 'etd', 'status', 'pic', 'notes', 'terminalStays', 'completionReason'];
@@ -15,7 +16,6 @@ const clean = (value, keys) => Object.fromEntries(Object.entries(value || {}).fi
 const error = (message, code = 400, extra = {}) => json({ error: message, ...extra }, code);
 const personScope = kind => kind === 'crew' ? 'crew' : 'visitor';
 const rows = (sql, query, params = []) => sql.query(query, params);
-const documentsFolder = data => jobPath({ name: data.vessel, jobNo: data.jobNo, eta: data.eta }, 'General').replace(/\/General$/, '');
 async function createJobFolder(data, id) {
   const folder = documentsFolder(data);
   const path = folder + '/General/job.json';
@@ -66,6 +66,34 @@ async function patchRow(sql, table, id, scope, base, patch, actor, validate, rea
     if (saved) return json({ record: saved });
   }
   return error('Concurrent change; reload and review', 409);
+}
+async function patchJobWithFolder(sql, job, patch, base, actor, reason = '') {
+  const merged = { ...job.data, ...patch };
+  if (!job.data.documentsPath) return patchRow(sql, 'operation_jobs', job.id, 'job', base, patch, actor, validateJob, reason);
+  if (!textField(merged.vessel) || !textField(merged.jobNo) || !merged.eta) return error('Vessel, Job No. and ETA are required while the GitHub folder exists');
+  const nextFolder = documentsFolder(merged);
+  if (nextFolder === job.data.documentsPath) return patchRow(sql, 'operation_jobs', job.id, 'job', base, patch, actor, validateJob, reason);
+  const guardedPatch = { ...patch, documentsPath: nextFolder };
+  const guardedBase = { ...base, documentsPath: job.data.documentsPath };
+  for (const key of ['vessel', 'jobNo', 'eta', 'status']) {
+    if (!(key in guardedPatch)) guardedPatch[key] = job.data[key] ?? '';
+    if (!(key in guardedBase)) guardedBase[key] = job.data[key] ?? '';
+  }
+  const conflicts = fieldConflicts(job.data, guardedBase, guardedPatch);
+  if (conflicts.length) return error('Field conflict. Review each value before saving.', 409, { conflicts, current: job });
+  const invalid = validateJob({ ...job.data, ...guardedPatch });
+  if (invalid) return error(invalid);
+  await moveJobFolder(job.data.documentsPath, nextFolder, job.id);
+  try {
+    const saved = await patchRow(sql, 'operation_jobs', job.id, 'job', guardedBase, guardedPatch, actor, validateJob, reason);
+    if (saved.ok) return saved;
+    await moveJobFolder(nextFolder, job.data.documentsPath, job.id);
+    return saved;
+  } catch (e) {
+    try { await moveJobFolder(nextFolder, job.data.documentsPath, job.id); }
+    catch { throw Error('GitHub folder moved but Job save failed. Use Sync GitHub folders to repair.'); }
+    throw e;
+  }
 }
 function validatePerson(data) {
   if (!['crew', 'visitor'].includes(data.kind)) return 'Invalid person category';
@@ -195,7 +223,7 @@ async function route(request) {
   }
   if (action === 'syncJobFolder') {
     if (grant.role !== 'owner') return error('Only owner can create the GitHub folder', 403);
-    const job = await loadJob(sql, input.id);
+    let job = await loadJob(sql, input.id);
     if (!job) return error('Job not found', 404);
     if (!job.data.documentsPath && (!textField(job.data.vessel) || !textField(job.data.jobNo) || !job.data.eta)) return error('Vessel, Job No. and ETA are required');
     if (!process.env.GITHUB_DOCUMENTS_TOKEN) return error('Private GitHub storage is not configured', 503);
@@ -203,7 +231,16 @@ async function route(request) {
     const newServiceFiles = [];
     try {
       if (!job.data.documentsPath) created = await createJobFolder(job.data, job.id);
-      const folder = job.data.documentsPath || created.folder;
+      let folder = job.data.documentsPath || created.folder;
+      if (job.data.documentsPath) {
+        const expected = documentsFolder(job.data);
+        if (expected !== folder) {
+          const saved = await patchJobWithFolder(sql, job, {}, {}, login);
+          if (!saved.ok) return saved;
+          job = await loadJob(sql, job.id);
+          folder = job.data.documentsPath;
+        }
+      }
       const services = await rows(sql, "SELECT DISTINCT data->>'type' AS type FROM operation_services WHERE job_id=$1 AND removed_at IS NULL", [job.id]);
       for (const service of services) {
         const serviceFile = await createServiceFolder(folder, service.type);
@@ -232,8 +269,8 @@ async function route(request) {
       const [unfinished] = await rows(sql, `SELECT count(*)::int AS total FROM operation_services WHERE job_id=$1 AND removed_at IS NULL AND data->>'status' NOT IN ('Completed','Cancelled')`, [job.id]);
       if (unfinished.total && (grant.role !== 'owner' || !textField(input.reason))) return error('Unfinished Services require owner exception and reason');
     }
-    try { return await patchRow(sql, 'operation_jobs', job.id, 'job', input.base || {}, patch, login, validateJob, textField(input.reason, 500)); }
-    catch (e) { return e.code === '23505' ? error('Job No. is already used', 409) : error('Job could not be saved', 500); }
+    try { return await patchJobWithFolder(sql, job, patch, input.base || {}, login, textField(input.reason, 500)); }
+    catch (e) { return e.code === '23505' ? error('Job No. is already used', 409) : error(e.message || 'Job or GitHub folder could not be saved', 502); }
   }
   if (action === 'addService') {
     const job = await loadJob(sql, input.jobId);
