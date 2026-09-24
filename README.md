@@ -24,6 +24,10 @@
 
 หน้ารายละเอียด Crew Change เปิดเต็มจอ มี 3 แท็บ: **Crew members and Visitors, Travel, Checklist** กลุ่มรายชื่อ On-signers, Off-signers, Medical visitors, SIRE Inspectors, Surveyors, Service Engineers และ Other พับ/ขยายได้ แต่ละกลุ่มเพิ่มและลบคนในตารางได้ กด **Flight / Immigration** ที่แถวของบุคคลเพื่อกรอกข้อมูล Immigration และเพิ่ม/ลบเที่ยวบินของคนนั้น ส่วนแท็บ Travel มีตารางการใช้รถและเรือที่เพิ่ม/ลบรายการได้
 
+### Terminal Restriction and Contact list
+
+Open **Knowledge base** → **Terminal Restriction and Contact list** to add, edit or delete terminals and contacts. Click a service cell to cycle **— Unverified → ✓ Allowed → ✕ Restricted**. Record the source and last-verified date before operational use. This module stores changes only in the current browser; it is not shared with the team.
+
 ## Crew records and private documents
 
 The Crew members and Visitors tab saves records in the private repository `primoxy-dev/harborflow-job-documents`. Select **Sign in with GitHub** as `primoxy-dev`, edit the fields, and select **Save crew data**. Passport, Seaman Book, Flight and Visa / permission accept PDF, JPEG or PNG attachments up to 3 MB. The displayed filename confirms the attachment was uploaded and its crew record saved.
@@ -70,6 +74,8 @@ harborflow-webapp/
 ├── index.html        # โครงหน้าเว็บและส่วนสาธิตเดิม
 ├── enhancements.js   # การทำงาน Job, Service และ Crew Change
 ├── enhancements.css  # รูปแบบหน้าจอส่วนที่เพิ่ม
+├── knowledge.js       # Terminal restrictions and contact list
+├── knowledge.css      # Knowledge base table styles
 ├── api/              # GitHub login, crew sync and attachments
 ├── lib/              # shared server-side validation and GitHub API
 └── README.md         # คู่มือและสถานะโปรเจกต์
