@@ -1,13 +1,23 @@
 # HarborFlow
 
-ตัวอย่าง Web App สำหรับวางแนวทางระบบ **Ship Agency Operations & Business Intelligence Platform**
+Web App ทดลองสำหรับ **Ship Agency Operations & Business Intelligence Platform**. Operations/Services now use a shared Neon Postgres database; other dashboard sections may still be demonstrations.
 
 - เว็บตัวอย่าง: https://harborflow-webapp.vercel.app/
 - Source code: https://github.com/primoxy-dev/harborflow-webapp
 
 ## เปิดใช้งาน
 
-เปิด `index.html` ในเว็บเบราว์เซอร์ได้ทันที หรือเข้าผ่านลิงก์ Vercel ด้านบน โปรเจกต์นี้เป็นหน้าเว็บแบบ static ไม่ต้องติดตั้ง dependency หรือรัน build command
+เข้าผ่านลิงก์ Vercel ด้านบน การเปิด `index.html` โดยตรงจะไม่เชื่อม Operations API. Production and Preview need a Vercel-linked Neon database exposing `DATABASE_URL`; Vercel installs `@neondatabase/serverless` from `package.json`.
+
+## Operations trial
+
+Operations requires GitHub sign-in. `primoxy-dev` is the owner; the owner grants named Viewer/Editor roles and separate Crew View/Edit and Visitor View/Edit permissions. A PIC name alone never grants access. The owner creates Port Calls. Editors may change only assigned Jobs or Service instances. Up to 10 named users (including owner) and 80 Port Calls are supported in this trial.
+
+Port Calls and repeated Service instances autosave to Neon. Job No. is unique across all statuses. Service numbers are permanent within a Job; removal is recoverable by the owner with a reason. Every change has an actor history. Field conflicts stop and show original, shared and local values for review. Crew/Visitor and linked travel are separately permission-gated. No Operations or person data is cached in browser storage. Existing browser-only sample Jobs are not imported.
+
+**Use fictional or de-identified records only. Do not enter real crew, visitor, passport or medical data.** The production personal-data, retention, backup/restore, and recovery policies have not been completed. The other dashboard modules remain examples and are not covered by the new Operations database.
+
+The database schema is in [migrations/001_operations.sql](migrations/001_operations.sql). Run it in the linked Neon database before deploying API changes. Run `node --test tests/*.test.mjs` locally. Never commit `.env` files or connection strings.
 
 ## ส่วนที่แสดงในตัวอย่าง
 
@@ -58,7 +68,7 @@ Add these environment variables to the Vercel project before using personal data
 
 Create the OAuth App in the `primoxy-dev` GitHub account. Set its callback URL to `https://YOUR-VERCEL-HOST/api/auth?mode=callback`. Use the exact host where this app will run. Configure the four variables for that deployment environment and redeploy. The API rejects writes until all variables exist. `primoxy-dev` owns the Knowledge base and is the only editor initially. Anyone can view Terminal Restrictions without login. Contact details require named Contact-view access. The owner can separately grant restriction editing, Contact viewing, Contact editing, and administrator status. Crew records and attachments remain owner-only, regardless of Knowledge base role.
 
-The public source repository contains no GitHub credential, crew document, terminal table, or sharing list. The shared Knowledge base and ACL are stored in the private documents repository. The public API returns Terminal Restrictions only; Contact data stays behind a signed-in permission check. All Terminal fields are public, so do not put private information in their Notes or Source. Job metadata is still stored in this browser. Other dashboard sections remain sample UI.
+The public source repository contains no GitHub credential, crew document, terminal table, or sharing list. The shared Knowledge base and ACL are stored in the private documents repository. The public API returns Terminal Restrictions only; Contact data stays behind a signed-in permission check. All Terminal fields are public, so do not put private information in their Notes or Source. Operations Jobs and Services are in Neon; the legacy browser demo is no longer loaded. Other dashboard sections remain sample UI.
 
 ## งานที่ต้องทำก่อนใช้งานจริง
 
@@ -82,4 +92,5 @@ harborflow-webapp/
 ├── lib/              # shared server-side validation and GitHub API
 └── README.md         # คู่มือและสถานะโปรเจกต์
 ```
+
 

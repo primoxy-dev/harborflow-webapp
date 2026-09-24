@@ -8,6 +8,7 @@
   </style>
   <link rel="stylesheet" href="enhancements.css">
   <link rel="stylesheet" href="knowledge.css">
+  <link rel="stylesheet" href="operations.css">
 </head>
 <body>
 <div class="app">
@@ -44,7 +45,8 @@
   const modal=document.querySelector('#modal'),modalTitle=document.querySelector('#modalTitle');function openModal(titleText){modalTitle.textContent=titleText;modal.classList.add('open')}document.querySelector('#createJob').onclick=()=>openModal('Create new job');document.querySelector('#newQuote').onclick=()=>openModal('Create quotation / PDA');document.querySelector('#newLead').onclick=()=>openModal('Add marketing opportunity');document.querySelector('#newArticle').onclick=()=>openModal('Create knowledge article');['#closeModal','#cancelModal'].forEach(s=>document.querySelector(s).onclick=()=>modal.classList.remove('open'));
   const toast=document.querySelector('#toast');function notify(msg){toast.textContent=msg;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2200)}document.querySelector('#entryForm').addEventListener('submit',e=>{e.preventDefault();modal.classList.remove('open');notify(modalTitle.textContent+' saved');});document.querySelector('#generateReport').onclick=()=>notify('Monthly management report generated');
 </script>
-<script src="enhancements.js"></script>
 <script src="knowledge.js"></script>
+<script src="operations.js"></script>
 </body></html>
+
 
