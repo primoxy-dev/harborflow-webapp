@@ -26,7 +26,12 @@
   const f = (label, value, name, type = 'text', extra = '') => `<label class="hfo-field"><span>${escape(label)}</span><input type="${type}" name="${escape(name)}" value="${escape(value || '')}" ${extra}></label>`;
   const sel = (label, value, name, values, extra = '') => `<label class="hfo-field"><span>${escape(label)}</span><select name="${escape(name)}" ${extra}>${option(values, value)}</select></label>`;
   const area = (label, value, name, extra = '') => `<label class="hfo-field"><span>${escape(label)}</span><textarea name="${escape(name)}" ${extra}>${escape(value || '')}</textarea></label>`;
-  let state = { login: '', grant: null, jobs: [], services: [], people: [], trips: [], view: 'month', anchor: new Date(), openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [] };
+  const portOptions = current => {
+    const choices = [...new Set([current, ...state.portChoices].filter(Boolean))];
+    return '<option value="">Select Port / Terminal</option>' + option(choices, current);
+  };
+  const portSelect = (current, extra) => '<label class="hfo-field"><span>Port / Terminal</span><select name="port" ' + extra + '>' + portOptions(current) + '</select><small class="hfo-muted" data-port-status>' + escape(state.portStatus) + '</small></label>';
+  let state = { login: '', grant: null, jobs: [], services: [], people: [], trips: [], view: 'month', anchor: new Date(), openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…' };
   const isOwner = () => state.grant?.role === 'owner';
   const isEditor = () => isOwner() || state.grant?.role === 'editor';
   const job = () => state.jobs.find(x => x.id === state.openJobId);
@@ -143,11 +148,11 @@
       ${f('Job No.',data.jobNo,'jobNo','text',`${disable} ${attr}`)}
       ${f('Vessel',data.vessel,'vessel','text',`${disable} ${attr}`)}
       ${f('IMO',data.imo,'imo','text',`${disable} ${attr}`)}
-      ${f('Port',data.port,'port','text',`${disable} ${attr}`)}
+      <div class="hfo-field"><span>Find IMO from vessel name</span><button type="button" class="hfo-btn" data-lookup-imo ${disable}>Search IMO</button><small class="hfo-muted" data-imo-feedback>Suggestions from Wikidata; verify before use.</small><div class="hfo-imo-results" data-imo-results></div></div>
+      ${portSelect(data.port,`${disable} ${attr}`)}
       ${f('Principal',data.principal,'principal','text',`${disable} ${attr}`)}
       ${f('ETA',data.eta,'eta','datetime-local',`${disable} ${attr}`)}
       ${f('ETD',data.etd,'etd','datetime-local',`${disable} ${attr}`)}
-      ${f('Time zone',data.timeZone||'Asia/Bangkok','timeZone','text',`${disable} ${attr}`)}
       ${sel('Status',data.status,'status',JOB_STATUSES,`${disable} ${attr}`)}
       ${f('Job PIC (GitHub login)',data.pic,'pic','text',`${isOwner()?'': 'disabled'} ${attr}`)}
       ${area('Notes',data.notes,'notes',`${disable} ${attr}`)}
@@ -405,11 +410,62 @@
     try {const out=await api(action,payload);state.error='';await onSuccess?.(out);return out;}
     catch(e){announce(e.message);return null;}
   }
-  createButton.onclick=()=>{if(!isOwner())return;state.modal='create';state.error='';render();};
+  async function loadPortChoices() {
+    state.portStatus = 'Loading Port / Terminal…';
+    try {
+      const response = await fetch('/api/knowledge?area=restrictions', { credentials: 'same-origin', cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw Error(body.error || 'Port list unavailable');
+      state.portChoices = [...new Set((body.data?.terminals || [])
+        .filter(row => typeof row.port === 'string' && row.port.trim() && typeof row.terminal === 'string' && row.terminal.trim())
+        .map(row => row.port.trim() + ' / ' + row.terminal.trim()))].sort((a, b) => a.localeCompare(b));
+      state.portStatus = state.portChoices.length ? 'From Terminal Restriction' : 'No Port / Terminal rows in Terminal Restriction';
+    } catch {
+      state.portStatus = 'Port list unavailable. Close and reopen to retry.';
+    }
+    const select = document.querySelector('.hfo-overlay select[name="port"]');
+    if (select) {
+      const current = select.value;
+      select.innerHTML = portOptions(current);
+      select.value = current;
+      select.closest('.hfo-field').querySelector('[data-port-status]').textContent = state.portStatus;
+    }
+  }
+  async function lookupImo(button) {
+    const grid = button.closest('.hfo-form-grid');
+    const vessel = grid?.querySelector('[name="vessel"]')?.value.trim() || '';
+    const feedback = grid?.querySelector('[data-imo-feedback]');
+    const results = grid?.querySelector('[data-imo-results]');
+    if (!feedback || !results) return;
+    results.replaceChildren();
+    if (vessel.length < 3) { feedback.textContent = 'Enter at least 3 letters of the vessel name.'; return; }
+    feedback.textContent = 'Searching IMO…';
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/vessel?name=' + encodeURIComponent(vessel), { credentials: 'same-origin', cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw Error(body.error || 'IMO lookup unavailable');
+      const matches = Array.isArray(body.matches) ? body.matches : [];
+      feedback.textContent = matches.length ? 'Choose a vessel and verify its IMO with ship documents.' : 'No matching IMO found. Enter it manually and verify.';
+      for (const match of matches) {
+        const choice = document.createElement('button');
+        choice.type = 'button';
+        choice.className = 'hfo-btn';
+        choice.dataset.imoChoice = match.imo;
+        choice.textContent = match.name + ' · IMO ' + match.imo;
+        if (match.description) choice.title = match.description;
+        results.appendChild(choice);
+      }
+    } catch (error) { feedback.textContent = error.message; }
+    finally { button.disabled = false; }
+  }
+  createButton.onclick=async()=>{if(!isOwner())return;state.modal='create';state.error='';render();await loadPortChoices();};
   document.body.addEventListener('click',async event=>{
-    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-add-stay],[data-edit-stay],[data-remove-stay],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke]');
+    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-add-stay],[data-edit-stay],[data-remove-stay],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice]');
     if(!b)return;
-    if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.history=[];state.error='';render();return;}
+    if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.history=[];state.error='';render();await loadPortChoices();return;}
+    if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
+    if(b.dataset.imoChoice){const grid=b.closest('.hfo-form-grid'),input=grid?.querySelector('[name="imo"]');if(input){input.value=b.dataset.imoChoice;grid.querySelector('[data-imo-feedback]').textContent='IMO selected. Verify with ship documents.';if(input.hasAttribute('data-job-field'))input.dispatchEvent(new Event('change',{bubbles:true}));}return;}
     if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab='details';state.history=[];state.error='';render();return;}
     if(b.dataset.shift){shift(Number(b.dataset.shift));return;}
     if(b.hasAttribute('data-grants')){state.modal='grants';state.openJobId=null;state.openServiceId=null;render();return;}
