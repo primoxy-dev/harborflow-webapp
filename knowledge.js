@@ -79,7 +79,7 @@
     return `<form id="kbTerminalForm" class="kb-form">
       <h3>${editingTerminal === 'new' ? 'Add terminal' : 'Edit terminal'}</h3>
       <div class="kb-form-grid">${input('port', 'Port', row.port, 'text', true)}${input('terminal', 'Terminal', row.terminal, 'text', true)}${input('source', 'Source / circular', row.source)}${input('verified', 'Last verified', row.verified, 'date')}${input('note', 'General conditions / contact note', row.note)}</div>
-      <div class="kb-form-actions"><button type="button" class="secondary" data-kb-action="cancel-terminal">Cancel</button><button type="submit" class="primary">Save terminal</button></div>
+      <div class="kb-form-actions">${editingTerminal === 'new' ? '<button type="button" class="secondary" data-kb-action="cancel-terminal">Cancel</button><button type="submit" class="primary">Add terminal</button>' : '<span class="small" id="kbEditStatus" role="status">Changes save automatically in this browser</span><button type="button" class="secondary" data-kb-action="cancel-terminal">Close</button>'}</div>
     </form>`;
   }
   function contactForm() {
@@ -88,7 +88,7 @@
     return `<form id="kbContactForm" class="kb-form">
       <h3>${editingContact === 'new' ? 'Add contact' : 'Edit contact'}</h3>
       <div class="kb-form-grid">${input('port', 'Port', row.port, 'text', true)}${input('terminal', 'Terminal', row.terminal)}${input('name', 'Contact name', row.name, 'text', true)}${input('role', 'Role / department', row.role)}${input('phone', 'Phone', row.phone, 'tel')}${input('email', 'Email', row.email, 'email')}${input('note', 'Notes', row.note)}</div>
-      <div class="kb-form-actions"><button type="button" class="secondary" data-kb-action="cancel-contact">Cancel</button><button type="submit" class="primary">Save contact</button></div>
+      <div class="kb-form-actions">${editingContact === 'new' ? '<button type="button" class="secondary" data-kb-action="cancel-contact">Cancel</button><button type="submit" class="primary">Add contact</button>' : '<span class="small" id="kbEditStatus" role="status">Changes save automatically in this browser</span><button type="button" class="secondary" data-kb-action="cancel-contact">Close</button>'}</div>
     </form>`;
   }
   const statusInfo = status => status === 'yes' ? { icon: '✓', label: 'Allowed', checked: 'true' }
@@ -170,6 +170,32 @@
     render();
     if (action === 'add-terminal' || action === 'edit-terminal') module.querySelector('#kbTerminalForm [name="port"]')?.focus();
     if (action === 'add-contact' || action === 'edit-contact') module.querySelector('#kbContactForm [name="port"]')?.focus();
+  });
+  module.addEventListener('input', event => {
+    const form = event.target.closest('form');
+    const isTerminal = form?.id === 'kbTerminalForm' && editingTerminal && editingTerminal !== 'new';
+    const isContact = form?.id === 'kbContactForm' && editingContact && editingContact !== 'new';
+    if (!isTerminal && !isContact) return;
+    const row = isTerminal
+      ? state.terminals.find(item => item.id === editingTerminal)
+      : state.contacts.find(item => item.id === editingContact);
+    if (!row) return;
+    const keys = isTerminal
+      ? ['port', 'terminal', 'source', 'verified', 'note']
+      : ['port', 'terminal', 'name', 'role', 'phone', 'email', 'note'];
+    const values = Object.fromEntries(keys.map(key => [key, String(form.elements.namedItem(key)?.value || '').trim()]));
+    const status = form.querySelector('#kbEditStatus');
+    if (!values.port || (isTerminal ? !values.terminal : !values.name)) {
+      status.textContent = isTerminal ? 'Port and Terminal are required' : 'Port and Contact name are required';
+      return;
+    }
+    if (isTerminal && state.terminals.some(item => item.id !== row.id && item.port.toLowerCase() === values.port.toLowerCase() && item.terminal.toLowerCase() === values.terminal.toLowerCase())) {
+      status.textContent = 'This terminal already exists under this port';
+      return;
+    }
+    Object.assign(row, values);
+    persist();
+    status.textContent = storedLocally ? 'Saved automatically in this browser' : 'Browser storage unavailable; changes last until refresh';
   });
   module.addEventListener('submit', event => {
     const terminalFormSubmitted = event.target.id === 'kbTerminalForm';
