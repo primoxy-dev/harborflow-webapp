@@ -14,7 +14,7 @@ const parse = async request => {
 const clean = (value, keys) => Object.fromEntries(Object.entries(value || {}).filter(([key]) => keys.includes(key)));
 const error = (message, code = 400, extra = {}) => json({ error: message, ...extra }, code);
 const personScope = kind => kind === 'crew' ? 'crew' : 'visitor';
-const rows = (sql, query, params = []) => sql(query, params);
+const rows = (sql, query, params = []) => sql.query(query, params);
 
 async function loadJob(sql, id) {
   if (!uuid(id)) return null;
