@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canEditJob, canEditService, canPeople, fieldConflicts, validateJob, validateService } from '../lib/operations.mjs';
+import { canEditJob, canEditService, canPeople, fieldConflicts, permission, validateJob, validateService } from '../lib/operations.mjs';
 
 test('Draft may omit Job No.; Planned and Confirmed enforce milestones', () => {
   assert.equal(validateJob({ status: 'Draft' }), null);
@@ -34,5 +34,16 @@ test('PIC alone never grants editing; Crew and Visitor grants are independent', 
   assert.equal(canPeople({ crewView: true, visitorView: false }, 'crew'), true);
   assert.equal(canPeople({ crewView: true, visitorView: false }, 'visitor'), false);
   assert.equal(canPeople({ crewView: true, crewEdit: false }, 'crew', true), false);
+});
+
+test('non-owner grant lookup uses Neon 1.x query API', async () => {
+  const sql = Object.assign(() => { throw Error('Legacy call API must not be used'); }, {
+    query: async (query, params) => {
+      assert.match(query, /operation_grants/);
+      assert.deepEqual(params, ['alice']);
+      return [{ role: 'viewer', crew_view: false, crew_edit: false, visitor_view: true, visitor_edit: false }];
+    }
+  });
+  assert.deepEqual(await permission('alice', sql), { role: 'viewer', crewView: false, crewEdit: false, visitorView: true, visitorEdit: false });
 });
 
