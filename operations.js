@@ -145,13 +145,13 @@
     const disable=editable?'':'disabled';
     const attr=create ? '' : 'data-job-field';
     return `<div class="hfo-form-grid">
-      ${f('Job No.',data.jobNo,'jobNo','text',`${disable} ${attr}`)}
-      ${f('Vessel',data.vessel,'vessel','text',`${disable} ${attr}`)}
+      ${f('Job No.',data.jobNo,'jobNo','text',`${disable} ${attr} ${create?'required':''}`)}
+      ${f('Vessel',data.vessel,'vessel','text',`${disable} ${attr} ${create?'required':''}`)}
       ${f('IMO',data.imo,'imo','text',`${disable} ${attr}`)}
       <div class="hfo-field"><span>Find IMO from vessel name</span><button type="button" class="hfo-btn" data-lookup-imo ${disable}>Search IMO</button><small class="hfo-muted" data-imo-feedback>Suggestions from Wikidata; verify before use.</small><div class="hfo-imo-results" data-imo-results></div></div>
       ${portSelect(data.port,`${disable} ${attr}`)}
       ${f('Principal',data.principal,'principal','text',`${disable} ${attr}`)}
-      ${f('ETA',data.eta,'eta','datetime-local',`${disable} ${attr}`)}
+      ${f('ETA',data.eta,'eta','datetime-local',`${disable} ${attr} ${create?'required':''}`)}
       ${f('ETD',data.etd,'etd','datetime-local',`${disable} ${attr}`)}
       ${sel('Status',data.status,'status',JOB_STATUSES,`${disable} ${attr}`)}
       ${f('Job PIC (GitHub login)',data.pic,'pic','text',`${isOwner()?'': 'disabled'} ${attr}`)}
@@ -159,7 +159,7 @@
     </div>`;
   }
   function renderCreate() {
-    overlay(`<div class="hfo-banner">Draft can start without Job No. · Planned requires vessel, port and ETA · Confirmed also requires principal, Job No. and Job PIC.</div>
+    overlay(`<div class="hfo-banner">Create Draft requires Vessel, Job No. and ETA to create its private GitHub folder · Planned also requires Port · Confirmed also requires Principal and Job PIC.</div>
       <form id="hfoCreateJob" class="hfo-section"><h2>New Port Call</h2>${jobFields({status:'Draft'},true,true)}
       <div class="hfo-actions" style="margin-top:16px"><button class="hfo-btn primary">Create Draft</button></div></form>`, 'Create Port Call', 'Trial data only');
   }
@@ -173,9 +173,11 @@
   function renderJob() {
     const j=job(); if (!j) return;
     const services=serviceList(j), editable=mayEditJob(j);
+    const folderUrl=j.data.documentsPath?'https://github.com/primoxy-dev/harborflow-job-documents/tree/main/'+j.data.documentsPath.split('/').map(encodeURIComponent).join('/'):'';
+    const folderControl=folderUrl?`<a class="hfo-btn" href="${escape(folderUrl)}" target="_blank" rel="noopener noreferrer">Open GitHub folder</a><small class="hfo-muted">Folder name is kept from creation if Vessel, Job No. or ETA is edited.</small>`:isOwner()?'<button class="hfo-btn" data-sync-job-folder>Create GitHub folder</button>':'<small class="hfo-muted">GitHub folder not created</small>';
     overlay(`<div class="hfo-banner">ข้อมูลทดลองเท่านั้น · ห้ามใช้ข้อมูลลูกเรือหรือผู้เยี่ยมจริง · Autosave เมื่อเปลี่ยนช่องข้อมูล</div>
       <div class="hfo-section"><div class="hfo-toolbar"><div><h2>${escape(j.data.vessel||'Draft Port Call')}</h2><span class="hfo-muted">${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${escape(j.data.status)}</span></div><span class="hfo-muted" id="hfoSync">${escape(state.sync)}</span></div>
-      ${jobFields(j.data,editable)}<p class="hfo-muted">Job ID: ${escape(j.id)} · assigned PIC does not automatically grant access</p></div>
+      ${jobFields(j.data,editable)}<div class="hfo-actions">${folderControl}</div><p class="hfo-muted">Job ID: ${escape(j.id)} · assigned PIC does not automatically grant access</p></div>
       ${terminalStays(j)}
       <div class="hfo-section"><div class="hfo-toolbar"><h3>Services</h3>${editable?'<button class="hfo-btn primary" data-add-service>+ Add Service</button>':''}</div>
       <div class="hfo-list">${services.length?services.map(s=>`<div class="hfo-list-row"><button data-open-service="${s.id}"><b>#${s.seq} · ${escape(s.data.type)}</b><small>${escape(s.data.description||'No description')} · PIC ${escape(s.data.pic||'Unassigned')}</small></button><span>${escape(s.data.status)}</span>${mayEditService(s)?`<button class="hfo-btn danger" data-remove-service="${s.id}">Remove</button>`:''}</div>`).join(''):'<div class="hfo-empty">No Services yet.</div>'}</div></div>
@@ -461,10 +463,11 @@
   }
   createButton.onclick=async()=>{if(!isOwner())return;state.modal='create';state.error='';render();await loadPortChoices();};
   document.body.addEventListener('click',async event=>{
-    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-add-stay],[data-edit-stay],[data-remove-stay],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice]');
+    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-add-stay],[data-edit-stay],[data-remove-stay],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder]');
     if(!b)return;
     if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.history=[];state.error='';render();await loadPortChoices();return;}
     if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
+    if(b.hasAttribute('data-sync-job-folder')){await perform('syncJobFolder',{id:job().id},out=>{Object.assign(job(),out.record);render();});return;}
     if(b.dataset.imoChoice){const grid=b.closest('.hfo-form-grid'),input=grid?.querySelector('[name="imo"]');if(input){input.value=b.dataset.imoChoice;grid.querySelector('[data-imo-feedback]').textContent='IMO selected. Verify with ship documents.';if(input.hasAttribute('data-job-field'))input.dispatchEvent(new Event('change',{bubbles:true}));}return;}
     if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab='details';state.history=[];state.error='';render();return;}
     if(b.dataset.shift){shift(Number(b.dataset.shift));return;}
