@@ -44,8 +44,13 @@ async function call(handler, method, path, login, body) {
   return { status: response.statusCode, body: JSON.parse(String(response.body || '{}')) };
 }
 
-test('Knowledge base is private and owner can create shared table', async () => {
-  assert.equal((await call(knowledgeHandler, 'GET', '/api/knowledge')).status, 401);
+test('Knowledge base can be viewed anonymously but only editors can save', async () => {
+  const publicView = await call(knowledgeHandler, 'GET', '/api/knowledge');
+  assert.equal(publicView.status, 200);
+  assert.equal(publicView.body.role, 'viewer');
+  assert.equal(publicView.body.login, null);
+  assert.equal((await call(knowledgeHandler, 'PUT', '/api/knowledge', null, { revision: null, terminals: [], contacts: [] })).status, 401);
+  assert.equal((await call(knowledgeHandler, 'GET', '/api/knowledge?mode=access')).status, 403);
   const owner = await call(knowledgeHandler, 'GET', '/api/knowledge', 'primoxy-dev');
   assert.equal(owner.status, 200);
   assert.equal(owner.body.role, 'editor');
@@ -55,6 +60,8 @@ test('Knowledge base is private and owner can create shared table', async () => 
   });
   assert.equal(saved.status, 200);
   assert.ok(saved.body.revision);
+  const publicAfterSave = await call(knowledgeHandler, 'GET', '/api/knowledge');
+  assert.equal(publicAfterSave.body.data.terminals[0].terminal, 'LMPT1');
   const stale = await call(knowledgeHandler, 'PUT', '/api/knowledge', 'primoxy-dev', { revision: null, terminals: [], contacts: [] });
   assert.equal(stale.status, 409);
 });
@@ -72,14 +79,15 @@ test('Owner can share read-only and editor roles without opening crew documents'
   const status = await call(authHandler, 'GET', '/api/auth?mode=status', 'reader-example');
   assert.equal(status.body.authenticated, false);
   assert.equal(status.body.knowledgeRole, 'viewer');
-  assert.equal((await call(knowledgeHandler, 'GET', '/api/knowledge', 'unlisted-example')).status, 403);
+  assert.equal((await call(knowledgeHandler, 'GET', '/api/knowledge', 'unlisted-example')).body.role, 'viewer');
+  assert.equal((await call(knowledgeHandler, 'PUT', '/api/knowledge', 'unlisted-example', { revision: table.body.revision, terminals: [], contacts: [] })).status, 403);
   assert.equal((await call(knowledgeHandler, 'GET', '/api/knowledge?mode=access', 'editor-example')).status, 403);
   const update = await call(knowledgeHandler, 'PUT', '/api/knowledge?mode=access', 'primoxy-dev', {
     revision: access.body.revision, users: [{ login: 'reader-example', role: 'editor' }]
   });
   assert.equal(update.status, 200);
   assert.equal((await call(knowledgeHandler, 'GET', '/api/knowledge', 'reader-example')).body.role, 'editor');
-  assert.equal((await call(knowledgeHandler, 'GET', '/api/knowledge', 'editor-example')).status, 403);
+  assert.equal((await call(knowledgeHandler, 'GET', '/api/knowledge', 'editor-example')).body.role, 'viewer');
 });
 
 test('Invalid table changes and stale revisions are rejected', async () => {
