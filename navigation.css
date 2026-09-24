@@ -10,7 +10,9 @@
 .nav-toggle{margin-right:14px}
 .nav-close{display:none;margin-left:auto;background:transparent;border-color:#69809b;color:#fff}
 .nav-backdrop{display:none}
-.top-heading{min-width:0}
+.top{justify-content:flex-start}
+.top-heading{min-width:0;flex:1}
+.actions{margin-left:auto}
 body.nav-collapsed .app{--sidebar-width:72px}
 body.nav-collapsed .sidebar{padding-left:8px;padding-right:8px}
 body.nav-collapsed .brand{justify-content:center;padding-left:0;padding-right:0}
