@@ -134,7 +134,7 @@
       const months=[]; let d=new Date(start);
       while (d<=end) { const y=d.getFullYear(), m=d.getMonth(), first=new Date(y,m,1), last=new Date(y,m+1,0);
         const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && j.data.eta && dateOnly(j.data.eta)>=localKey(first) && dateOnly(j.data.eta)<=localKey(last));
-        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Husbandry Calls</p>${calls.map(j=>`<button class="hfo-btn" data-open-job="${j.id}">${escape(j.data.vessel || 'Draft')} · ${escape(j.data.jobNo || 'No Job No.')}</button>`).join(' ')}</div>`);
+        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Husbandry Calls</p>${calls.map(j=>`<button class="hfo-btn" data-open-job="${j.id}">${escape(j.data.vessel || 'Draft')}${state.public?'':' · '+escape(j.data.jobNo || 'No Job No.')}</button>`).join(' ')}</div>`);
         d.setMonth(d.getMonth()+1);
       }
       return `<div class="hfo-stats">${months.join('')}</div>`;
@@ -152,7 +152,7 @@
       `<div class="hfo-stats">${metrics().map(([label,value,indicator,trend])=>`<div class="hfo-card hfo-stat"><span>${escape(label)}</span><strong>${escape(value)}</strong>${indicator?`<small class="hfo-trend ${trend}">${escape(indicator)}</small><small class="hfo-muted">By ETA · excludes Cancelled</small>`:''}</div>`).join('')}</div>
        ${state.public?'<div class="hfo-info">ดู Job และ Service แบบสรุปได้โดยไม่ต้องลงชื่อเข้าใช้ · <a href="/api/auth?mode=start">ลงชื่อเข้าใช้เพื่อดูรายละเอียดและแก้ไขตามสิทธิ์</a></div>':''}
        <div class="hfo-card hfo-calendar-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><button class="hfo-btn" data-shift="-1" aria-label="Previous period">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1" aria-label="Next period">›</button><select id="hfoView" aria-label="Calendar view">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">Jobs appear on their ETA date · port local time</p>${calendar()}</div>
-       <details class="hfo-card hfo-calls" ${state.callsOpen?'open':''}><summary data-calls-toggle><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft Port Call')}</b><small>${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${formatDate(j.data.eta)} – ${formatDate(j.data.etd)}</small></button><span>${escape(j.data.status)}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>
+       <details class="hfo-card hfo-calls" ${state.callsOpen?'open':''}><summary data-calls-toggle><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft Port Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(j.data.status)}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>
        ${isOwner()?'<button class="hfo-btn" data-grants>Manage Operations access</button>':''}`}
     </div>`;
     document.querySelector('.top .actions select').style.display='none';
@@ -168,18 +168,17 @@
     const calls = serviceList(j);
     overlay(`<div class="hfo-banner">Public summary only · รายชื่อ Crew/Visitor และข้อมูลภายในต้องลงชื่อเข้าใช้</div>
       <div class="hfo-section"><h2>${escape(j.data.vessel||'Draft Port Call')}</h2>
-      <p>Job No. ${escape(j.data.jobNo||'—')} · ${escape(j.data.port||'—')} · ${escape(j.data.status||'—')}</p>
-      <p>Principal: ${escape(j.data.principal||'—')} · ETA: ${formatDate(j.data.eta)} · ETD: ${formatDate(j.data.etd)}</p></div>
+      <p>${escape(j.data.port||'—')} · ${escape(j.data.status||'—')}</p>
+      <p>ETA: ${formatDate(j.data.eta)}</p></div>
       <div class="hfo-section"><h3>Services</h3><div class="hfo-list">${calls.length?calls.map(s=>`<div class="hfo-list-row"><button data-open-service="${s.id}">#${s.seq} · ${escape(s.data.type||'Service')}</button><span>${escape(s.data.status||'—')}</span></div>`).join(''):'<p class="hfo-muted">No Services yet.</p>'}</div></div>
-      <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, j.data.vessel||'Port Call', j.data.jobNo||'Public view');
+      <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, j.data.vessel||'Port Call', 'Public view');
   }
   function renderPublicService() {
     const s = service(), j = job(); if (!s || !j) return;
     overlay(`<div class="hfo-banner">Public Service summary only · บุคคล เอกสาร และหมายเหตุไม่แสดง</div>
       <div class="hfo-section"><button class="hfo-btn" data-back-job>← Job</button>
-      <h2>#${s.seq} · ${escape(s.data.type||'Service')}</h2><p>${escape(j.data.vessel||'Port Call')} · ${escape(s.data.status||'—')}</p>
-      <div class="hfo-form-grid"><p>Planned: ${formatDate(s.data.plannedStart)} – ${formatDate(s.data.plannedEnd)}</p><p>Actual: ${formatDate(s.data.actualStart)} – ${formatDate(s.data.actualEnd)}</p></div></div>
-      <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, `#${s.seq} · ${s.data.type||'Service'}`, j.data.jobNo||'Public view');
+      <h2>#${s.seq} · ${escape(s.data.type||'Service')}</h2><p>${escape(j.data.vessel||'Port Call')} · ${escape(s.data.status||'—')}</p></div>
+      <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, `#${s.seq} · ${s.data.type||'Service'}`, 'Public view');
   }
   function render() {
     renderHome();
