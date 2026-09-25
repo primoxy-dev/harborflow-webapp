@@ -11,7 +11,7 @@ Web App ทดลองสำหรับ **Ship Agency Operations & Business In
 
 ## Operations trial
 
-Operations requires GitHub sign-in. `primoxy-dev` is the owner; the owner grants named Viewer/Editor roles and separate Crew View/Edit and Visitor View/Edit permissions. A PIC name alone never grants access. The owner creates Port Calls. Editors may change only assigned Jobs or Service instances. Up to 10 named users (including owner) and 80 Port Calls are supported in this trial.
+Operations has a public read-only summary: vessel, port, ETA and status for Jobs, plus Service type and status. The calendar shows each Job on its ETA date only, including mobile views. Job No., Principal, ETD, internal notes, detailed Service fields, Crew/Visitor data and all editing require GitHub sign-in and the relevant permission. `primoxy-dev` is the owner; the owner grants named Viewer/Editor roles and separate Crew View/Edit and Visitor View/Edit permissions. A PIC name alone never grants access. The owner creates Port Calls. Editors may change only assigned Jobs or Service instances. Up to 10 named users (including owner) and 80 Port Calls are supported in this trial.
 
 Port Calls and repeated Service instances autosave to Neon. Creating a Port Call also creates `Jobs/YYYY/MM. MON/DD. VESSEL - JOB-NO/General/job.json` in the private documents repository; Vessel, Job No. and ETA are required even for Draft. Adding a Service creates a folder named for its Service type. Existing Port Calls can create their folder with **Create GitHub folder**. The GitHub folder is renamed with its contents when Vessel, Job No. or ETA changes. Cancelled Jobs add ` cancelled` after the Job No.; changing back removes the suffix. Job No. is unique across all statuses. Service numbers are permanent within a Job; removal is recoverable by the owner with a reason. Every change has an actor history. Field conflicts stop and show original, shared and local values for review. Crew/Visitor and linked travel are separately permission-gated. No Operations or person data is cached in browser storage. Existing browser-only sample Jobs are not imported.
 
@@ -92,5 +92,6 @@ harborflow-webapp/
 ├── lib/              # shared server-side validation and GitHub API
 └── README.md         # คู่มือและสถานะโปรเจกต์
 ```
+
 
 
