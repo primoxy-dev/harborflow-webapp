@@ -4,3 +4,8 @@
 .hfo-imo-results{display:flex;flex-wrap:wrap;gap:6px}.hfo-imo-results:empty{display:none}
 
 .hfo-trend{display:block;margin-top:5px;font-size:12px;font-weight:600}.hfo-trend.up{color:#0e7265}.hfo-trend.down{color:#a65b00}.hfo-trend.flat{color:#64748b}.hfo-stat .hfo-muted{display:block;margin-top:3px;font-size:10px}
+
+.hfo-weekday{text-align:center;color:#64748b;font-size:12px}.hfo-cell{min-width:0}.hfo-cell.hfo-outside{background:#f1f4f8;box-shadow:inset 0 0 0 1px #e4eaf0}.hfo-cell.hfo-outside>small{color:#94a3b8}.hfo-job-pill{min-width:0;overflow:hidden}.hfo-job-pill b,.hfo-job-meta{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hfo-job-meta{font-size:11px}.hfo-calls summary{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;font-weight:700;list-style:none}.hfo-calls summary::-webkit-details-marker{display:none}.hfo-calls summary::before{content:'▾';color:#64748b}.hfo-calls:not([open]) summary::before{content:'▸'}.hfo-calls .hfo-list{margin-top:12px}
+@media(max-width:760px){.hfo-calendar-card{padding:10px}.hfo-grid{grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}.hfo-weekday{font-size:10px}.hfo-cell{min-height:60px;padding:3px;border-radius:4px}.hfo-cell>small{font-size:10px}.hfo-job-pill{padding:3px;margin:3px 0;font-size:9px}.hfo-job-meta{display:none}}
+@media(max-width:420px){.hfo-calendar-card .hfo-toolbar{align-items:flex-start}.hfo-calendar-card .hfo-row{gap:5px}.hfo-calls summary .hfo-muted{font-size:10px}}
+

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { nodeHandler, gh, json, readJson, safeName, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
 import { documentsFolder, moveJobFolder } from '../lib/job-folders.mjs';
-import { OWNER, TRIP_KINDS, canEditJob, canEditService, canPeople, db, fieldConflicts, permission, textField, uuid, validateJob, validateService } from '../lib/operations.mjs';
+import { OWNER, TRIP_KINDS, canEditJob, canEditService, canPeople, db, fieldConflicts, permission, publicJob, publicService, textField, uuid, validateJob, validateService } from '../lib/operations.mjs';
 
 const jobFields = ['jobNo', 'vessel', 'imo', 'port', 'principal', 'eta', 'etd', 'status', 'pic', 'notes', 'terminalStays', 'completionReason'];
 const serviceFields = ['type', 'status', 'description', 'pic', 'supplier', 'plannedStart', 'plannedEnd', 'actualStart', 'actualEnd', 'planConfirmed', 'supplierConfirmed', 'terminalCondition', 'terminalConfirmation', 'restrictionReason', 'details', 'checklist', 'sopVersion', 'baselineDue', 'deadlineReason', 'notes'];
@@ -109,6 +109,15 @@ function validateTrip(data) {
 }
 async function route(request) {
   if (!process.env.DATABASE_URL) return error('Operations database is not configured', 503);
+  const url = new URL(request.url);
+  if (request.method === 'GET' && url.searchParams.get('action') === 'publicState') {
+    const sql = db();
+    const [jobs, services] = await Promise.all([
+      rows(sql, 'SELECT id,data FROM operation_jobs ORDER BY updated_at DESC LIMIT 80'),
+      rows(sql, 'SELECT id,job_id,seq,data FROM operation_services WHERE removed_at IS NULL ORDER BY job_id,seq')
+    ]);
+    return json({ jobs: jobs.map(publicJob), services: services.map(publicService), public: true, trial: true });
+  }
   const login = sessionLogin(request);
   if (!login) return error('Sign in required', 401);
   const sql = db();
@@ -116,7 +125,6 @@ async function route(request) {
   try { grant = await permission(login, sql); }
   catch { return error('Current authorization could not be verified', 503); }
   if (!grant) return error('Operations permission required', 403);
-  const url = new URL(request.url);
   if (request.method === 'GET') {
     const action = url.searchParams.get('action') || 'state';
     if (action === 'state') {
@@ -373,4 +381,5 @@ async function route(request) {
 }
 
 export default nodeHandler(route);
+
 

@@ -31,7 +31,7 @@
     return '<option value="">Select Port / Terminal</option>' + option(choices, current);
   };
   const portSelect = (current, extra) => '<label class="hfo-field"><span>Port / Terminal</span><select name="port" ' + extra + '>' + portOptions(current) + '</select><small class="hfo-muted" data-port-status>' + escape(state.portStatus) + '</small></label>';
-  let state = { login: '', grant: null, jobs: [], services: [], people: [], trips: [], view: 'month', anchor: new Date(), openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…' };
+  let state = { login: '', grant: null, public: false, jobs: [], services: [], people: [], trips: [], view: 'month', anchor: new Date(), callsOpen: true, openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…' };
   const isOwner = () => state.grant?.role === 'owner';
   const isEditor = () => isOwner() || state.grant?.role === 'editor';
   const job = () => state.jobs.find(x => x.id === state.openJobId);
@@ -52,7 +52,7 @@
       body: method === 'POST' ? JSON.stringify({ action, ...payload }) : undefined });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      if (response.status === 401 || action === 'state' && [403,503].includes(response.status)) {
+      if (action !== 'state' && response.status === 401) {
         state.jobs = []; state.services = []; state.people = []; state.trips = []; state.openJobId = null; state.openServiceId = null;
         render();
       }
@@ -65,16 +65,24 @@
     if (state.busy) return;
     const editing = Boolean(state.modal || state.openJobId || state.openServiceId || state.personDraft || state.tripDraft);
     try {
-      const next = await api('state', {}, 'GET');
-      state.login = next.login; state.grant = next.grant;
+      let next;
+      try { next = await api('state', {}, 'GET'); }
+      catch (authError) {
+        if (![401,403,503].includes(authError.code)) throw authError;
+        next = await api('publicState', {}, 'GET');
+      }
+      const scopeChanged = Boolean(next.public) !== state.public;
+      state.public = Boolean(next.public);
+      state.login = next.login || ''; state.grant = next.grant || null;
       state.sync = 'Synced ' + new Date().toLocaleTimeString();
+      if (state.public) { state.people = []; state.trips = []; state.history = []; state.personDraft = null; state.tripDraft = null; state.modal = null; }
       // Keep the original field values in an open editor so a concurrent write
       // is compared against the user's true base, not silently replaced by polling.
-      if (editing) return;
+      if (editing && !scopeChanged) return;
       state.jobs = next.jobs; state.services = next.services;
       if (state.openJobId && !job()) { state.openJobId = null; state.openServiceId = null; state.people = []; state.trips = []; }
       render();
-    } catch (e) { state.grant = null; state.jobs = []; state.services = []; state.people = []; state.trips = []; state.openJobId = null; state.openServiceId = null; state.modal = null; state.sync = ''; state.error = e.message; render(); }
+    } catch (e) { state.grant = null; state.public = false; state.jobs = []; state.services = []; state.people = []; state.trips = []; state.openJobId = null; state.openServiceId = null; state.modal = null; state.sync = ''; state.error = e.message; render(); }
   }
   function metrics() {
     const now = Date.now();
@@ -119,31 +127,32 @@
     const first = localKey(start), last = localKey(end);
     return state.jobs.filter(j => j.data.status !== 'Cancelled' && j.data.eta && dateOnly(j.data.eta) >= first && dateOnly(j.data.eta) <= last).length;
   }
-  function matchesDate(j, date) { const day=localKey(date); return j.data.eta && dateOnly(j.data.eta) <= day && (!j.data.etd || dateOnly(j.data.etd) >= day); }
+  function matchesDate(j, date) { return j.data.eta && dateOnly(j.data.eta) === localKey(date); }
   function calendar() {
     const [start,end,label]=period();
     if (state.view === 'quarter' || state.view === 'year') {
       const months=[]; let d=new Date(start);
       while (d<=end) { const y=d.getFullYear(), m=d.getMonth(), first=new Date(y,m,1), last=new Date(y,m+1,0);
-        const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && j.data.eta && dateOnly(j.data.eta)<=localKey(last) && (!j.data.etd || dateOnly(j.data.etd)>=localKey(first)));
-        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Husbandry Calls</p>${calls.map(j=>`<button class="hfo-btn" data-open-job="${j.id}">${escape(j.data.vessel || 'Draft')} · ${escape(j.data.jobNo || 'No Job No.')}</button>`).join(' ')}</div>`);
+        const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && j.data.eta && dateOnly(j.data.eta)>=localKey(first) && dateOnly(j.data.eta)<=localKey(last));
+        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Husbandry Calls</p>${calls.map(j=>`<button class="hfo-btn" data-open-job="${j.id}">${escape(j.data.vessel || 'Draft')}${state.public?'':' · '+escape(j.data.jobNo || 'No Job No.')}</button>`).join(' ')}</div>`);
         d.setMonth(d.getMonth()+1);
       }
       return `<div class="hfo-stats">${months.join('')}</div>`;
     }
     const first=state.view==='month' ? startOfWeek(start) : start, days=state.view==='month' ? 42 : 7;
-    return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-muted">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); return `<div class="hfo-cell"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill" data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft')}</b><br><small>${escape(j.data.port||'No port')} · ${escape(j.data.status)}</small></button>`).join('')}</div>`;}).join('')}</div>`;
+    return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-weekday">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); const outside=state.view==='month' && d.getMonth()!==start.getMonth(); return `<div class="hfo-cell${outside?' hfo-outside':''}"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill" data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft')}</b><span class="hfo-job-meta">${escape(j.data.port||'No port')} · ${escape(j.data.status)}</span></button>`).join('')}</div>`;}).join('')}</div>`;
   }
   function renderHome() {
     document.getElementById('title').textContent='Operations · Trial';
     createButton.textContent='+ Create Port Call'; createButton.hidden=!isOwner();
     root.innerHTML=`<div class="hfo-shell">
-      <div class="hfo-banner">ระบบทดลองซิงค์ข้ามเครื่อง · ใช้ข้อมูลสมมติเท่านั้น ห้ามกรอกข้อมูลลูกเรือหรือผู้เยี่ยมจริง</div>
+      <div class="hfo-banner">ระบบทดลองซิงค์ข้ามเครื่อง · ใช้ข้อมูลสมมติเท่านั้น ห้ามกรอกข้อมูลลูกเรือหรือผู้เยี่ยมจริง${state.public?' · ผู้ชมทั่วไปเห็นเฉพาะข้อมูลสรุป':''}</div>
       <div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>
-      ${!state.grant ? `<div class="hfo-card"><h2>Operations requires sign-in and a named grant</h2><p>${escape(state.error||'Sign in with an approved GitHub account. No private Job data is stored on this device.')}</p><a class="hfo-btn primary" href="/api/auth?mode=start">Sign in with GitHub</a></div>` :
+      ${!state.grant && !state.public ? `<div class="hfo-card"><h2>Operations unavailable</h2><p>${escape(state.error||'Unable to load Operations data right now.')}</p></div>` :
       `<div class="hfo-stats">${metrics().map(([label,value,indicator,trend])=>`<div class="hfo-card hfo-stat"><span>${escape(label)}</span><strong>${escape(value)}</strong>${indicator?`<small class="hfo-trend ${trend}">${escape(indicator)}</small><small class="hfo-muted">By ETA · excludes Cancelled</small>`:''}</div>`).join('')}</div>
-       <div class="hfo-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><button class="hfo-btn" data-shift="-1">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1">›</button><select id="hfoView">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">ETA–ETD range · port local time</p>${calendar()}</div>
-       <div class="hfo-card"><div class="hfo-toolbar"><h2>All Husbandry Calls</h2><span class="hfo-muted">${escape(state.sync)}</span></div><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft Port Call')}</b><small>${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${formatDate(j.data.eta)} – ${formatDate(j.data.etd)}</small></button><span>${escape(j.data.status)}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></div>
+       ${state.public?'<div class="hfo-info">ดู Job และ Service แบบสรุปได้โดยไม่ต้องลงชื่อเข้าใช้ · <a href="/api/auth?mode=start">ลงชื่อเข้าใช้เพื่อดูรายละเอียดและแก้ไขตามสิทธิ์</a></div>':''}
+       <div class="hfo-card hfo-calendar-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><button class="hfo-btn" data-shift="-1" aria-label="Previous period">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1" aria-label="Next period">›</button><select id="hfoView" aria-label="Calendar view">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">Jobs appear on their ETA date · port local time</p>${calendar()}</div>
+       <details class="hfo-card hfo-calls" ${state.callsOpen?'open':''}><summary data-calls-toggle><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft Port Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(j.data.status)}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>
        ${isOwner()?'<button class="hfo-btn" data-grants>Manage Operations access</button>':''}`}
     </div>`;
     document.querySelector('.top .actions select').style.display='none';
@@ -154,9 +163,28 @@
     el.innerHTML=`<div class="hfo-overlay-head"><div><b>${escape(title)}</b><small class="hfo-muted" style="display:block">${escape(subtitle)}</small></div><button class="hfo-btn" data-close>Close ×</button></div><div class="hfo-overlay-body"><div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>${content}</div>`;
     document.body.appendChild(el);
   }
+  function renderPublicJob() {
+    const j = job(); if (!j) return;
+    const calls = serviceList(j);
+    overlay(`<div class="hfo-banner">Public summary only · รายชื่อ Crew/Visitor และข้อมูลภายในต้องลงชื่อเข้าใช้</div>
+      <div class="hfo-section"><h2>${escape(j.data.vessel||'Draft Port Call')}</h2>
+      <p>${escape(j.data.port||'—')} · ${escape(j.data.status||'—')}</p>
+      <p>ETA: ${formatDate(j.data.eta)}</p></div>
+      <div class="hfo-section"><h3>Services</h3><div class="hfo-list">${calls.length?calls.map(s=>`<div class="hfo-list-row"><button data-open-service="${s.id}">#${s.seq} · ${escape(s.data.type||'Service')}</button><span>${escape(s.data.status||'—')}</span></div>`).join(''):'<p class="hfo-muted">No Services yet.</p>'}</div></div>
+      <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, j.data.vessel||'Port Call', 'Public view');
+  }
+  function renderPublicService() {
+    const s = service(), j = job(); if (!s || !j) return;
+    overlay(`<div class="hfo-banner">Public Service summary only · บุคคล เอกสาร และหมายเหตุไม่แสดง</div>
+      <div class="hfo-section"><button class="hfo-btn" data-back-job>← Job</button>
+      <h2>#${s.seq} · ${escape(s.data.type||'Service')}</h2><p>${escape(j.data.vessel||'Port Call')} · ${escape(s.data.status||'—')}</p></div>
+      <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, `#${s.seq} · ${s.data.type||'Service'}`, 'Public view');
+  }
   function render() {
     renderHome();
-    if (state.modal === 'grants') renderGrants();
+    if (state.public && state.openServiceId) renderPublicService();
+    else if (state.public && state.openJobId) renderPublicJob();
+    else if (state.modal === 'grants') renderGrants();
     else if (state.modal === 'create') renderCreate();
     else if (state.modal === 'addService') renderAddService();
     else if (state.openServiceId) renderService();
@@ -485,9 +513,10 @@
   }
   createButton.onclick=async()=>{if(!isOwner())return;state.modal='create';state.error='';render();await loadPortChoices();};
   document.body.addEventListener('click',async event=>{
+    if(event.target.closest('[data-calls-toggle]')){state.callsOpen=!state.callsOpen;return;}
     const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-add-stay],[data-edit-stay],[data-remove-stay],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder]');
     if(!b)return;
-    if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.history=[];state.error='';render();await loadPortChoices();return;}
+    if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.history=[];state.error='';render();if(!state.public)await loadPortChoices();return;}
     if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
     if(b.hasAttribute('data-sync-job-folder')){await perform('syncJobFolder',{id:job().id},out=>{Object.assign(job(),out.record);render();});return;}
     if(b.dataset.imoChoice){const grid=b.closest('.hfo-form-grid'),input=grid?.querySelector('[name="imo"]');if(input){input.value=b.dataset.imoChoice;grid.querySelector('[data-imo-feedback]').textContent='IMO selected. Verify with ship documents.';if(input.hasAttribute('data-job-field'))input.dispatchEvent(new Event('change',{bubbles:true}));}return;}
