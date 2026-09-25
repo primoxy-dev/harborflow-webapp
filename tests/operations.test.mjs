@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canEditJob, canEditService, canPeople, fieldConflicts, permission, validateJob, validateService } from '../lib/operations.mjs';
+import { canEditJob, canEditService, canPeople, fieldConflicts, permission, publicJob, publicService, validateJob, validateService } from '../lib/operations.mjs';
 
 test('Draft may omit Job No.; Planned and Confirmed enforce milestones', () => {
   assert.equal(validateJob({ status: 'Draft' }), null);
@@ -46,4 +46,13 @@ test('non-owner grant lookup uses Neon 1.x query API', async () => {
   });
   assert.deepEqual(await permission('alice', sql), { role: 'viewer', crewView: false, crewEdit: false, visitorView: true, visitorEdit: false });
 });
+
+test('anonymous read model never returns free-text, person, supplier or financial fields', () => {
+  const job = publicJob({ id: 'j1', data: { jobNo: 'TEST-1', vessel: 'Demo', port: 'Map Ta Phut', principal: 'Fictional', eta: '2026-09-25T08:00', etd: '2026-09-26T08:00', status: 'Planned', pic: 'alice', notes: 'private', terminalStays: [{ contact: 'private' }] } });
+  const service = publicService({ id: 's1', job_id: 'j1', seq: 1, data: { type: 'Crew Change', status: 'Not Started', plannedStart: '', plannedEnd: '', actualStart: '', actualEnd: '', description: 'private', supplier: 'private', details: { passport: 'private' }, checklist: [{ text: 'private' }] } });
+  assert.deepEqual(Object.keys(job.data).sort(), ['eta','etd','jobNo','port','principal','status','vessel']);
+  assert.deepEqual(Object.keys(service.data).sort(), ['actualEnd','actualStart','plannedEnd','plannedStart','status','type']);
+  assert.doesNotMatch(JSON.stringify({ job, service }), /private|passport|alice/);
+});
+
 
