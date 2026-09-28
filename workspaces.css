@@ -1,0 +1,10 @@
+.workspace-group{margin:8px 0}
+.workspace-group summary{padding:10px 8px;border-radius:7px;background:#ffffff12;font-weight:600;cursor:pointer}
+.workspace-group .nav{padding-left:20px;font-size:13px}
+.brand-collapse{margin-left:auto;flex:none;border:1px solid #69809b;border-radius:6px;background:transparent;color:#fff;min-height:32px;min-width:32px}
+.brand{gap:6px;padding-left:0;padding-right:0;font-size:17px}
+body.nav-collapsed .workspace-group summary{font-size:0;padding:6px;text-align:center}
+body.nav-collapsed .workspace-group summary::after{content:'▸';font-size:16px}
+body.nav-collapsed .workspace-group[open] summary::after{content:'▾'}
+body.nav-collapsed .brand{flex-wrap:wrap}
+@media(max-width:900px){body.nav-collapsed .workspace-group summary{font-size:14px;padding:10px 8px;text-align:left}body.nav-collapsed .workspace-group summary::after{display:none}.brand-collapse{display:none}}

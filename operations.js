@@ -143,8 +143,8 @@
     return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-weekday">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); const outside=state.view==='month' && d.getMonth()!==start.getMonth(); return `<div class="hfo-cell${outside?' hfo-outside':''}"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill" data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft')}</b><span class="hfo-job-meta">${escape(j.data.port||'No port')} · ${escape(j.data.status)}</span></button>`).join('')}</div>`;}).join('')}</div>`;
   }
   function renderHome() {
-    document.getElementById('title').textContent='Operations · Trial';
-    createButton.textContent='+ Create Port Call'; createButton.hidden=!isOwner();
+    if (root.classList.contains('active')) document.getElementById('title').textContent='Operations · Trial';
+    createButton.textContent='+ Create Port Call'; createButton.hidden=!isOwner() || !root.classList.contains('active');
     root.innerHTML=`<div class="hfo-shell">
       <div class="hfo-banner">ระบบทดลองซิงค์ข้ามเครื่อง · ใช้ข้อมูลสมมติเท่านั้น ห้ามกรอกข้อมูลลูกเรือหรือผู้เยี่ยมจริง${state.public?' · ผู้ชมทั่วไปเห็นเฉพาะข้อมูลสรุป':''}</div>
       <div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>
