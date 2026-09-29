@@ -9,3 +9,55 @@
 @media(max-width:760px){.hfo-calendar-card{padding:10px}.hfo-grid{grid-template-columns:repeat(7,minmax(0,1fr));gap:2px}.hfo-weekday{font-size:10px}.hfo-cell{min-height:60px;padding:3px;border-radius:4px}.hfo-cell>small{font-size:10px}.hfo-job-pill{padding:3px;margin:3px 0;font-size:9px}.hfo-job-meta{display:none}}
 @media(max-width:420px){.hfo-calendar-card .hfo-toolbar{align-items:flex-start}.hfo-calendar-card .hfo-row{gap:5px}.hfo-calls summary .hfo-muted{font-size:10px}}
 
+.hfo-service-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(154px,1fr));gap:12px;margin-top:14px}
+.hfo-service-card{position:relative;min-width:0}
+.hfo-service-tile{width:100%;height:100%;min-height:154px;border:1px solid #dbe3ed;border-radius:13px;background:#fff;display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding:15px;text-align:left;color:#10233d;box-shadow:0 2px 10px #10233d0a}
+.hfo-service-tile:hover,.hfo-service-tile:focus-visible{border-color:#107a72;box-shadow:0 3px 15px #107a7226}
+.hfo-service-icon{position:relative;font-size:31px;line-height:1;display:grid;place-items:center;width:49px;height:49px;border-radius:11px;background:#e7f4f2}.hfo-service-count{position:absolute;right:-6px;top:-6px;min-width:19px;height:19px;padding:1px 3px;box-sizing:border-box;display:grid;place-items:center;border-radius:20px;background:#10233d;color:#fff;font:700 9px/1 Arial,sans-serif}
+.hfo-service-name{font-size:13px;font-weight:750;line-height:1.25;overflow-wrap:anywhere}
+.hfo-service-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto}
+.hfo-service-meta small{padding:3px 6px;border-radius:100px;background:#edf2f7;font-size:10px}
+.hfo-service-meta .hfo-status{background:#e7f4f2;color:#0b6f68}
+.hfo-remove-service{position:absolute;right:6px;top:6px;padding:2px 7px}
+.hfo-service-status{max-width:230px;margin:14px 0}
+.hfo-roster-table{min-width:1050px}
+.hfo-roster-table input,.hfo-flight-table input{width:100%;min-width:0;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:5px;padding:7px;font-size:12px;color:#172033}
+.hfo-roster-table th,.hfo-roster-table td,.hfo-flight-table th,.hfo-flight-table td{padding:6px}
+.hfo-roster-table td:first-child{width:36px}
+.hfo-roster-table td:nth-child(2){min-width:180px}
+.hfo-name-link{display:block;border:0;background:none;color:#0b6f68;padding:4px 0;text-align:left;font-size:11px;text-decoration:underline;cursor:pointer}
+.hfo-person-expanded{padding:16px;border:1px solid #c9e8e3;border-radius:9px;background:#f8fcfb;max-width:100%;min-width:0}
+.hfo-person-expanded h4{margin:4px 0 10px}
+.hfo-person-expanded .hfo-field{margin:8px 0}
+.hfo-immigration{border:1px solid #dbe3ed;border-radius:7px;margin:14px 0;padding:12px}
+.hfo-immigration legend{font-weight:700;font-size:13px;padding:0 6px}
+.hfo-immigration-codes{display:flex;flex-wrap:wrap;gap:7px}
+.hfo-immigration-codes label{display:inline-flex;align-items:center;gap:3px;padding:4px 6px;border:1px solid #dbe3ed;border-radius:5px;background:#fff;font-size:11px;font-weight:600}
+.hfo-immigration-codes input{width:13px;height:13px;margin:0}
+.hfo-flight-table{min-width:870px}
+.hfo-flight-table input[list]{text-transform:uppercase}
+.hfo-flight-table td:nth-child(4){min-width:125px}
+.hfo-ddmmm{display:block;color:#0b6f68;font-size:10px;margin-top:2px;white-space:nowrap}
+.hfo-new-person{background:#f1fbf8}
+.hfo-roster-table tfoot td{padding:9px}
+@media(max-width:1024px){
+  .hfo-overlay-body{width:100%;box-sizing:border-box;padding:12px}
+  .hfo-table-wrap{max-width:100%;overflow-x:visible}
+  .hfo-roster-table,.hfo-flight-table,.hfo-roster-table tbody,.hfo-flight-table tbody,.hfo-roster-table tfoot{display:block;min-width:0;width:100%}
+  .hfo-roster-table thead,.hfo-flight-table thead{display:none}
+  .hfo-roster-table tr.hfo-person-row,.hfo-flight-table tbody tr{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin:8px 0;padding:8px;border:1px solid #dbe3ed;border-radius:8px}
+  .hfo-roster-table td,.hfo-flight-table td{display:block;width:auto!important;min-width:0!important;border:0;padding:3px}
+  .hfo-roster-table td::before,.hfo-flight-table td::before{content:attr(data-label);display:block;color:#64748b;font-size:10px;font-weight:700;margin-bottom:3px}
+  .hfo-roster-table tr.hfo-person-details-row{display:block}
+  .hfo-roster-table tr.hfo-person-details-row>td{display:block;padding:0}
+  .hfo-roster-table tfoot tr,.hfo-roster-table tfoot td{display:block}
+}
+@media(max-width:600px){
+  .hfo-service-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .hfo-service-tile{min-height:135px;padding:10px}
+  .hfo-service-icon{width:40px;height:40px;font-size:25px}
+  .hfo-roster-table tr.hfo-person-row,.hfo-flight-table tbody tr{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hfo-person-expanded{padding:10px}
+  .hfo-immigration-codes{gap:4px}
+  .hfo-immigration-codes label{font-size:10px}
+}
