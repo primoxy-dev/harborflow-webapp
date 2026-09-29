@@ -3,24 +3,46 @@
   const root = document.getElementById('operations');
   const createButton = document.getElementById('createJob');
   if (!root || !createButton) return;
-  const TYPES = ['Port Clearance','Crew Change','Fresh Water','Garbage','CTM','Provisions','Launch Boat','Transport','Spare Parts/Customs','Medical','Inspection/Technical Visit','Other'];
+  const TYPES = ['Crew Change','Visitor','SIRE Inspector','Surveyor','Provision & Store','Ship Spare & Courier & Offland','Cash to Master','Medical Visit','SSCEC','Fresh Water','Garbage & Sludge','UWI & UWC','Others'];
+  const LEGACY_TYPES = ['Port Clearance','Garbage','CTM','Provisions','Launch Boat','Transport','Spare Parts/Customs','Medical','Inspection/Technical Visit','Other'];
+  const SERVICE_ICONS = {
+    'Crew Change':'👥','Visitor':'🪪','SIRE Inspector':'🔍','Surveyor':'📐',
+    'Provision & Store':'📦','Ship Spare & Courier & Offland':'🚚','Cash to Master':'💵',
+    'Medical Visit':'🩺','SSCEC':'🛡️','Fresh Water':'💧','Garbage & Sludge':'♻️',
+    'UWI & UWC':'⚓','Others':'⋯','Port Clearance':'🛂','Garbage':'♻️',
+    'CTM':'💵','Provisions':'📦','Launch Boat':'🚤','Transport':'🚐',
+    'Spare Parts/Customs':'🚚','Medical':'🩺','Inspection/Technical Visit':'🔍','Other':'⋯'
+  };
   const JOB_STATUSES = ['Draft','Planned','Confirmed','In Progress','On Hold','Completed','Cancelled'];
   const SERVICE_STATUSES = ['Not Started','In Progress','Waiting','Completed','Cancelled'];
   const CATEGORIES = ['On-signers','Off-signers','Medical visitors','SIRE Inspectors','Surveyors','Service Engineers','Other'];
   const TYPE_FIELDS = {
-    'Port Clearance': [['arrivalFormalities','Arrival formalities'],['departureFormalities','Departure formalities'],['authority','Authority'],['submissionDue','Submission due','datetime-local'],['submissionDate','Submitted','datetime-local'],['reference','Reference'],['approval','Approval']],
     'Crew Change': [['changeType','Change type'],['boardingPoint','Boarding point'],['crewNotes','Crew change notes']],
-    'Fresh Water': [['requestedQuantity','Requested quantity','number'],['actualQuantity','Actual quantity','number'],['unit','Unit'],['deliveryPoint','Delivery point'],['deliveryTime','Delivery time','datetime-local'],['receipt','Receipt reference']],
-    'Garbage': [['requestedQuantity','Requested quantity','number'],['actualQuantity','Actual quantity','number'],['unit','Unit'],['wasteType','Waste type'],['deliveryPoint','Collection point'],['deliveryTime','Collection time','datetime-local'],['disposalCertificate','Disposal certificate reference']],
-    'CTM': [['amount','Transferred amount','number'],['currency','Currency'],['recipient','Recipient'],['handoverTime','Handover time','datetime-local'],['receipt','Receipt reference']],
-    'Provisions': [['requestedQuantity','Requested quantity','number'],['actualQuantity','Actual quantity','number'],['unit','Unit'],['deliveryPoint','Delivery point'],['deliveryTime','Delivery time','datetime-local'],['receipt','Receipt reference']],
+    'Visitor': [['purpose','Visit purpose'],['boardingPoint','Boarding point']],
+    'SIRE Inspector': [['inspectionDate','Inspection date','datetime-local'],['company','Company'],['boardingPoint','Boarding point']],
+    'Surveyor': [['surveyType','Survey type'],['company','Company'],['boardingPoint','Boarding point']],
+    'Provision & Store': [['requestedQuantity','Requested quantity','number'],['actualQuantity','Actual quantity','number'],['unit','Unit'],['deliveryPoint','Delivery point'],['receipt','Receipt reference']],
+    'Ship Spare & Courier & Offland': [['shipment','Shipment'],['awbBl','AWB / B/L'],['consignee','Consignee'],['deliveryToVessel','Delivery / offland details']],
+    'Cash to Master': [['amount','Transferred amount','number'],['currency','Currency'],['recipient','Recipient'],['receipt','Receipt reference']],
+    'Medical Visit': [['appointment','Appointment','datetime-local'],['coordinator','Coordinator'],['requiredDocuments','Required documents (no diagnosis)']],
+    'SSCEC': [['inspectionDate','Inspection date','datetime-local'],['certificateReference','Certificate reference']],
+    'Fresh Water': [['requestedQuantity','Requested quantity','number'],['actualQuantity','Actual quantity','number'],['unit','Unit'],['deliveryPoint','Delivery point'],['receipt','Receipt reference']],
+    'Garbage & Sludge': [['requestedQuantity','Requested quantity','number'],['actualQuantity','Actual quantity','number'],['wasteType','Waste type'],['disposalCertificate','Disposal certificate']],
+    'UWI & UWC': [['workScope','Work scope'],['contractor','Contractor'],['permitReference','Permit reference']],
+    'Others': [['customDetails','Custom details']],
+    'Port Clearance': [['arrivalFormalities','Arrival formalities'],['departureFormalities','Departure formalities'],['authority','Authority']],
+    'Garbage': [['requestedQuantity','Requested quantity','number'],['actualQuantity','Actual quantity','number'],['wasteType','Waste type']],
+    'CTM': [['amount','Transferred amount','number'],['currency','Currency'],['recipient','Recipient']],
+    'Provisions': [['requestedQuantity','Requested quantity','number'],['actualQuantity','Actual quantity','number']],
     'Launch Boat': [['boardingPoint','Boarding point'],['boatPurpose','Purpose']],
     'Transport': [['pickupPoint','Pickup point'],['transportPurpose','Purpose']],
-    'Spare Parts/Customs': [['shipment','Shipment'],['awbBl','AWB / B/L'],['consignee','Consignee'],['customsDocuments','Customs documents'],['releaseState','Release state'],['deliveryToVessel','Delivery to vessel']],
-    'Medical': [['appointment','Appointment','datetime-local'],['coordinator','Coordinator'],['travel','Travel reference'],['medicalStatus','Status'],['requiredDocuments','Necessary documents (no diagnosis)']],
-    'Inspection/Technical Visit': [['visitType','Visit type'],['company','Company / authority'],['visitor','Visitor reference'],['appointment','Appointment','datetime-local'],['boarding','Boarding','datetime-local'],['disembarkation','Disembarkation','datetime-local'],['boardingPermission','Boarding permission'],['requiredDocuments','Required documents'],['outcomeReference','Outcome reference']],
+    'Spare Parts/Customs': [['shipment','Shipment'],['awbBl','AWB / B/L'],['consignee','Consignee']],
+    'Medical': [['appointment','Appointment','datetime-local'],['coordinator','Coordinator']],
+    'Inspection/Technical Visit': [['visitType','Visit type'],['company','Company / authority']],
     'Other': [['customDetails','Custom details']]
   };
+  const AIRLINE_CODES = [['TG','THAI AIRWAYS'],['FD','THAI AIRASIA'],['SQ','SINGAPORE AIRLINES'],['QR','QATAR AIRWAYS'],['EK','EMIRATES'],['EY','ETIHAD AIRWAYS'],['CX','CATHAY PACIFIC'],['MH','MALAYSIA AIRLINES']];
+  const AIRPORT_CODES = [['BKK','BANGKOK SUVARNABHUMI'],['DMK','BANGKOK DON MUEANG'],['HKT','PHUKET'],['UTP','UTAPAO'],['SIN','SINGAPORE CHANGI'],['KUL','KUALA LUMPUR'],['DOH','DOHA HAMAD'],['DXB','DUBAI'],['AUH','ABU DHABI'],['HKG','HONG KONG'],['MNL','MANILA'],['BOM','MUMBAI'],['DEL','DELHI']];
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const option = (values, current) => values.map(v => `<option value="${escape(v)}" ${v === current ? 'selected' : ''}>${escape(v)}</option>`).join('');
   const f = (label, value, name, type = 'text', extra = '') => `<label class="hfo-field"><span>${escape(label)}</span><input type="${type}" name="${escape(name)}" value="${escape(value || '')}" ${extra}></label>`;
@@ -31,7 +53,7 @@
     return '<option value="">Select Port / Terminal</option>' + option(choices, current);
   };
   const portSelect = (current, extra) => '<label class="hfo-field"><span>Port / Terminal</span><select name="port" ' + extra + '>' + portOptions(current) + '</select><small class="hfo-muted" data-port-status>' + escape(state.portStatus) + '</small></label>';
-  let state = { login: '', grant: null, public: false, jobs: [], services: [], people: [], trips: [], view: 'month', anchor: new Date(), callsOpen: true, openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…' };
+  let state = { login: '', grant: null, public: false, jobs: [], services: [], people: [], peopleLoadedFor: null, trips: [], view: 'month', anchor: new Date(), callsOpen: true, openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…' };
   const isOwner = () => state.grant?.role === 'owner';
   const isEditor = () => isOwner() || state.grant?.role === 'editor';
   const job = () => state.jobs.find(x => x.id === state.openJobId);
@@ -41,10 +63,16 @@
   const serviceList = j => state.services.filter(x => x.job_id === j.id && !x.removed_at).sort((a,b) => a.seq-b.seq);
   const anyPeopleView = () => state.grant?.crewView || state.grant?.visitorView;
   const canPeople = kind => kind === 'crew' ? state.grant?.crewView : state.grant?.visitorView;
-  const canEditPeople = kind => kind === 'crew' ? state.grant?.crewEdit : state.grant?.visitorEdit;
+  const canEditPeople = kind => isEditor() && mayEditService(service()) && (kind === 'crew' ? state.grant?.crewEdit : state.grant?.visitorEdit);
   const dateOnly = value => value ? String(value).slice(0,10) : '';
   const formatDate = value => value ? escape(String(value).replace('T',' ').slice(0,16)) : '—';
-  const announce = message => { state.error = message; const el = document.getElementById('hfoNotice'); if (el) { el.textContent = message; el.hidden = !message; } };
+  function formatDdMmm(value) {
+  const d=dateOnly(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return 'DDMMM';
+  const date=new Date(d+'T00:00:00Z');
+  return Number.isNaN(date.getTime())?'DDMMM':String(date.getUTCDate()).padStart(2,'0')+date.toLocaleString('en',{month:'short',timeZone:'UTC'}).toUpperCase();
+}
+  const announce = message => { state.error = message; const el = document.querySelector('.hfo-overlay #hfoNotice') || document.querySelector('#operations #hfoNotice'); if (el) { el.textContent = message; el.hidden = !message; } };
   async function api(action, payload, method = 'POST') {
     const url = method === 'GET' ? '/api/operations?' + new URLSearchParams({ action, ...payload }) : '/api/operations';
     const response = await fetch(url, { method, credentials: 'same-origin', cache: 'no-store',
@@ -71,7 +99,8 @@
         if (![401,403,503].includes(authError.code)) throw authError;
         next = await api('publicState', {}, 'GET');
       }
-      const scopeChanged = Boolean(next.public) !== state.public;
+      const scopeChanged = Boolean(next.public) !== state.public || (next.login||'') !== state.login || JSON.stringify(next.grant||null) !== JSON.stringify(state.grant);
+      if (scopeChanged) { state.people=[]; state.peopleLoadedFor=null; state.trips=[]; state.personDraft=null; }
       state.public = Boolean(next.public);
       state.login = next.login || ''; state.grant = next.grant || null;
       state.sync = 'Synced ' + new Date().toLocaleTimeString();
@@ -164,15 +193,13 @@
     document.body.appendChild(el);
   }
   function renderPublicJob() {
-    const j = job(); if (!j) return;
-    const calls = serviceList(j);
-    overlay(`<div class="hfo-banner">Public summary only · รายชื่อ Crew/Visitor และข้อมูลภายในต้องลงชื่อเข้าใช้</div>
-      <div class="hfo-section"><h2>${escape(j.data.vessel||'Draft Port Call')}</h2>
-      <p>${escape(j.data.port||'—')} · ${escape(j.data.status||'—')}</p>
-      <p>ETA: ${formatDate(j.data.eta)}</p></div>
-      <div class="hfo-section"><h3>Services</h3><div class="hfo-list">${calls.length?calls.map(s=>`<div class="hfo-list-row"><button data-open-service="${s.id}">#${s.seq} · ${escape(s.data.type||'Service')}</button><span>${escape(s.data.status||'—')}</span></div>`).join(''):'<p class="hfo-muted">No Services yet.</p>'}</div></div>
-      <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, j.data.vessel||'Port Call', 'Public view');
-  }
+  const j=job(); if (!j) return;
+  const calls=serviceList(j);
+  overlay(`<div class="hfo-banner">Public summary only · รายชื่อ Crew/Visitor และข้อมูลภายในต้องลงชื่อเข้าใช้</div>
+    <div class="hfo-section"><h2>${escape(j.data.vessel||'Draft Port Call')}</h2><p>${escape(j.data.port||'—')} · ${escape(j.data.status||'—')}</p><p>ETA: ${formatDate(j.data.eta)}</p></div>
+    <div class="hfo-section"><h3>Services</h3><div class="hfo-service-grid">${calls.length?calls.map(s=>serviceTile(s,true)).join(''):'<p class="hfo-muted">No Services yet.</p>'}</div></div>
+    <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`,j.data.vessel||'Port Call','Public view');
+}
   function renderPublicService() {
     const s = service(), j = job(); if (!s || !j) return;
     overlay(`<div class="hfo-banner">Public Service summary only · บุคคล เอกสาร และหมายเหตุไม่แสดง</div>
@@ -213,27 +240,33 @@
       <form id="hfoCreateJob" class="hfo-section"><h2>New Port Call</h2>${jobFields({status:'Draft'},true,true)}
       <div class="hfo-actions" style="margin-top:16px"><button class="hfo-btn primary">Create Draft</button></div></form>`, 'Create Port Call', 'Trial data only');
   }
-  function terminalStays(j) {
-    const stays=Array.isArray(j.data.terminalStays)?j.data.terminalStays:[];
-    return `<div class="hfo-section"><div class="hfo-toolbar"><h3>Terminal Stays</h3>${mayEditJob(j)?'<button class="hfo-btn" data-add-stay>+ Add terminal stay</button>':''}</div>
-      <div class="hfo-table-wrap"><table class="hfo-table"><thead><tr><th>#</th><th>Terminal</th><th>Planned berth</th><th>Planned departure</th><th>Actual berth</th><th>Actual departure</th><th>Status</th><th></th></tr></thead><tbody>
-      ${stays.map((x,i)=>`<tr><td>${i+1}</td><td>${escape(x.terminal||'')}</td><td>${formatDate(x.plannedBerth)}</td><td>${formatDate(x.plannedDeparture)}</td><td>${formatDate(x.actualBerth)}</td><td>${formatDate(x.actualDeparture)}</td><td>${escape(x.status||'Planned')}</td><td>${mayEditJob(j)?`<button class="hfo-btn" data-edit-stay="${i}">Edit</button> <button class="hfo-btn danger" data-remove-stay="${i}">Remove</button>`:''}</td></tr>`).join('')}
-      </tbody></table></div>${!stays.length?'<p class="hfo-muted">No terminal stay recorded.</p>':''}</div>`;
-  }
+  function serviceTile(s, publicView=false) {
+  const type=s.data.type||'Service';
+  const icon=SERVICE_ICONS[type]||'⚙️';
+  const label=escape(type);
+  const status=escape(s.data.status||'—');
+  const personType=['Crew Change','Visitor','SIRE Inspector','Surveyor','Medical Visit','Inspection/Technical Visit','Medical'].includes(type);
+  const personKind=type==='Crew Change'?'crew':'visitor';
+  const count=state.peopleLoadedFor===s.job_id && !publicView && personType && canPeople(personKind)
+    ? state.people.filter(p=>p.kind===personKind && Array.isArray(p.data.serviceIds) && p.data.serviceIds.includes(s.id)).length : null;
+  return `<div class="hfo-service-card"><button class="hfo-service-tile" type="button" data-open-service="${s.id}" aria-label="Open ${label}, ${status}">
+    <span class="hfo-service-icon" aria-hidden="true">${icon}<small class="hfo-service-count">${personType && count!==null?count+'p':'1s'}</small></span><span class="hfo-service-name">${label}</span>
+    <span class="hfo-service-meta"><small>#${s.seq}</small><small class="hfo-status">${status}</small>${personType && count!==null?`<small>${count} people</small>`:''}</span>
+    </button>${!publicView && mayEditService(s)?`<button class="hfo-btn danger hfo-remove-service" type="button" data-remove-service="${s.id}" aria-label="Remove ${label}">×</button>`:''}</div>`;
+}
   function renderJob() {
-    const j=job(); if (!j) return;
-    const services=serviceList(j), editable=mayEditJob(j);
-    const folderUrl=j.data.documentsPath?'https://github.com/primoxy-dev/harborflow-job-documents/tree/main/'+j.data.documentsPath.split('/').map(encodeURIComponent).join('/'):'';
-    const folderControl=folderUrl?`<a class="hfo-btn" href="${escape(folderUrl)}" target="_blank" rel="noopener noreferrer">Open GitHub folder</a>${isOwner()?'<button class="hfo-btn" data-sync-job-folder>Sync GitHub folders</button>':''}<small class="hfo-muted">Folder follows Vessel, Job No., ETA and Cancelled status.</small>`:isOwner()?'<button class="hfo-btn" data-sync-job-folder>Create GitHub folder</button>':'<small class="hfo-muted">GitHub folder not created</small>';
-    overlay(`<div class="hfo-banner">ข้อมูลทดลองเท่านั้น · ห้ามใช้ข้อมูลลูกเรือหรือผู้เยี่ยมจริง · Autosave เมื่อเปลี่ยนช่องข้อมูล</div>
-      <div class="hfo-section"><div class="hfo-toolbar"><div><h2>${escape(j.data.vessel||'Draft Port Call')}</h2><span class="hfo-muted">${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${escape(j.data.status)}</span></div><span class="hfo-muted" id="hfoSync">${escape(state.sync)}</span></div>
-      ${jobFields(j.data,editable)}<div class="hfo-actions">${folderControl}</div><p class="hfo-muted">Job ID: ${escape(j.id)} · assigned PIC does not automatically grant access</p></div>
-      ${terminalStays(j)}
-      <div class="hfo-section"><div class="hfo-toolbar"><h3>Services</h3>${editable?'<button class="hfo-btn primary" data-add-service>+ Add Service</button>':''}</div>
-      <div class="hfo-list">${services.length?services.map(s=>`<div class="hfo-list-row"><button data-open-service="${s.id}"><b>#${s.seq} · ${escape(s.data.type)}</b><small>${escape(s.data.description||'No description')} · PIC ${escape(s.data.pic||'Unassigned')}</small></button><span>${escape(s.data.status)}</span>${mayEditService(s)?`<button class="hfo-btn danger" data-remove-service="${s.id}">Remove</button>`:''}</div>`).join(''):'<div class="hfo-empty">No Services yet.</div>'}</div></div>
-      <div class="hfo-section"><div class="hfo-toolbar"><h3>Activity</h3><button class="hfo-btn" data-history="job" data-history-id="${j.id}">View history</button></div><div id="hfoHistory">${historyHtml()}</div></div>
-      ${isOwner()?removedServices(j):''}`, j.data.vessel||'Draft Port Call', j.data.jobNo||j.id);
-  }
+  const j=job(); if (!j) return;
+  const services=serviceList(j), editable=mayEditJob(j);
+  const folderUrl=j.data.documentsPath?'https://github.com/primoxy-dev/harborflow-job-documents/tree/main/'+j.data.documentsPath.split('/').map(encodeURIComponent).join('/'):'';
+  const folderControl=folderUrl?`<a class="hfo-btn" href="${escape(folderUrl)}" target="_blank" rel="noopener noreferrer">Open GitHub folder</a>${isOwner()?'<button class="hfo-btn" data-sync-job-folder>Sync GitHub folders</button>':''}<small class="hfo-muted">Folder follows Vessel, Job No., ETA and Cancelled status.</small>`:isOwner()?'<button class="hfo-btn" data-sync-job-folder>Create GitHub folder</button>':'<small class="hfo-muted">GitHub folder not created</small>';
+  overlay(`<div class="hfo-banner">ข้อมูลทดลองเท่านั้น · ห้ามใช้ข้อมูลลูกเรือหรือผู้เยี่ยมจริง · Autosave เมื่อเปลี่ยนช่องข้อมูล</div>
+    <div class="hfo-section"><div class="hfo-toolbar"><div><h2>${escape(j.data.vessel||'Draft Port Call')}</h2><span class="hfo-muted">${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${escape(j.data.status)}</span></div><span class="hfo-muted" id="hfoSync">${escape(state.sync)}</span></div>
+    ${jobFields(j.data,editable)}<div class="hfo-actions">${folderControl}</div><p class="hfo-muted">Job ID: ${escape(j.id)} · assigned PIC does not automatically grant access</p></div>
+    <div class="hfo-section"><div class="hfo-toolbar"><h3>Services</h3>${editable?'<button class="hfo-btn primary" data-add-service>+ Add Service</button>':''}</div>
+    <div class="hfo-service-grid">${services.length?services.map(s=>serviceTile(s)).join(''):'<div class="hfo-empty">No Services yet.</div>'}</div></div>
+    <div class="hfo-section"><div class="hfo-toolbar"><h3>Activity</h3><button class="hfo-btn" data-history="job" data-history-id="${j.id}">View history</button></div><div id="hfoHistory">${historyHtml()}</div></div>
+    ${isOwner()?removedServices(j):''}`, j.data.vessel||'Draft Port Call', j.data.jobNo||j.id);
+}
   function removedServices(j) {
     const removed=state.services.filter(s=>s.job_id===j.id && s.removed_at);
     return removed.length?`<div class="hfo-section"><h3>Removed Services · owner restore</h3>${removed.map(s=>`<div class="hfo-list-row">#${s.seq} ${escape(s.data.type)} · ${escape(s.removed_reason)}<button class="hfo-btn" data-restore-service="${s.id}">Restore</button></div>`).join('')}</div>`:'';
@@ -251,26 +284,21 @@
       render();
     } catch(e) { handleSaveError(e,{kind:'job',id:j.id,field,value,old,reason}); }
   }
-  async function saveStay(stay,index) {
-    const j=job(), old=Array.isArray(j.data.terminalStays)?j.data.terminalStays:[];
-    const next=[...old]; if (index===null) next.push(stay); else if (stay) next[index]=stay; else next.splice(index,1);
-    try { const out=await api('updateJob',{id:j.id,patch:{terminalStays:next},base:{terminalStays:old}}); Object.assign(j,out.record); state.error=''; render(); }
-    catch(e){handleSaveError(e,{kind:'job',id:j.id,field:'terminalStays',value:next,old});}
-  }
+
   function renderAddService() {
     const j=job(); if (!j) return;
     overlay(`<div class="hfo-banner">Each Service instance gets a permanent number. Repeated types are allowed.</div>
       <form class="hfo-section" id="hfoAddService"><h2>Add Service to ${escape(j.data.vessel||'Port Call')}</h2>
-      <div class="hfo-form-grid">${sel('Service type','Port Clearance','type',TYPES)}${f('Description','','description')}${f('Service PIC (GitHub login)','','pic')}</div>
+       <div class="hfo-form-grid">${sel('Service type','Crew Change','type',TYPES)}${f('Description','','description')}${f('Service PIC (GitHub login)','','pic')}</div>
       <p class="hfo-muted">A PIC name does not grant account access. Other fields can be filled in the dedicated Service view.</p>
       <button class="hfo-btn primary">Add Service</button></form>`, 'Add Service', j.data.jobNo||j.id);
   }
   function serviceDetails(s, editable) {
     const d=s.data, dis=editable?'':'disabled';
     const attr='data-service-field';
-    const specifics=(TYPE_FIELDS[d.type]||TYPE_FIELDS.Other).map(([name,label,type])=>f(label,d.details?.[name],name,type||'text',`${dis} data-detail-field`)).join('');
+    const specifics=(TYPE_FIELDS[d.type]||TYPE_FIELDS.Others).map(([name,label,type])=>f(label,d.details?.[name],name,type||'text',`${dis} data-detail-field`)).join('');
     return `<div class="hfo-section"><h3>Shared details</h3><div class="hfo-form-grid">
-      ${sel('Type',d.type,'type',TYPES,`${dis} ${attr}`)}
+       ${sel('Type',d.type,'type',TYPES.includes(d.type)?TYPES:[d.type,...TYPES],`${dis} ${attr}`)}
       ${sel('Status',d.status,'status',SERVICE_STATUSES,`${dis} ${attr}`)}
       ${f('Description',d.description,'description','text',`${dis} ${attr}`)}
       ${f('Service PIC (GitHub login)',d.pic,'pic','text',`${isOwner()||mayEditJob(job())?'':'disabled'} ${attr}`)}
@@ -287,41 +315,73 @@
       <label class="hfo-checkbox"><input type="checkbox" name="supplierConfirmed" data-service-check ${d.supplierConfirmed?'checked':''} ${dis}> Supplier confirmed</label></div>
       <p class="hfo-muted">Baseline due: ${formatDate(d.baselineDue)}. Once locked, a deadline change needs a reason.</p></div>
       <div class="hfo-section"><h3>${escape(d.type)} · specific form</h3><div class="hfo-form-grid">${specifics}</div>
-      ${d.type==='Other'?'<p class="hfo-muted">Custom fields are instance-specific; standard templates need owner approval.</p>':''}</div>`;
+       ${['Other','Others'].includes(d.type)?'<p class="hfo-muted">Custom fields are instance-specific; standard templates need owner approval.</p>':''}</div>`;
   }
   function checklistHtml(s) {
     const list=Array.isArray(s.data.checklist)?s.data.checklist:[];
     return `<div class="hfo-section"><div class="hfo-toolbar"><h3>Checklist · SOP ${escape(s.data.sopVersion||'not set')}</h3>${mayEditService(s)?'<button class="hfo-btn" data-add-step>+ Add step</button>':''}</div>
       ${list.length?list.map((step,i)=>`<div class="hfo-checklist-row"><input type="checkbox" data-step="${i}" ${step.done?'checked':''} ${mayEditService(s)?'':'disabled'}><span style="flex:1">${escape(step.text)}</span><small class="hfo-muted">${step.done?`${escape(step.actor||'')} · ${formatDate(step.completedAt)}`:''}</small>${mayEditService(s)?`<button class="hfo-btn danger" data-remove-step="${i}">×</button>`:''}</div>`).join(''):'<p class="hfo-muted">No checklist steps yet.</p>'}</div>`;
   }
+  function crewTableInput(p, field, label, type='text', editable=false) {
+  return `<input data-person-field="${field}" data-person-id="${p.id}" aria-label="${escape(label)} for ${escape(p.data.name||'crew member')}" type="${type}" value="${escape(p.data[field]||'')}" ${editable?'':'disabled'}>`;
+}
+  function personRow(p, i, kind) {
+  const edit=canEditPeople(kind), expanded=state.personDraft?.id===p.id;
+  const fields=[['nationality','Nationality'],['rank','Rank'],['dob','Date of Birth','date'],['seamanBook','Seaman book'],['passport','Passport'],['passportExpiry','PP. EXP','date']];
+  const nameCell=`<input data-person-field="name" data-person-id="${p.id}" aria-label="Name – Surname" value="${escape(p.data.name||'')}" ${edit?'':'disabled'}><button type="button" class="hfo-name-link" data-edit-person="${p.id}" aria-expanded="${expanded}">${escape(p.data.name||'Open details')} <span aria-hidden="true">${expanded?'▴':'▾'}</span></button>`;
+  return `<tr class="hfo-person-row"><td data-label="No.">${i+1}</td><td data-label="Name – Surname">${nameCell}</td>${fields.map(([key,label,type])=>`<td data-label="${label}">${kind==='visitor' && key==='seamanBook'?'—':crewTableInput(p,key,label,type||'text',edit)}</td>`).join('')}
+    <td data-label="Actions">${edit?`<button type="button" class="hfo-btn danger" data-remove-person="${p.id}" aria-label="Remove ${escape(p.data.name)}">×</button>`:''}</td></tr>
+    ${expanded?`<tr class="hfo-person-details-row"><td colspan="9">${personForm()}</td></tr>`:''}`;
+}
+  function newPersonRow(category, kind) {
+  const draft=state.personDraft;
+  if (!draft?.newRow || draft.data.category!==category) return '';
+  const input=(field,label,type='text')=>`<input data-new-person-field="${field}" aria-label="${label}" type="${type}" placeholder="${label}">`;
+  return `<tr class="hfo-person-row hfo-new-person"><td data-label="No.">New</td>
+    <td data-label="Name – Surname">${input('name','Name – Surname')}</td>
+    <td data-label="Nationality">${input('nationality','Nationality')}</td>
+    <td data-label="Rank">${input('rank','Rank')}</td>
+    <td data-label="Date of Birth">${input('dob','Date of Birth','date')}</td>
+    <td data-label="Seaman book">${kind==='crew'?input('seamanBook','Seaman book'):'—'}</td>
+    <td data-label="Passport">${input('passport','Passport')}</td>
+    <td data-label="PP. EXP">${input('passportExpiry','PP. EXP','date')}</td>
+    <td data-label="Actions"><button type="button" class="hfo-btn primary" data-save-new-person>Save</button><button type="button" class="hfo-btn" data-close-person>Cancel</button></td></tr>`;
+}
   function rosterHtml(s) {
-    if (!anyPeopleView()) return '<div class="hfo-section hfo-alert">Separate Crew or Visitor view permission is required. Job/Service PIC alone does not grant it.</div>';
-    const filtered=state.people.filter(p=>Array.isArray(p.data.serviceIds) && p.data.serviceIds.includes(s.id));
-    return `<div class="hfo-section"><div class="hfo-banner">ข้อมูลบุคคลสมมติหรือปกปิดตัวตนเท่านั้น · อย่าใส่เลขเอกสารจริงในช่วงทดลอง</div>
-      <div class="hfo-toolbar"><h3>Crew members and Visitors</h3><div class="hfo-row">${state.grant.crewEdit?'<button class="hfo-btn" data-add-person="crew">+ Crew</button>':''}${state.grant.visitorEdit?'<button class="hfo-btn" data-add-person="visitor">+ Visitor</button>':''}</div></div>
-      ${CATEGORIES.map(category=>{ const list=filtered.filter(p=>p.data.category===category && canPeople(p.kind)); const kind=['On-signers','Off-signers'].includes(category)?'crew':'visitor';
-        if (!canPeople(kind)) return ''; return `<details class="hfo-group" ${list.length?'open':''}><summary>${escape(category)} (${list.length})</summary><div class="hfo-table-wrap"><table class="hfo-table"><thead><tr><th>No.</th><th>Name – Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Seaman book</th><th>Passport</th><th>PP. EXP</th><th>Flight / Immigration</th></tr></thead><tbody>${list.map((p,i)=>`<tr><td>${i+1}</td><td>${escape(p.data.name)}</td><td>${escape(p.data.nationality)}</td><td>${escape(p.data.rank)}</td><td>${escape(p.data.dob)}</td><td>${escape(p.kind==='crew'?p.data.seamanBook:'')}</td><td>${escape(p.data.passport)}</td><td>${escape(p.data.passportExpiry)}</td><td><button class="hfo-btn" data-edit-person="${p.id}">Open</button> ${canEditPeople(p.kind)?`<button class="hfo-btn danger" data-remove-person="${p.id}">×</button>`:''}</td></tr>`).join('')}</tbody></table></div></details>`}).join('')}
-      ${state.personDraft?personForm():''}</div>`;
-  }
+  const crew=s.data.type==='Crew Change';
+  const kind=crew?'crew':'visitor';
+  if (!canPeople(kind)) return `<div class="hfo-section hfo-alert">Separate ${crew?'Crew':'Visitor'} view permission is required. Job/Service PIC alone does not grant it.</div>`;
+  const categories=crew?CATEGORIES.slice(0,2):CATEGORIES.slice(2);
+  const filtered=state.people.filter(p=>p.kind===kind && Array.isArray(p.data.serviceIds) && p.data.serviceIds.includes(s.id));
+  return `<div class="hfo-section"><div class="hfo-banner">ข้อมูลบุคคลสมมติหรือปกปิดตัวตนเท่านั้น · อย่าใส่เลขเอกสารจริงในช่วงทดลอง</div>
+    <div class="hfo-toolbar"><h3>${crew?'Crew members':'Visitors'}</h3><small class="hfo-muted">${filtered.length} people · Click a name to expand ${crew?'Immigration & flight details':'flight details'}</small></div>
+    ${categories.map(category=>{const list=filtered.filter(p=>p.data.category===category);
+      return `<details class="hfo-group" ${crew||list.length||state.personDraft?.data.category===category?'open':''}><summary>${escape(category)} (${list.length})</summary>
+        <div class="hfo-table-wrap"><table class="hfo-table hfo-roster-table"><thead><tr><th>No.</th><th>Name – Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Seaman book</th><th>Passport</th><th>PP. EXP</th><th></th></tr></thead>
+        <tbody>${list.map((p,i)=>personRow(p,i,kind)).join('')}${newPersonRow(category,kind)}</tbody>
+        ${canEditPeople(kind)?`<tfoot><tr><td colspan="9"><button type="button" class="hfo-btn" data-add-person="${kind}" data-person-category="${escape(category)}">+ Add ${escape(category)}</button></td></tr></tfoot>`:''}
+        </table></div></details>`}).join('')}</div>`;
+}
   function personForm() {
-    const draft=state.personDraft, p=draft.data, edit=canEditPeople(draft.kind), flights=Array.isArray(p.flights)?p.flights:[];
-    return `<form id="hfoPersonForm" class="hfo-section hfo-nested"><div class="hfo-toolbar"><h3>${draft.id?'Edit':'Add'} ${escape(draft.kind)}</h3><button type="button" class="hfo-btn" data-close-person>Close</button></div>
-      <div class="hfo-form-grid">${sel('Change / visitor role',p.category,'category',draft.kind==='crew'?CATEGORIES.slice(0,2):CATEGORIES.slice(2),edit?'':'disabled')}
-      ${f('Name – Surname',p.name,'name','text',edit?'':'disabled')}${f('Nationality',p.nationality,'nationality','text',edit?'':'disabled')}
-      ${f('Rank / role',p.rank,'rank','text',edit?'':'disabled')}${f('Date of birth',p.dob,'dob','date',edit?'':'disabled')}
-      ${f('Passport No.',p.passport,'passport','text',edit?'':'disabled')}${f('Passport expiry',p.passportExpiry,'passportExpiry','date',edit?'':'disabled')}
-      ${draft.kind==='crew'?f('Seaman book No.',p.seamanBook,'seamanBook','text',edit?'':'disabled'):''}
-      ${area('Notes',p.notes,'notes',edit?'':'disabled')}</div>
-      ${draft.kind==='crew'?`<h4>Immigration · per person</h4><div class="hfo-form-grid">
-       ${sel('Status',p.immigration?.status||'Not started','immigrationStatus',['Not started','Documents pending','Submitted','Approved','Rejected'],edit?'':'disabled')}
-       ${f('Visa / permission',p.immigration?.visa,'immigrationVisa','text',edit?'':'disabled')}
-       ${f('OKTB',p.immigration?.oktb,'immigrationOktb','text',edit?'':'disabled')}
-       ${area('Immigration notes',p.immigration?.notes,'immigrationNotes',edit?'':'disabled')}</div>`:''}
-      <div class="hfo-toolbar"><h4>Flights · ${flights.length}</h4>${edit?'<button type="button" class="hfo-btn" data-add-flight>+ Add flight</button>':''}</div>
-      <div class="hfo-table-wrap"><table class="hfo-table"><thead><tr><th>#</th><th>Airline</th><th>Flight No.</th><th>Date</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>Booking</th><th></th></tr></thead><tbody>
-      ${flights.map((fl,i)=>`<tr><td>${i+1}</td>${['airline','number','date','from','to','departure','arrival','booking'].map(key=>`<td><input style="max-width:110px" data-flight="${i}" data-flight-field="${key}" value="${escape(fl[key]||'')}" ${edit?'':'disabled'}></td>`).join('')}<td>${edit?`<button type="button" class="hfo-btn danger" data-remove-flight="${i}">×</button>`:''}</td></tr>`).join('')}</tbody></table></div>
-      ${edit?'<div class="hfo-actions"><button class="hfo-btn primary">Save person</button></div>':''}</form>`;
-  }
+  const draft=state.personDraft, p=draft.data, edit=canEditPeople(draft.kind), flights=Array.isArray(p.flights)?p.flights:[];
+  const codes=['VISA','VISA-C','VOA','BG','OKTB','EX'];
+  const current=p.immigration?.codes||{};
+  const checked=code=>Boolean(current[code] || code==='VISA' && p.immigration?.visa || code==='OKTB' && p.immigration?.oktb);
+  const airlineOptions=AIRLINE_CODES.map(([code,name])=>`<option value="${code}" label="${escape(name)}"></option>`).join('');
+  const airportOptions=AIRPORT_CODES.map(([code,name])=>`<option value="${code}" label="${escape(name)}"></option>`).join('');
+  return `<form id="hfoPersonForm" class="hfo-person-expanded"><div class="hfo-toolbar"><h4>${draft.kind==='crew'?'Immigration & flight details':'Flight details'} · ${escape(p.name)}</h4><button type="button" class="hfo-btn" data-close-person>Close</button></div>
+    ${sel('Change / visitor role',p.category,'category',draft.kind==='crew'?CATEGORIES.slice(0,2):CATEGORIES.slice(2),edit?'':'disabled')}
+    ${draft.kind==='crew'?`<fieldset class="hfo-immigration"><legend>Immigration</legend><div class="hfo-immigration-codes">${codes.map(code=>`<label><input type="checkbox" name="immigration-${code}" ${checked(code)?'checked':''} ${edit?'':'disabled'}><span>${code}</span></label>`).join('')}</div>
+      <div class="hfo-form-grid">${sel('Status',p.immigration?.status||'Not started','immigrationStatus',['Not started','Documents pending','Submitted','Approved','Rejected'],edit?'':'disabled')}${area('Notes',p.immigration?.notes,'immigrationNotes',edit?'':'disabled')}</div></fieldset>`:''}
+    <div class="hfo-toolbar"><h4>Flights · ${flights.length}</h4>${edit?'<button type="button" class="hfo-btn" data-add-flight>+ Add flight</button>':''}</div>
+    <p class="hfo-muted">Common trial suggestions only. <a href="https://www.iata.org/en/publications/directories/code-search/" target="_blank" rel="noopener noreferrer">Verify airline and airport codes with IATA ↗</a></p>
+    <datalist id="hfoAirlineCodes">${airlineOptions}</datalist><datalist id="hfoAirportCodes">${airportOptions}</datalist>
+    <div class="hfo-table-wrap"><table class="hfo-table hfo-flight-table"><thead><tr><th>#</th><th>Airline</th><th>Flight No.</th><th>Date (DDMMM)</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>PNR</th><th></th></tr></thead><tbody>
+    ${flights.map((fl,i)=>`<tr><td data-label="#">${i+1}</td>
+      ${[['airline','Airline','hfoAirlineCodes'],['number','Flight No.',''],['date','Date (DDMMM)',''],['from','From','hfoAirportCodes'],['to','To','hfoAirportCodes'],['departure','Departure',''],['arrival','Arrival',''],['booking','PNR','']].map(([key,label,list])=>`<td data-label="${label}"><input data-flight="${i}" data-flight-field="${key}" aria-label="${label}, flight ${i+1}" type="${key==='date'?'date':['departure','arrival'].includes(key)?'time':'text'}" ${list?`list="${list}"`:''} value="${escape(key==='date'?dateOnly(fl[key]):fl[key]||'')}" ${edit?'':'disabled'}>${key==='date'?`<small class="hfo-ddmmm">${formatDdMmm(fl[key])}</small>`:''}</td>`).join('')}
+      <td data-label="Remove">${edit?`<button type="button" class="hfo-btn danger" data-remove-flight="${i}" aria-label="Remove flight ${i+1}">×</button>`:''}</td></tr>`).join('')}
+    </tbody></table></div>${edit?'<div class="hfo-actions"><button class="hfo-btn primary">Save details</button></div>':''}</form>`;
+}
   function tripsHtml(s) {
     if (!state.grant?.crewView || !state.grant?.visitorView) return '<div class="hfo-section hfo-alert">Travel with linked passengers requires both separate Crew and Visitor view grants.</div>';
     const list=state.trips.filter(t=>t.service_id===s.id), edit=mayEditService(s)&&state.grant.crewEdit&&state.grant.visitorEdit;
@@ -346,13 +406,19 @@
       ${edit?'<button class="hfo-btn primary">Save trip</button>':''}</form>`;
   }
   function renderService() {
-    const s=service(), j=job(); if (!s || !j) return;
-    const tabs=['details','crew','travel','checklist','history'];
-    overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
-      <div class="hfo-toolbar"><div><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Port Call')} · ${escape(j.data.jobNo||j.id)} · ${escape(s.data.status)}</span></div><button class="hfo-btn" data-back-job>← Job</button></div>
-      <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${{details:'Service details',crew:'Crew members and Visitors',travel:'Travel',checklist:'Checklist',history:'History'}[t]}</button>`).join('')}</div>
-      ${state.tab==='details'?serviceDetails(s,mayEditService(s)):state.tab==='crew'?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`, '#'+s.seq+' · '+s.data.type, j.data.vessel||'Port Call');
-  }
+  const s=service(), j=job(); if (!s || !j) return;
+  const isCrew=s.data.type==='Crew Change';
+  const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
+  const tabs=isCrew?['crew','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:['details','travel','checklist','history'];
+  if (!tabs.includes(state.tab)) state.tab=tabs[0];
+  const label={details:'Service details',crew:'Crew members',visitors:'Visitors',travel:'Travel',checklist:'Checklist',history:'History'};
+  overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
+    <div class="hfo-toolbar"><div><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Port Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>← Job</button></div>
+    ${isCrew?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
+    <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${label[t]}</button>`).join('')}</div>
+    ${state.tab==='details'?serviceDetails(s,mayEditService(s)):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
+    '#'+s.seq+' · '+s.data.type,j.data.vessel||'Port Call');
+}
   async function saveServiceField(target, checked=false) {
     const s=service(); if (!s || !mayEditService(s)) return;
     const name=target.name, value=checked?target.checked:target.value, detail=target.hasAttribute('data-detail-field');
@@ -372,65 +438,103 @@
     catch(e){handleSaveError(e,{kind:'service',id:s.id,field:'checklist',value:next,old});}
   }
   function handleSaveError(e, context) {
-    if (e.code === 409 && e.detail?.conflicts?.length) {
-      state.conflict={...context, conflicts:e.detail.conflicts, current:e.detail.current};
-      const box=document.createElement('div'); box.className='hfo-section hfo-conflict'; box.id='hfoConflict';
-      box.innerHTML=`<h3>Concurrent edit · review each field</h3><p>No value was overwritten.</p>
-        ${state.conflict.conflicts.map(c=>`<div class="hfo-nested"><b>${escape(c.field)}</b><p>Original: ${escape(JSON.stringify(c.original))}</p><p>Shared now: ${escape(JSON.stringify(c.shared))}</p><p>Your value: ${escape(JSON.stringify(c.local))}</p></div>`).join('')}
-        <div class="hfo-actions"><button class="hfo-btn" data-resolve="shared">Use shared value</button><button class="hfo-btn primary" data-resolve="mine">Save my value after review</button></div>`;
-      document.querySelector('.hfo-overlay-body')?.prepend(box);
-    } else announce(e.message);
-  }
+  if (e.code===409 && e.detail?.conflicts?.length) {
+    state.conflict={...context,conflicts:e.detail.conflicts,current:e.detail.current};
+    document.getElementById('hfoConflict')?.remove();
+    const box=document.createElement('div');box.className='hfo-section hfo-conflict';box.id='hfoConflict';
+    box.innerHTML=`<h3>Concurrent edit · review each field</h3><p>No value was overwritten.</p>
+      ${state.conflict.conflicts.map(c=>`<div class="hfo-nested"><b>${escape(c.field)}</b><p>Original: ${escape(JSON.stringify(c.original))}</p><p>Shared now: ${escape(JSON.stringify(c.shared))}</p><p>Your value: ${escape(JSON.stringify(c.local))}</p></div>`).join('')}
+      <div class="hfo-actions"><button class="hfo-btn" data-resolve="shared">Use shared value</button><button class="hfo-btn primary" data-resolve="mine">Save my value after review</button></div>`;
+    document.querySelector('.hfo-overlay-body')?.prepend(box);
+  } else announce(e.message);
+}
   async function resolveConflict(choice) {
-    const c=state.conflict; if (!c) return;
-    if (choice==='shared') {
-      const list=c.kind==='job'?state.jobs:state.services, item=list.find(x=>x.id===c.id);
-      if (item) Object.assign(item,c.current);
-      state.conflict=null; state.error=''; render(); return;
-    }
-    const conflict=c.conflicts[0]; if (!conflict) return;
-    const nested=c.field.startsWith('details.');
-    const name=nested?c.field.slice(8):c.field;
-    const patch=nested?{details:{[name]:c.value}}:{[name]:c.value};
-    const base=nested?{details:{[name]:conflict.shared}}:{[name]:conflict.shared};
-    try {
-      const out=await api(c.kind==='job'?'updateJob':'updateService',{id:c.id,patch,base,reason:c.reason||''});
-      const item=(c.kind==='job'?state.jobs:state.services).find(x=>x.id===c.id);
-      if (item) Object.assign(item,out.record);
-      state.conflict=null; state.error=''; render();
-    } catch(e){state.conflict=null; document.getElementById('hfoConflict')?.remove(); handleSaveError(e,c);}
+  const c=state.conflict;if(!c)return;
+  const list=c.kind==='job'?state.jobs:c.kind==='person'?state.people:state.services;
+  const item=list.find(x=>x.id===c.id);
+  if(choice==='shared'){if(item)Object.assign(item,c.current);state.conflict=null;state.personDraft=null;state.error='';render();return;}
+  const conflict=c.conflicts[0];if(!conflict)return;
+  let patch,base,action,payload;
+  if(c.kind==='person'){
+    patch=c.patch;
+    base=Object.fromEntries(Object.keys(patch).map(key=>[key,c.current.data[key]]));
+    action='updatePerson';payload={id:c.id,kind:c.personKind,patch,base};
+  } else {
+    const nested=c.field.startsWith('details.'),name=nested?c.field.slice(8):c.field;
+    patch=nested?{details:{[name]:c.value}}:{[name]:c.value};
+    base=nested?{details:{[name]:conflict.shared}}:{[name]:conflict.shared};
+    action=c.kind==='job'?'updateJob':'updateService';payload={id:c.id,patch,base,reason:c.reason||''};
   }
-  async function loadPeople() {
-    if (!job() || !anyPeopleView()) return;
-    try {const out=await api('people',{jobId:job().id},'GET');state.people=out.people;state.error='';render();}
-    catch(e){state.people=[];announce(e.message);}
-  }
+  try {
+    const out=await api(action,payload);
+    if(item)Object.assign(item,out.record);
+    state.conflict=null;state.personDraft=null;state.error='';render();
+  } catch(e){state.conflict=null;document.getElementById('hfoConflict')?.remove();handleSaveError(e,c);}
+}
+  function loadPeople() {
+  if (!job() || !anyPeopleView()) return;
+  const id=job().id;
+  return api('people',{jobId:id},'GET').then(out=>{
+    if (job()?.id!==id) return;
+    state.people=out.people;state.peopleLoadedFor=id;state.error='';render();
+  }).catch(e=>{state.people=[];state.peopleLoadedFor=null;announce(e.message);});
+}
   async function loadTrips() {
     if (!job() || !state.grant.crewView || !state.grant.visitorView) return;
     try {const out=await api('trips',{jobId:job().id},'GET');state.trips=out.trips;state.error='';render();}
     catch(e){state.trips=[];announce(e.message);}
   }
   function capturePersonForm() {
-    const draft=state.personDraft, form=document.getElementById('hfoPersonForm'); if (!draft || !form) return;
-    const d=new FormData(form);
-    for (const name of ['category','name','nationality','rank','dob','passport','passportExpiry','seamanBook','notes']) if (d.has(name)) draft.data[name]=String(d.get(name)||'');
-    if (draft.kind==='crew') draft.data.immigration={status:String(d.get('immigrationStatus')||''),visa:String(d.get('immigrationVisa')||''),oktb:String(d.get('immigrationOktb')||''),notes:String(d.get('immigrationNotes')||'')};
-    form.querySelectorAll('[data-flight]').forEach(input=>{const i=Number(input.dataset.flight);draft.data.flights[i][input.dataset.flightField]=input.value;});
+  const draft=state.personDraft, form=document.getElementById('hfoPersonForm'); if (!draft || !form) return;
+  const d=new FormData(form);
+  if (d.has('category')) draft.data.category=String(d.get('category')||'');
+  if (draft.kind==='crew') {
+    const codes=Object.fromEntries(['VISA','VISA-C','VOA','BG','OKTB','EX'].map(code=>[code,d.has('immigration-'+code)]));
+    draft.data.immigration={...(draft.data.immigration||{}),status:String(d.get('immigrationStatus')||'Not started'),codes,notes:String(d.get('immigrationNotes')||'')};
+    delete draft.data.immigration.visa; delete draft.data.immigration.oktb;
   }
+  form.querySelectorAll('[data-flight]').forEach(input=>{
+    const i=Number(input.dataset.flight),key=input.dataset.flightField;
+    draft.data.flights[i][key]=['date','departure','arrival'].includes(key)?input.value:input.value.toUpperCase();
+  });
+}
   async function savePerson() {
-    capturePersonForm();
-    const draft=state.personDraft, old=draft.id && state.people.find(p=>p.id===draft.id);
-    try {
-      const data={...draft.data,kind:draft.kind,serviceIds:[...new Set([...(draft.data.serviceIds||[]),service().id])]};
-      if (old) {
-        const patch=Object.fromEntries(Object.entries(data).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(old.data[key])));
-        if (Object.keys(patch).length) {const out=await api('updatePerson',{id:old.id,kind:draft.kind,patch,base:old.data});Object.assign(old,out.record);}
-      } else {
-        const out=await api('createPerson',{jobId:job().id,kind:draft.kind,data}); state.people.push(out.person);
-      }
-      state.personDraft=null;state.error='';render();
-    } catch(e){handleSaveError(e,{kind:'person',id:draft.id});}
-  }
+  capturePersonForm();
+  const draft=state.personDraft, old=draft.id && state.people.find(p=>p.id===draft.id);
+  if (!old) return;
+  const data={...draft.data,kind:draft.kind,serviceIds:[...new Set([...(draft.data.serviceIds||[]),service().id])]};
+  const patch=Object.fromEntries(Object.entries(data).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(old.data[key])));
+  if (!Object.keys(patch).length) {state.personDraft=null;render();return;}
+  const base=Object.fromEntries(Object.keys(patch).map(key=>[key,old.data[key]]));
+  try {
+    const out=await api('updatePerson',{id:old.id,kind:draft.kind,patch,base});
+    Object.assign(old,out.record);state.personDraft=null;state.error='';render();
+  } catch(e){handleSaveError(e,{kind:'person',personKind:draft.kind,id:draft.id,patch,base});}
+}
+  async function saveNewPerson() {
+  const draft=state.personDraft,row=document.querySelector('.hfo-new-person');
+  if (!draft?.newRow || !row || !canEditPeople(draft.kind)) return;
+  const data={...draft.data};
+  row.querySelectorAll('[data-new-person-field]').forEach(input=>{data[input.dataset.newPersonField]=input.value;});
+  if (!data.name?.trim()) {announce('Name is required');return;}
+  try {
+    const out=await api('createPerson',{jobId:job().id,kind:draft.kind,data});
+    state.people.push(out.person);state.personDraft=null;state.peopleLoadedFor=job().id;state.error='';render();
+  } catch(e){announce(e.message);}
+}
+  async function saveInlinePerson(target) {
+  const p=state.people.find(x=>x.id===target.dataset.personId), field=target.dataset.personField;
+  if (!p || !canEditPeople(p.kind)) return;
+  const value=target.value, old=p.data[field]??'';
+  if (value===old) return;
+  const patch={[field]:value},base={[field]:old};
+  try {
+    const out=await api('updatePerson',{id:p.id,kind:p.kind,patch,base});
+    Object.assign(p,out.record);
+    if (state.personDraft?.id===p.id) state.personDraft.data[field]=value;
+    state.sync='Saved '+new Date().toLocaleTimeString();state.error='';if(field==='name'){const button=target.closest('tr')?.querySelector('.hfo-name-link');if(button)button.firstChild.textContent=value+' ';}
+  } catch(e){handleSaveError(e,{kind:'person',personKind:p.kind,id:p.id,field,value,old,patch,base});}
+}
   async function saveTrip() {
     const form=document.getElementById('hfoTripForm'), draft=state.tripDraft, d=new FormData(form), data={};
     for (const name of ['kind','origin','destination','plannedDeparture','plannedArrival','actualDeparture','actualArrival','provider','vehicle','purpose','status','cargo','notes']) data[name]=String(d.get(name)||'');
@@ -514,29 +618,28 @@
   createButton.onclick=async()=>{if(!isOwner())return;state.modal='create';state.error='';render();await loadPortChoices();};
   document.body.addEventListener('click',async event=>{
     if(event.target.closest('[data-calls-toggle]')){state.callsOpen=!state.callsOpen;return;}
-    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-add-stay],[data-edit-stay],[data-remove-stay],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder]');
+    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder]');
     if(!b)return;
-    if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.history=[];state.error='';render();if(!state.public)await loadPortChoices();return;}
+if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
     if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
     if(b.hasAttribute('data-sync-job-folder')){await perform('syncJobFolder',{id:job().id},out=>{Object.assign(job(),out.record);render();});return;}
     if(b.dataset.imoChoice){const grid=b.closest('.hfo-form-grid'),input=grid?.querySelector('[name="imo"]');if(input){input.value=b.dataset.imoChoice;grid.querySelector('[data-imo-feedback]').textContent='IMO selected. Verify with ship documents.';if(input.hasAttribute('data-job-field'))input.dispatchEvent(new Event('change',{bubbles:true}));}return;}
-    if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab='details';state.history=[];state.error='';render();return;}
+if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=service()?.data.type==='Crew Change'?'crew':'details';state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
     if(b.dataset.shift){shift(Number(b.dataset.shift));return;}
     if(b.hasAttribute('data-grants')){state.modal='grants';state.openJobId=null;state.openServiceId=null;render();return;}
-    if(b.hasAttribute('data-close')){state.modal=null;state.openJobId=null;state.openServiceId=null;state.people=[];state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
-    if(b.hasAttribute('data-back-job')){state.openServiceId=null;state.people=[];state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];render();return;}
+    if(b.hasAttribute('data-close')){state.modal=null;state.openJobId=null;state.openServiceId=null;state.people=[];state.peopleLoadedFor=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
+    if(b.hasAttribute('data-back-job')){state.openServiceId=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];render();return;}
     if(b.hasAttribute('data-add-service')){state.modal='addService';render();return;}
     if(b.dataset.removeService){const reason=prompt('Reason for removing this erroneous Service entry:');if(reason)await perform('removeService',{id:b.dataset.removeService,reason},out=>{const x=state.services.find(s=>s.id===out.service.id);Object.assign(x,out.service);render();});return;}
     if(b.dataset.restoreService){const reason=prompt('Reason for restoring this Service:');if(reason)await perform('restoreService',{id:b.dataset.restoreService,reason},out=>{const x=state.services.find(s=>s.id===out.service.id);Object.assign(x,out.service);render();});return;}
-    if(b.hasAttribute('data-add-stay')||b.hasAttribute('data-edit-stay')){const i=b.hasAttribute('data-edit-stay')?Number(b.dataset.editStay):null;const old=i===null?{}:(job().data.terminalStays||[])[i];const terminal=prompt('Terminal name:',old.terminal||'');if(terminal===null)return;const plannedBerth=prompt('Planned berth (YYYY-MM-DDTHH:MM):',old.plannedBerth||'');if(plannedBerth===null)return;const plannedDeparture=prompt('Planned departure (YYYY-MM-DDTHH:MM):',old.plannedDeparture||'');if(plannedDeparture===null)return;await saveStay({...old,terminal,plannedBerth,plannedDeparture,status:old.status||'Planned'},i);return;}
-    if(b.hasAttribute('data-remove-stay')){const i=Number(b.dataset.removeStay);if(confirm('Remove this terminal stay?'))await saveStay(null,i);return;}
-    if(b.dataset.tab){state.tab=b.dataset.tab;state.personDraft=null;state.tripDraft=null;state.history=[];render();if(state.tab==='crew')await loadPeople();if(state.tab==='travel'){await loadPeople();await loadTrips();}return;}
+    if(b.dataset.tab){state.tab=b.dataset.tab;state.personDraft=null;state.tripDraft=null;state.history=[];render();if(['crew','visitors'].includes(state.tab))await loadPeople();if(state.tab==='travel'){await loadPeople();await loadTrips();}return;}
     if(b.hasAttribute('data-add-step')){const text=prompt('Checklist step:');if(text?.trim())await saveChecklist([...(service().data.checklist||[]),{text:text.trim(),done:false}]);return;}
     if(b.hasAttribute('data-remove-step')){const i=Number(b.dataset.removeStep);const next=[...(service().data.checklist||[])];next.splice(i,1);await saveChecklist(next);return;}
-    if(b.dataset.addPerson){state.personDraft={kind:b.dataset.addPerson,data:{category:b.dataset.addPerson==='crew'?'On-signers':'Medical visitors',name:'',flights:[],serviceIds:[service().id]}};render();return;}
-    if(b.dataset.editPerson){const p=state.people.find(x=>x.id===b.dataset.editPerson);state.personDraft={id:p.id,kind:p.kind,data:structuredClone(p.data)};render();return;}
+    if(b.dataset.addPerson){state.personDraft={kind:b.dataset.addPerson,newRow:true,data:{category:b.dataset.personCategory,name:'',flights:[],serviceIds:[service().id]}};render();return;}
+    if(b.dataset.editPerson){const p=state.people.find(x=>x.id===b.dataset.editPerson);state.personDraft=state.personDraft?.id===p.id?null:{id:p.id,kind:p.kind,data:structuredClone(p.data)};render();return;}
     if(b.dataset.removePerson){const p=state.people.find(x=>x.id===b.dataset.removePerson),reason=prompt('Reason for removing this person:');if(reason)await perform('removePerson',{id:p.id,kind:p.kind,reason},()=>{state.people=state.people.filter(x=>x.id!==p.id);render();});return;}
     if(b.hasAttribute('data-close-person')){state.personDraft=null;render();return;}
+    if(b.hasAttribute('data-save-new-person')){await saveNewPerson();return;}
     if(b.hasAttribute('data-add-flight')){capturePersonForm();state.personDraft.data.flights.push({airline:'',number:'',date:'',from:'',to:'',departure:'',arrival:'',booking:''});render();return;}
     if(b.hasAttribute('data-remove-flight')){capturePersonForm();state.personDraft.data.flights.splice(Number(b.dataset.removeFlight),1);render();return;}
     if(b.hasAttribute('data-add-trip')){state.tripDraft={data:{kind:'car',origin:'',destination:'',personIds:[]}};render();return;}
@@ -551,16 +654,18 @@
     const t=event.target;
     if(t.id==='hfoView'){state.view=t.value;render();return;}
     if(t.hasAttribute('data-job-field')){await saveJobField(t);return;}
+    if(t.hasAttribute('data-person-field')){await saveInlinePerson(t);return;}
     if(t.hasAttribute('data-service-field')||t.hasAttribute('data-detail-field')){await saveServiceField(t);return;}
     if(t.hasAttribute('data-service-check')){await saveServiceField(t,true);return;}
     if(t.hasAttribute('data-step')){const next=structuredClone(service().data.checklist||[]),i=Number(t.dataset.step);next[i]={...next[i],done:t.checked,actor:state.login,completedAt:t.checked?new Date().toISOString():null};await saveChecklist(next);}
   });
+  document.body.addEventListener('input',event=>{const t=event.target;if(t.dataset.flightField==='date'){const label=t.parentElement.querySelector('.hfo-ddmmm');if(label)label.textContent=formatDdMmm(t.value);}if(t.hasAttribute('data-flight-field') && !['date','departure','arrival'].includes(t.dataset.flightField)){const pos=t.selectionStart;t.value=t.value.toUpperCase();if(pos!==null)t.setSelectionRange(pos,pos);}});
   document.body.addEventListener('submit',async event=>{
     const form=event.target;
     if(!['hfoCreateJob','hfoAddService','hfoPersonForm','hfoTripForm','hfoGrantForm'].includes(form.id))return;
     event.preventDefault();const d=new FormData(form);
     if(form.id==='hfoCreateJob'){const data=Object.fromEntries(d.entries());await perform('createJob',{data},out=>{state.jobs.unshift(out.job);state.modal=null;state.openJobId=out.job.id;render();});}
-    if(form.id==='hfoAddService'){await perform('addService',{jobId:job().id,data:Object.fromEntries(d.entries())},out=>{state.services.push(out.service);state.modal=null;state.openServiceId=out.service.id;state.tab='details';render();});}
+    if(form.id==='hfoAddService'){await perform('addService',{jobId:job().id,data:Object.fromEntries(d.entries())},out=>{state.services.push(out.service);state.modal=null;state.openServiceId=out.service.id;state.tab=out.service.data.type==='Crew Change'?'crew':'details';render();});}
     if(form.id==='hfoPersonForm')await savePerson();
     if(form.id==='hfoTripForm')await saveTrip();
     if(form.id==='hfoGrantForm'){const data=Object.fromEntries(d.entries());for(const key of ['crewView','crewEdit','visitorView','visitorEdit'])data[key]=d.has(key);await perform('grant',data,()=>renderGrants());}
@@ -568,4 +673,3 @@
   refresh();
   setInterval(refresh,15000);
 })();
-
