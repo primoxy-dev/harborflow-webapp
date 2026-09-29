@@ -16,6 +16,17 @@ const clean = (value, keys) => Object.fromEntries(Object.entries(value || {}).fi
 const error = (message, code = 400, extra = {}) => json({ error: message, ...extra }, code);
 const personScope = kind => kind === 'crew' ? 'crew' : 'visitor';
 const rows = (sql, query, params = []) => sql.query(query, params);
+async function canEditPersonLinks(sql, grant, login, jobId, serviceIds) {
+  const job = await loadJob(sql, jobId);
+  if (!job) return false;
+  if (canEditJob(grant, login, job)) return true;
+  if (!Array.isArray(serviceIds) || !serviceIds.length) return false;
+  for (const id of new Set(serviceIds)) {
+    const service = await loadService(sql, id);
+    if (!service || service.job_id !== jobId || service.removed_at || !canEditService(grant, login, job, service)) return false;
+  }
+  return true;
+}
 async function createJobFolder(data, id) {
   const folder = documentsFolder(data);
   const path = folder + '/General/job.json';
@@ -332,12 +343,13 @@ async function route(request) {
   }
   if (action === 'createPerson' || action === 'updatePerson' || action === 'removePerson') {
     const kind = input.kind;
-    if (!['crew', 'visitor'].includes(kind) || !canPeople(grant, kind, true)) return error('Separate person edit permission required', 403);
+    if (!['crew', 'visitor'].includes(kind) || !isEditor(grant) || !canPeople(grant, kind, true)) return error('Operations Editor and separate person edit permission required', 403);
     if (action === 'createPerson') {
       if (!await loadJob(sql, input.jobId)) return error('Job not found', 404);
       const data = { kind, ...clean(input.data, personFields), kind };
       const invalid = validatePerson(data);
       if (invalid) return error(invalid);
+      if (!await canEditPersonLinks(sql, grant, login, input.jobId, data.serviceIds)) return error('Assigned Job or every linked Service required', 403);
       const id = randomUUID();
       const [person] = await rows(sql, `WITH inserted AS (INSERT INTO operation_people(id,job_id,kind,data,created_by) VALUES($1,$2,$3,$4::jsonb,$5) RETURNING *),
         history AS (INSERT INTO operation_events(scope,record_id,action,actor,after_data) SELECT $3,id::text,'create',$5,data FROM inserted) SELECT * FROM inserted`, [id, input.jobId, kind, JSON.stringify(data), login]);
@@ -345,7 +357,10 @@ async function route(request) {
     }
     const [person] = await rows(sql, 'SELECT * FROM operation_people WHERE id=$1 AND kind=$2', [input.id, kind]);
     if (!person || person.removed_at) return error('Person not found', 404);
-    if (action === 'updatePerson') return patchRow(sql, 'operation_people', person.id, kind, input.base || {}, clean(input.patch, personFields), login, validatePerson);
+    const patch = clean(input.patch, personFields);
+    const linked = 'serviceIds' in patch ? patch.serviceIds : person.data.serviceIds;
+    if (!await canEditPersonLinks(sql, grant, login, person.job_id, linked)) return error('Assigned Job or every linked Service required', 403);
+    if (action === 'updatePerson') return patchRow(sql, 'operation_people', person.id, kind, input.base || {}, patch, login, validatePerson);
     const reason = textField(input.reason, 500);
     if (!reason) return error('Reason required');
     const [removed] = await rows(sql, `WITH changed AS (UPDATE operation_people SET removed_at=now(),version=version+1 WHERE id=$1 AND removed_at IS NULL RETURNING *),
