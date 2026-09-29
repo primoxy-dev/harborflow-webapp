@@ -48,8 +48,6 @@
   const marketing=sidebar.querySelector('[data-view="marketing"]');
   const business=document.createElement('div'); business.className='group'; business.textContent='Business Development';
   const last=sidebar.querySelectorAll('.workspace-group')[1]; last.after(business); business.after(marketing);
-  const brandToggle=document.createElement('button'); brandToggle.type='button'; brandToggle.className='brand-collapse'; brandToggle.textContent='☰'; brandToggle.setAttribute('aria-label','ยุบหรือขยายแถบ HarborFlow');
-  brandToggle.addEventListener('click',()=>document.getElementById('navToggle').click()); sidebar.querySelector('.brand').append(brandToggle);
   document.getElementById('commercial').addEventListener('click',e=>{const b=e.target.closest('[data-doc-type]');if(!b)return;document.querySelectorAll('[data-doc-type]').forEach(x=>x.classList.toggle('active',x===b));document.querySelector('#commercial h2').textContent=b.dataset.docType;});
   let request=0;
   async function loadServices(){
