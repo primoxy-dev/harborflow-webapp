@@ -49,14 +49,38 @@
   const business=document.createElement('div'); business.className='group'; business.textContent='Business Development';
   const last=sidebar.querySelectorAll('.workspace-group')[1]; last.after(business); business.after(marketing);
   document.getElementById('commercial').addEventListener('click',e=>{const b=e.target.closest('[data-doc-type]');if(!b)return;document.querySelectorAll('[data-doc-type]').forEach(x=>x.classList.toggle('active',x===b));document.querySelector('#commercial h2').textContent=b.dataset.docType;});
-  let request=0;
+  let request=0, serviceData=null, sortKey='eta', sortDirection='asc';
+  const allServices=document.getElementById('allservices');
+  allServices.addEventListener('change',event=>{
+    if(event.target.id==='serviceSortKey') sortKey=event.target.value;
+    else if(event.target.id==='serviceSortDirection') sortDirection=event.target.value;
+    else return;
+    if(serviceData) renderServices(serviceData);
+  });
+  function renderServices(data){
+    const jobs=new Map((data.jobs||[]).map(job=>[job.id,job]));
+    const rows=(data.services||[]).map(service=>({service,job:jobs.get(service.job_id)}));
+    const field=row=>sortKey==='vessel'?row.job?.data.vessel:sortKey==='type'?row.service.data.type:sortKey==='status'?row.service.data.status:row.job?.data.eta;
+    rows.sort((a,b)=>{
+      const left=field(a)||'', right=field(b)||'';
+      if(!left && right)return 1;
+      if(left && !right)return -1;
+      const order=String(left).localeCompare(String(right),'en',{numeric:true,sensitivity:'base'});
+      return (sortDirection==='desc'?-order:order)||String(a.job?.data.vessel||'').localeCompare(String(b.job?.data.vessel||''),'en')||a.service.seq-b.service.seq;
+    });
+    const sortBar='<div class="hfs-sortbar"><label for="serviceSortKey">เรียงตาม <select id="serviceSortKey" aria-label="Sort All Services by"><option value="eta">ETA</option><option value="vessel">ชื่อเรือ</option><option value="type">ประเภท Service</option><option value="status">สถานะ</option></select></label><label for="serviceSortDirection">ลำดับ <select id="serviceSortDirection" aria-label="Sort direction"><option value="asc">น้อยไปมาก / A–Z</option><option value="desc">มากไปน้อย / Z–A</option></select></label></div>';
+    allServices.innerHTML='<div class="panel"><h2>All Services · Public summary</h2><p class="small">ข้อมูลบุคคลและรายละเอียดภายในไม่แสดงในหน้านี้</p>'+sortBar+(rows.length?'<div class="table-wrap"><table class="table"><thead><tr><th>Vessel</th><th>ETA</th><th>Service</th><th>Status</th></tr></thead><tbody>'+rows.map(({service,job})=>`<tr><td>${escape(job?.data.vessel)}</td><td>${escape(job?.data.eta||'—')}</td><td>${escape(service.data.type)} #${escape(service.seq)}</td><td>${escape(service.data.status)}</td></tr>`).join('')+'</tbody></table></div>':'<p>ยังไม่มี Service</p>')+'</div>';
+    allServices.querySelector('#serviceSortKey').value=sortKey;
+    allServices.querySelector('#serviceSortDirection').value=sortDirection;
+  }
   async function loadServices(){
     const own=++request, section=document.getElementById('allservices'); section.innerHTML=views.allservices;
     try {
       const response=await fetch('/api/operations?action=publicState',{cache:'no-store'});
       if(!response.ok) throw Error('โหลดข้อมูลไม่ได้ กรุณาลองใหม่');
       const data=await response.json(); if(own!==request)return;
-      section.innerHTML='<div class="panel"><h2>All Services · Public summary</h2><p class="small">ข้อมูลบุคคลและรายละเอียดภายในไม่แสดงในหน้านี้</p>'+(data.services?.length?'<div class="table-wrap"><table class="table"><thead><tr><th>Vessel</th><th>Service</th><th>Status</th></tr></thead><tbody>'+data.services.map(s=>{const job=data.jobs.find(j=>j.id===s.job_id);return `<tr><td>${escape(job?.data.vessel)}</td><td>${escape(s.data.type)} #${escape(s.seq)}</td><td>${escape(s.data.status)}</td></tr>`;}).join('')+'</tbody></table></div>':'<p>ยังไม่มี Service</p>')+'</div>';
+      serviceData=data; renderServices(data);
     } catch(error){if(own===request)section.innerHTML='<div class="panel" role="alert">'+escape(error.message)+'</div>';}
   }
 })();
+
