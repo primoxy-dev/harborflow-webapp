@@ -16,6 +16,7 @@ const clean = (value, keys) => Object.fromEntries(Object.entries(value || {}).fi
 const error = (message, code = 400, extra = {}) => json({ error: message, ...extra }, code);
 const personScope = kind => kind === 'crew' ? 'crew' : 'visitor';
 const rows = (sql, query, params = []) => sql.query(query, params);
+const isEditor = grant => grant?.role === 'owner' || grant?.role === 'editor';
 async function canEditPersonLinks(sql, grant, login, jobId, serviceIds) {
   const job = await loadJob(sql, jobId);
   if (!job) return false;
@@ -118,22 +119,23 @@ function validateTrip(data) {
   if (JSON.stringify(data).length > 6000) return 'Travel record is too large';
   return null;
 }
-async function route(request) {
+export function createOperationsRoute({ database = db, loginFromRequest = sessionLogin, readPermission = permission } = {}) {
+return async function route(request) {
   if (!process.env.DATABASE_URL) return error('Operations database is not configured', 503);
   const url = new URL(request.url);
   if (request.method === 'GET' && url.searchParams.get('action') === 'publicState') {
-    const sql = db();
+    const sql = database();
     const [jobs, services] = await Promise.all([
       rows(sql, 'SELECT id,data FROM operation_jobs ORDER BY updated_at DESC LIMIT 80'),
       rows(sql, 'SELECT id,job_id,seq,data FROM operation_services WHERE removed_at IS NULL ORDER BY job_id,seq')
     ]);
     return json({ jobs: jobs.map(publicJob), services: services.map(publicService), public: true, trial: true });
   }
-  const login = sessionLogin(request);
+  const login = loginFromRequest(request);
   if (!login) return error('Sign in required', 401);
-  const sql = db();
+  const sql = database();
   let grant;
-  try { grant = await permission(login, sql); }
+  try { grant = await readPermission(login, sql); }
   catch { return error('Current authorization could not be verified', 503); }
   if (!grant) return error('Operations permission required', 403);
   if (request.method === 'GET') {
@@ -393,8 +395,8 @@ async function route(request) {
     return removed ? json({ trip: removed }) : error('Trip state changed', 409);
   }
   return error('Unknown action', 404);
+};
 }
 
-export default nodeHandler(route);
-
+export default nodeHandler(createOperationsRoute());
 
