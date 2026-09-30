@@ -1,8 +1,5 @@
-/* Trial document review. Person identifiers never enter this page from the preview API. */
+/* Crew Change document drafts. Private data stays behind current account permissions. */
 (() => {
-  const section = document.getElementById('documents');
-  const nav = document.querySelector('[data-view="documents"]');
-  if (!section || !nav) return;
 
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const dateOnly = value => /^\d{4}-\d{2}-\d{2}/.test(String(value ?? '')) ? String(value).slice(0, 10) : '';
@@ -19,26 +16,77 @@
   };
   const labels = { oktb: 'OKTB', permit: 'Terminal Permit', loi: 'LOI' };
   const row = (label, value) => `<div class="hfd-field"><span>${escape(label)}</span><strong>${escape(value || 'ยังไม่มีข้อมูล')}</strong></div>`;
-  let jobs = [], type = 'oktb', jobId = '', request = 0, signatureUrl = '';
-
-  function clearSignature() {
-    if (signatureUrl) URL.revokeObjectURL(signatureUrl);
-    signatureUrl = '';
-  }
+  const contexts = new Map();
+  let account = null, generation = 0;
+  const keys = { hfdContact: 'contact', hfdPhone: 'phone', hfdSigner: 'signer' };
   async function get(params) {
-    const response = await fetch('/api/documents?' + new URLSearchParams(params), { cache: 'no-store' });
+    const response = await fetch('/api/documents?' + new URLSearchParams(params), { credentials: 'same-origin', cache: 'no-store' });
     const body = await response.json();
     if (!response.ok) { const error = new Error(body.error || 'โหลดข้อมูลไม่ได้'); error.status = response.status; throw error; }
     return body;
   }
-  function base(message = '') {
-    section.innerHTML = `<div class="panel hfd-panel"><div class="hfd-header"><div><h2>Documents &amp; Permits</h2><p class="small">OKTB · Terminal Permit · LOI — ตรวจร่างจากข้อมูล Job, รายชื่อ และ Travel ชุดเดียวกัน</p></div><span class="hfd-badge">Trial · masked</span></div>
-      <p class="hfd-warning">ใช้ข้อมูลสมมติเท่านั้น · ข้อมูลบุคคลและเส้นทางถูกปกปิด · ร่างนี้ยังไม่อนุมัติและห้ามใช้ยื่นต่อหน่วยงาน</p>
-      ${message ? `<div class="hfd-message" role="status">${escape(message)}</div>` : ''}
-      <div class="hfd-controls"><label>Job <select id="hfdJob" aria-label="Select Job">${jobs.length ? jobs.map(job => `<option value="${escape(job.id)}" ${job.id === jobId ? 'selected' : ''}>${escape(job.jobNo || 'Draft')} · ${escape(job.vessel || 'Vessel not set')} · ${escape(job.port || 'Port not set')}</option>`).join('') : '<option value="">ไม่มี Job</option>'}</select></label>
-      <label>ประเภทเอกสาร <select id="hfdType" aria-label="Document type">${Object.entries(labels).map(([key, value]) => `<option value="${key}" ${key === type ? 'selected' : ''}>${value}</option>`).join('')}</select></label>
-      <button class="secondary" type="button" id="hfdPreview" ${jobs.length ? '' : 'disabled'}>ตรวจร่าง</button></div>
-      <div id="hfdResult" aria-live="polite"></div></div>`;
+  function message(host, text, failed = false) {
+    const el = host.querySelector('#hfdSaveStatus');
+    if (el) { el.textContent = text; el.classList.toggle('hfd-save-error', failed); }
+  }
+  function accountState(login) {
+    if (account?.login !== login) account = { login, values: {}, saved: {}, queue: Promise.resolve(), canSave: false, blocked: false, pending: 0, loaded: false };
+    return account;
+  }
+  function remember(host, profile, patch) {
+    Object.assign(profile.values, patch);
+    if (!profile.loaded || !profile.canSave || profile.blocked) return;
+    message(host, 'กำลังบันทึก…');
+    profile.pending++;
+    const gen = generation;
+    profile.queue = profile.queue.then(async () => {
+      if (generation !== gen || account !== profile || profile.blocked) return;
+      const changed = Object.fromEntries(Object.entries(patch).filter(([key, value]) => value !== (profile.saved[key] || '')));
+      if (!Object.keys(changed).length) return;
+      const base = Object.fromEntries(Object.keys(changed).map(key => [key, profile.saved[key] || '']));
+      const response = await fetch('/api/documents', { method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action: 'savePreferences', login: profile.login, patch: changed, base}) });
+      const data = await response.json();
+      if (!response.ok) {
+        profile.blocked = true;
+        if ([401,403].includes(response.status)) { clear(); host.replaceChildren(); }
+        throw Error(data.error || 'บันทึกไม่สำเร็จ');
+      }
+      if (generation === gen && account === profile) Object.assign(profile.saved, data.preferences);
+    }).catch(error => { profile.blocked = true; message(host, error.message + ' · กรุณาเปิดแท็บใหม่ก่อนลองอีกครั้ง', true); }).finally(() => {
+      profile.pending--;
+      if (generation === gen && account === profile && !profile.blocked && profile.pending === 0) message(host, 'บันทึกข้อมูลผู้ติดต่อและลายเซ็นแล้ว · ใช้อัตโนมัติครั้งต่อไป');
+    });
+  }
+  function flightKey(flight) {
+    return JSON.stringify(['airline','number','date','from','to','departure','arrival'].map(key => (flight[key] || '').toUpperCase()));
+  }
+  function groups(people) {
+    const result = new Map();
+    for (const person of people) for (const flight of person.flights || []) {
+      if (!Object.values(flight).some(Boolean)) continue;
+      const key = flightKey(flight);
+      if (!result.has(key)) result.set(key, { flight, ids: [], names: [], bookings: [] });
+      const group = result.get(key);
+      if (!group.ids.includes(person.id)) { group.ids.push(person.id); group.names.push(person.name); }
+      if (flight.booking && !group.bookings.includes(flight.booking)) group.bookings.push(flight.booking);
+    }
+    return [...result.values()];
+  }
+  function personSelection(preview, ctx) {
+    const flightGroups = groups(preview.people);
+    return '<fieldset class="hfd-crew-select"><legend>เลือกลูกเรือสำหรับ OKTB</legend><div class="hfd-selection-actions"><button type="button" class="hfo-btn" data-select-crew="all">เลือกทั้งหมด</button><button type="button" class="hfo-btn" data-select-crew="none">ล้างการเลือก</button></div>' +
+      preview.people.map(person => '<label><input type="checkbox" data-oktb-person="' + escape(person.id) + '" ' + (ctx.selected.has(person.id) ? 'checked' : '') + '><span>' + escape(person.name) + ' · ' + escape(person.category) + '</span></label>').join('') +
+      (preview.people.length ? '' : '<p>ยังไม่มีลูกเรือใน Crew members ของ Service นี้</p>') +
+      (flightGroups.length ? '<div class="hfd-flight-groups"><span>เลือกผู้โดยสารเที่ยวบินเดียวกัน</span>' + flightGroups.map((group, i) => '<button type="button" class="hfo-btn" data-flight-group="' + i + '">' + escape([group.flight.airline, group.flight.number, group.flight.date, group.flight.from + ' → ' + group.flight.to].filter(Boolean).join(' · ')) + ' (' + group.ids.length + ' คน)</button>').join('') + '</div>' : '') +
+      '<p id="hfdSelectionCount">' + ctx.selected.size + ' คนที่เลือก</p></fieldset>';
+  }
+  function personalRows(people) {
+    return people.length ? people.map((person, index) => '<tr><td>' + (index + 1) + '</td><td>' + escape(person.name) + '</td><td>' + escape(person.nationality) + '</td><td>' + escape(person.rank) + '</td><td>' + displayDate(dateOnly(person.dob)) + '</td><td>' + escape(person.seamanBook) + '</td><td>' + escape(person.passport) + '</td><td>' + displayDate(dateOnly(person.passportExpiry)) + '</td></tr>').join('') : '<tr><td colspan="8">กรุณาเลือกลูกเรือเพื่อทำ OKTB</td></tr>';
+  }
+  function flightRows(people) {
+    const flights = groups(people);
+    return flights.length ? '<table aria-label="Flight Details"><thead><tr><th>Airline / Flight</th><th>Date</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>PNR</th></tr></thead><tbody>' +
+      flights.map(({flight, names, bookings}) => '<tr><td>' + escape([flight.airline, flight.number].filter(Boolean).join(' ')) + '</td><td>' + escape(/^\d{4}-/.test(flight.date) ? displayDate(dateOnly(flight.date)) : flight.date) + '</td><td>' + escape(flight.from) + '</td><td>' + escape(flight.to) + '</td><td>' + escape(flight.departure) + '</td><td>' + escape(flight.arrival) + '</td><td>' + escape(bookings.join(' / ')) + '</td></tr><tr class="hfd-flight-passengers"><td colspan="7">' + escape(names.join(', ')) + '</td></tr>').join('') + '</tbody></table>' : '<p>No flights recorded for selected crew</p>';
   }
   function genericPreview(preview) {
     const people = preview.people.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>ลำดับ</th><th>ประเภท</th><th>Passport</th><th>Seaman book</th><th>Flights</th></tr></thead><tbody>${preview.people.map((person, index) => `<tr><td>${index + 1}</td><td>${escape(person.category)}</td><td>${person.hasPassport ? 'มีข้อมูล (ปกปิด)' : 'ยังไม่มี'}</td><td>${person.hasSeamanBook ? 'มีข้อมูล (ปกปิด)' : 'ยังไม่มี'}</td><td>${person.flightCount}</td></tr>`).join('')}</tbody></table></div>` : '<p class="small">ไม่มีรายชื่อสำหรับเอกสารประเภทนี้</p>';
@@ -49,93 +97,157 @@
       <h3>ต้องตรวจสอบก่อนออกเอกสาร</h3><ul>${preview.requirements.map(item => `<li>${escape(item)}</li>`).join('')}</ul>
       <p class="hfd-warning">${escape(preview.notice)}</p><button type="button" class="secondary" disabled>ดาวน์โหลด · รอขั้นอนุมัติจากเจ้าของ</button></div>`;
   }
-  function oktbPreview(preview) {
-    const issueDate = localDate();
-    const arrivalDate = dateOnly(preview.job.eta);
+  function oktbPreview(preview, ctx, profile) {
+    const issueDate = ctx.issueDate || localDate();
+    const arrivalDate = ctx.arrivalDate || dateOnly(preview.job.eta);
+    ctx.issueDate = issueDate; ctx.arrivalDate = arrivalDate;
     const vessel = escape(preview.job.vessel || '[Vessel from Job]');
     const port = escape((preview.job.port || '[Port from Job]').toUpperCase());
-    const peopleRows = preview.people.length ? preview.people.map((person, index) => `<tr><td>${index + 1}</td><td>${escape(person.label)} (${escape(person.category)})</td><td>[masked]</td><td>[masked]</td><td>[masked]</td><td>${person.hasSeamanBook ? '[masked]' : '—'}</td><td>${person.hasPassport ? '[masked]' : '—'}</td><td>[masked]</td></tr>`).join('') : '<tr><td colspan="8">No crew or visitors recorded for this Job</td></tr>';
-    const flights = preview.people.filter(person => person.flightCount > 0);
-    const flightLines = flights.length ? flights.map(person => `<div>${escape(person.label)} · ${person.flightCount} flight(s) · [details masked]</div>`).join('') : '<div>No flights recorded</div>';
-    return `<div class="hfd-oktb-editor" aria-label="OKTB draft details">
-      <label>To · ชื่อสายการบิน<input id="hfdAirline" type="text" autocomplete="off" placeholder="Airline name"></label>
+    const selectedPeople = preview.people.filter(person => ctx.selected.has(person.id));
+    const peopleRows = personalRows(selectedPeople);
+    const flightLines = flightRows(selectedPeople);
+    const saved = profile.values;
+    const disabled = profile.canSave ? '' : 'disabled';
+    return `${personSelection(preview, ctx)}<div class="hfd-oktb-editor" aria-label="OKTB draft details">
+      <label>To · ชื่อสายการบิน<input id="hfdAirline" type="text" autocomplete="off" placeholder="Airline name" value="${escape(ctx.airline || '')}"></label>
       <label>Date · วันที่ออกเอกสาร<input id="hfdIssueDate" type="date" value="${issueDate}"></label>
       <label>วันเรือเข้า · on<input id="hfdArrivalInput" type="date" value="${escape(arrivalDate)}"></label>
-      <label>Contact person<input id="hfdContact" type="text" autocomplete="off" placeholder="Contact name"></label>
-      <label>เบอร์โทร<input id="hfdPhone" type="tel" autocomplete="off" placeholder="Telephone"></label>
-      <label>ชื่อผู้ลงนาม<input id="hfdSigner" type="text" autocomplete="off" placeholder="Authorized signatory"></label>
-      <label>ภาพลายเซ็นสำหรับตรวจร่างเท่านั้น<input id="hfdSignature" type="file" accept="image/png,image/jpeg"></label>
-      <p class="hfd-oktb-editor-note">Vessel และ Port มาจาก Job · Personal Details และ Flight Details มาจาก Crew members and Visitors โดยยังปกปิดข้อมูลอ่อนไหว · ช่องที่แก้ในหน้านี้ยังไม่บันทึกข้ามเครื่อง</p></div>
+      <label>Contact person<input id="hfdContact" type="text" autocomplete="off" placeholder="Contact name" maxlength="200" value="${escape(saved.contact || '')}" ${disabled}></label>
+      <label>เบอร์โทร<input id="hfdPhone" type="tel" autocomplete="off" placeholder="Telephone" maxlength="200" value="${escape(saved.phone || '')}" ${disabled}></label>
+      <label>ชื่อผู้ลงนาม<input id="hfdSigner" type="text" autocomplete="off" placeholder="Authorized signatory" maxlength="200" value="${escape(saved.signer || '')}" ${disabled}></label>
+      <label>ภาพลายเซ็นสำหรับตรวจร่างเท่านั้น<input id="hfdSignature" type="file" accept="image/png,image/jpeg" ${disabled}>${profile.canSave?'<button type="button" class="hfo-btn" data-clear-signature>ลบลายเซ็นที่จำไว้</button>':''}</label>
+      <p class="hfd-oktb-editor-note">Vessel และ Port มาจาก Job · Personal Details และ Flight Details มาจากลูกเรือที่เลือกใน Crew members · ข้อมูลผู้ติดต่อและลายเซ็นจำตามบัญชี</p><p id="hfdSaveStatus" role="status" class="hfd-oktb-editor-note">ใช้ข้อมูลผู้ติดต่อและลายเซ็นที่บันทึกไว้ล่าสุด</p></div>
       <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page" aria-label="OKTB sample letter">
-        <header class="hfd-oktb-letterhead"><span class="hfd-oktb-logo" role="img" aria-label="GAC logo"></span><div><h2>BANGKOK, THAILAND</h2><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p>26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400&nbsp; Fax +66-2-650 7401&nbsp; E-mail shipping.thailand@gac.com</p></div></header>
+        <header class="hfd-oktb-letterhead"><span class="hfd-oktb-logo" role="img" aria-label="GAC logo"></span><div><h2>BANGKOK, THAILAND</h2><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p class="hfd-oktb-address">26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400&nbsp; Fax +66-2-650 7401&nbsp; E-mail shipping.thailand@gac.com</p></div></header>
         <div class="hfd-oktb-field"><span>Date</span><span>:</span><span id="hfdIssuedDate">${displayDate(issueDate)}</span></div>
-        <div class="hfd-oktb-field"><span>To</span><span>:</span><span id="hfdAirlineOut">[airline not set]</span></div>
+        <div class="hfd-oktb-field"><span>To</span><span>:</span><span id="hfdAirlineOut">${escape(ctx.airline || '[airline not set]')}</span></div>
         <div class="hfd-oktb-field"><span>Attn</span><span>:</span><span>All concern</span></div>
         <p class="hfd-oktb-re">Re&nbsp;&nbsp;&nbsp; : &nbsp; "OK TO BOARD MESSAGE/ GUARANTEE LETTER"</p>
         <p>Gulf Agency Company (Thailand) Ltd., as agent for Vessel "${vessel}"<br>The Vessel above will arrive at&nbsp; <b>${port}</b> on&nbsp; <span id="hfdArrivalDate">${displayDate(arrivalDate)}</span></p>
         <p>We would hereby confirm that the under mentioned person is/are scheduled to embark the said vessel on <span id="hfdEmbarkDate">${displayDate(arrivalDate)}</span>, we confirm meeting following personnel arriving Bangkok</p>
-        <h3>Personal Details</h3><table aria-label="Personal Details"><colgroup><col style="width:6%"><col style="width:27%"><col style="width:10%"><col style="width:10%"><col style="width:13%"><col style="width:12%"><col style="width:11%"><col style="width:11%"></colgroup><thead><tr><th>No.</th><th>Name - Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Seaman Book</th><th>Passport</th><th>Expire</th></tr></thead><tbody>${peopleRows}</tbody></table>
-        <div class="hfd-oktb-flights"><b>Flight Details:</b>${flightLines}</div>
-        <p>Please provide with your valuable assistance for departure as per the above flight details<br>and should you require further clarification, please do not hesitate to contact<br><b id="hfdContactOut">[contact not set]</b> on Tel : <span id="hfdPhoneOut">[phone not set]</span></p>
+        <h3>Personal Details</h3><table aria-label="Personal Details"><colgroup><col style="width:6%"><col style="width:27%"><col style="width:10%"><col style="width:10%"><col style="width:13%"><col style="width:12%"><col style="width:11%"><col style="width:11%"></colgroup><thead><tr><th>No.</th><th>Name - Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Seaman Book</th><th>Passport</th><th>Expire</th></tr></thead><tbody id="hfdPersonalRows">${peopleRows}</tbody></table>
+        <div class="hfd-oktb-flights"><b>Flight Details:</b><div id="hfdFlightRows">${flightLines}</div></div>
+        <p>Please provide with your valuable assistance for departure as per the above flight details<br>and should you require further clarification, please do not hesitate to contact<br><b id="hfdContactOut">${escape(saved.contact || '[contact not set]')}</b> on Tel : <span id="hfdPhoneOut">${escape(saved.phone || '[phone not set]')}</span></p>
         <p>Thank you for your kind co-operation.</p><p>Your faithfully</p>
-        <div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" hidden><span id="hfdSignaturePlaceholder">Signature pending owner approval</span></div>
-        <p class="hfd-oktb-signoff"><span id="hfdSignerOut">[signatory not set]</span><br>Gulf Agency Company (Thailand) Ltd.<br>As Agents Only</p>
+        <div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" ${saved.signature?`src="${escape(saved.signature)}"`:'hidden'}><span id="hfdSignaturePlaceholder" ${saved.signature?'hidden':''}>Signature pending owner approval</span></div>
+        <p class="hfd-oktb-signoff"><span id="hfdSignerOut">${escape(saved.signer || '[signatory not set]')}</span><br>Gulf Agency Company (Thailand) Ltd.<br>As Agents Only</p>
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
       </article></div>
-      <p class="hfd-warning">${escape(preview.notice)} ลายเซ็นที่เลือกแสดงเฉพาะในเบราว์เซอร์นี้และไม่ส่งไปเก็บบนเซิร์ฟเวอร์</p>
+      <p class="hfd-warning">${escape(preview.notice)} ข้อมูลผู้ติดต่อและลายเซ็นบันทึกส่วนตัวตามบัญชีผู้ใช้</p>
       <button type="button" class="secondary" disabled>ดาวน์โหลด · รอขั้นอนุมัติจากเจ้าของ</button>`;
   }
-  function show(preview) {
-    clearSignature();
-    document.getElementById('hfdResult').innerHTML = preview.type === 'oktb' ? oktbPreview(preview) : genericPreview(preview);
+  function clear() {
+    generation++;
+    contexts.clear();
+    account = null;
   }
-  async function load() {
-    const current = ++request; clearSignature(); base('กำลังตรวจสิทธิ์และโหลด Job…');
+  function updateSelected(host, preview, ctx) {
+    const selected = preview.people.filter(person => ctx.selected.has(person.id));
+    host.querySelector('#hfdPersonalRows').innerHTML = personalRows(selected);
+    host.querySelector('#hfdFlightRows').innerHTML = flightRows(selected);
+    host.querySelector('#hfdSelectionCount').textContent = selected.length + ' คนที่เลือก';
+    host.querySelectorAll('[data-oktb-person]').forEach(input => { input.checked = ctx.selected.has(input.dataset.oktbPerson); });
+  }
+  function showSignature(host, signature) {
+    const image = host.querySelector('#hfdSignatureOut');
+    const placeholder = host.querySelector('#hfdSignaturePlaceholder');
+    if (!image) return;
+    if (signature) image.src = signature; else image.removeAttribute('src');
+    image.hidden = !signature; placeholder.hidden = Boolean(signature);
+  }
+  async function readSignature(file) {
+    if (!['image/png','image/jpeg'].includes(file.type) || file.size > 2000000) throw Error('ใช้ไฟล์ PNG/JPEG ขนาดไม่เกิน 2 MB');
+    const bitmap = await createImageBitmap(file);
     try {
-      const data = await get({ action: 'jobs' }); if (current !== request) return;
-      jobs = data.jobs || []; if (!jobs.some(job => job.id === jobId)) jobId = jobs[0]?.id || '';
-      base(jobs.length ? 'เลือก Job และประเภทเอกสาร แล้วกดตรวจร่าง' : 'ยังไม่มี Job ในระบบทดลอง');
-    } catch (error) {
-      if (current !== request) return;
-      jobs = []; jobId = ''; base(error.status === 401 ? 'กรุณาลงชื่อเข้าใช้ก่อนดูเอกสาร' : error.status === 403 ? 'ต้องได้รับสิทธิ์ Crew และ Visitor แยกต่างหาก' : error.message);
-      if (error.status === 401) document.getElementById('hfdResult').innerHTML = '<a href="/api/auth?mode=start">ลงชื่อเข้าใช้</a>';
+      if (!bitmap.width || !bitmap.height) throw Error('อ่านภาพลายเซ็นไม่ได้');
+      const scale = Math.min(1, 900 / bitmap.width, 350 / bitmap.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const data = canvas.toDataURL('image/png');
+      if (data.length > 700000) throw Error('ภาพลายเซ็นใหญ่เกินไป กรุณาเลือกภาพที่เล็กลง');
+      return data;
+    } finally { bitmap.close(); }
+  }
+  function bind(host, preview, ctx, profile, options) {
+    host.addEventListener('input', event => {
+      const target = event.target;
+      const fields = { hfdAirline:'hfdAirlineOut', hfdContact:'hfdContactOut', hfdPhone:'hfdPhoneOut', hfdSigner:'hfdSignerOut' };
+      const output = host.querySelector('#' + fields[target.id]);
+      if (output) output.textContent = target.value || '[not set]';
+      if (target.id === 'hfdAirline') ctx.airline = target.value;
+      if (target.id === 'hfdIssueDate') { ctx.issueDate = target.value; host.querySelector('#hfdIssuedDate').textContent = displayDate(target.value); }
+      if (target.id === 'hfdArrivalInput') { ctx.arrivalDate = target.value; for (const id of ['hfdArrivalDate','hfdEmbarkDate']) host.querySelector('#' + id).textContent = displayDate(target.value); }
+    });
+    host.addEventListener('change', async event => {
+      const target = event.target;
+      if (keys[target.id]) remember(host, profile, { [keys[target.id]]:target.value });
+      if (target.dataset.oktbPerson) {
+        if (target.checked) ctx.selected.add(target.dataset.oktbPerson); else ctx.selected.delete(target.dataset.oktbPerson);
+        updateSelected(host, preview, ctx);
+      }
+      if (target.id === 'hfdSignature' && profile.canSave) {
+        const file = target.files?.[0];
+        if (!file) return;
+        const gen = generation;
+        try {
+          const signature = await readSignature(file);
+          if (gen !== generation || !host.isConnected || account !== profile) return;
+          showSignature(host, signature);
+          remember(host, profile, { signature });
+        } catch(error) { message(host, error.message, true); }
+      }
+    });
+    host.addEventListener('click', event => {
+      const target = event.target.closest('button');
+      if (!target) return;
+      if (target.dataset.selectCrew) {
+        ctx.selected = target.dataset.selectCrew === 'all' ? new Set(preview.people.map(person => person.id)) : new Set();
+        updateSelected(host, preview, ctx);
+      }
+      if (target.hasAttribute('data-flight-group')) {
+        const group = groups(preview.people)[Number(target.dataset.flightGroup)];
+        ctx.selected = new Set(group.ids);
+        updateSelected(host, preview, ctx);
+      }
+      if (target.hasAttribute('data-clear-signature') && profile.canSave) { showSignature(host, ''); remember(host, profile, {signature:''}); }
+      if (target.hasAttribute('data-document-retry')) mount(host, options);
+    });
+  }
+  async function mount(host, options) {
+    if (!host) return;
+    const gen = generation;
+    const profile = accountState(options.login);
+    const key = [options.login, options.jobId, options.serviceId, options.type].join(':');
+    if (!contexts.has(key)) contexts.set(key, {});
+    const ctx = contexts.get(key);
+    host.innerHTML = '<p role="status">กำลังโหลด ' + escape(labels[options.type]) + '…</p>';
+    try {
+      // Finish this account's pending saves before reloading its defaults.
+      await profile.queue;
+      const [data, prefs] = await Promise.all([
+        get({action:'preview', jobId:options.jobId, serviceId:options.serviceId, type:options.type}),
+        options.type === 'oktb' ? get({action:'preferences'}) : Promise.resolve(null)
+      ]);
+      if (gen !== generation || !host.isConnected || account !== profile) return;
+      if (data.login !== options.login || (prefs && prefs.login !== options.login)) throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
+      if (prefs) {
+        profile.values = { ...prefs.preferences }; profile.saved = { ...prefs.preferences };
+        profile.canSave = prefs.canSave; profile.loaded = true; profile.blocked = false;
+        const available = new Set(data.preview.people.map(person => person.id));
+        ctx.selected = ctx.selected ? new Set([...ctx.selected].filter(id => available.has(id))) : new Set(data.preview.people.filter(person => person.category === 'On-signers').map(person => person.id));
+      }
+      host.innerHTML = '<div class="hfd-header"><h3>' + escape(labels[options.type]) + '</h3><span class="hfd-badge">Draft</span></div>' +
+        (options.type === 'oktb' ? oktbPreview(data.preview, ctx, profile) : genericPreview(data.preview));
+      bind(host, data.preview, ctx, profile, options);
+    } catch(error) {
+      if (gen !== generation || !host.isConnected) return;
+      if ([401,403].includes(error.status)) { clear(); }
+      host.innerHTML = '<p role="alert">' + escape(error.message) + '</p><button type="button" class="hfo-btn" data-document-retry>ลองใหม่</button>';
+      host.querySelector('[data-document-retry]').addEventListener('click', () => mount(host, options));
     }
   }
-  nav.addEventListener('click', load);
-  section.addEventListener('change', event => {
-    if (event.target.id === 'hfdSignature') {
-      clearSignature();
-      const file = event.target.files?.[0];
-      const image = document.getElementById('hfdSignatureOut');
-      const placeholder = document.getElementById('hfdSignaturePlaceholder');
-      if (!image || !placeholder) return;
-      if (file && ['image/png', 'image/jpeg'].includes(file.type) && file.size <= 2000000) {
-        signatureUrl = URL.createObjectURL(file);
-        image.src = signatureUrl; image.hidden = false; placeholder.hidden = true;
-      } else {
-        image.removeAttribute('src'); image.hidden = true; placeholder.hidden = false;
-        if (file) alert('ใช้ไฟล์ PNG/JPEG ขนาดไม่เกิน 2 MB');
-      }
-      return;
-    }
-    if (event.target.id === 'hfdJob') jobId = event.target.value;
-    else if (event.target.id === 'hfdType') type = event.target.value;
-    else return;
-    request++; clearSignature(); document.getElementById('hfdResult').replaceChildren();
-  });
-  section.addEventListener('input', event => {
-    const fields = { hfdAirline: 'hfdAirlineOut', hfdContact: 'hfdContactOut', hfdPhone: 'hfdPhoneOut', hfdSigner: 'hfdSignerOut' };
-    const output = document.getElementById(fields[event.target.id]);
-    if (output) output.textContent = event.target.value || '[not set]';
-    if (event.target.id === 'hfdIssueDate') document.getElementById('hfdIssuedDate').textContent = displayDate(event.target.value);
-    if (event.target.id === 'hfdArrivalInput') for (const id of ['hfdArrivalDate', 'hfdEmbarkDate']) document.getElementById(id).textContent = displayDate(event.target.value);
-  });
-  section.addEventListener('click', async event => {
-    if (event.target.id !== 'hfdPreview' || !jobId) return;
-    const current = ++request; clearSignature();
-    document.getElementById('hfdResult').innerHTML = '<p role="status">กำลังสร้างร่างสำหรับตรวจ…</p>';
-    try { const data = await get({ action: 'preview', jobId, type }); if (current === request) show(data.preview); }
-    catch (error) { if (current === request) document.getElementById('hfdResult').innerHTML = `<p role="alert">${escape(error.message)}</p>`; }
-  });
+  window.HarborFlowDocuments = { mount, clear };
 })();
 

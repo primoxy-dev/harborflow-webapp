@@ -3,6 +3,13 @@
   const root = document.getElementById('operations');
   const createButton = document.getElementById('createJob');
   if (!root || !createButton) return;
+  const nationalities = document.createElement('datalist');
+  nationalities.id = 'hfoNationalities';
+  const demonyms = 'AFGHAN,ALBANIAN,ALGERIAN,AMERICAN,ANGOLAN,ARGENTINIAN,ARMENIAN,AUSTRALIAN,AUSTRIAN,AZERBAIJANI,BAHRAINI,BANGLADESHI,BELARUSIAN,BELGIAN,BOLIVIAN,BOSNIAN,BRAZILIAN,BRITISH,BULGARIAN,CAMBODIAN,CAMEROONIAN,CANADIAN,CHILEAN,CHINESE,COLOMBIAN,CROATIAN,CUBAN,CYPRIOT,CZECH,DANISH,DUTCH,ECUADORIAN,EGYPTIAN,EMIRATI,ESTONIAN,ETHIOPIAN,FIJIAN,FILIPINO,FINNISH,FRENCH,GEORGIAN,GERMAN,GHANAIAN,GREEK,HUNGARIAN,ICELANDIC,INDIAN,INDONESIAN,IRANIAN,IRAQI,IRISH,ISRAELI,ITALIAN,JAMAICAN,JAPANESE,JORDANIAN,KAZAKH,KENYAN,KOREAN,KUWAITI,LAO,LATVIAN,LEBANESE,LIBERIAN,LITHUANIAN,MALAGASY,MALAYSIAN,MALDIVIAN,MALTESE,MEXICAN,MONGOLIAN,MOROCCAN,MOZAMBICAN,MYANMAR,NEPALESE,NEW ZEALANDER,NIGERIAN,NORWEGIAN,OMANI,PAKISTANI,PANAMANIAN,PERUVIAN,POLISH,PORTUGUESE,QATARI,ROMANIAN,RUSSIAN,SAUDI,SENEGALESE,SERBIAN,SINGAPOREAN,SLOVAK,SLOVENIAN,SOUTH AFRICAN,SPANISH,SRI LANKAN,SUDANESE,SWEDISH,SWISS,SYRIAN,TAIWANESE,TANZANIAN,THAI,TUNISIAN,TURKISH,UGANDAN,UKRAINIAN,URUGUAYAN,UZBEK,VENEZUELAN,VIETNAMESE,YEMENI,ZAMBIAN,ZIMBABWEAN'.split(',');
+  for (const value of [...new Set(demonyms)].sort()) {
+    const choice = document.createElement('option'); choice.value = value; nationalities.appendChild(choice);
+  }
+  document.body.appendChild(nationalities);
   const TYPES = ['Crew Change','Visitor','SIRE Inspector','Surveyor','Provision & Store','Ship Spare & Courier & Offland','Cash to Master','Medical Visit','SSCEC','Fresh Water','Garbage & Sludge','UWI & UWC','Others'];
   const LEGACY_TYPES = ['Port Clearance','Garbage','CTM','Provisions','Launch Boat','Transport','Spare Parts/Customs','Medical','Inspection/Technical Visit','Other'];
   const SERVICE_ICONS = {
@@ -99,7 +106,7 @@
         next = await api('publicState', {}, 'GET');
       }
       const scopeChanged = Boolean(next.public) !== state.public || (next.login||'') !== state.login || JSON.stringify(next.grant||null) !== JSON.stringify(state.grant);
-      if (scopeChanged) { state.people=[]; state.peopleLoadedFor=null; state.trips=[]; state.personDraft=null; }
+      if (scopeChanged) { window.HarborFlowDocuments?.clear(); state.people=[]; state.peopleLoadedFor=null; state.trips=[]; state.personDraft=null; }
       state.public = Boolean(next.public);
       state.login = next.login || ''; state.grant = next.grant || null;
       state.sync = 'Synced ' + new Date().toLocaleTimeString();
@@ -110,7 +117,7 @@
       state.jobs = next.jobs; state.services = next.services;
       if (state.openJobId && !job()) { state.openJobId = null; state.openServiceId = null; state.people = []; state.trips = []; }
       render();
-    } catch (e) { state.grant = null; state.public = false; state.jobs = []; state.services = []; state.people = []; state.trips = []; state.openJobId = null; state.openServiceId = null; state.modal = null; state.sync = ''; state.error = e.message; render(); }
+    } catch (e) { window.HarborFlowDocuments?.clear(); state.grant = null; state.public = false; state.jobs = []; state.services = []; state.people = []; state.trips = []; state.openJobId = null; state.openServiceId = null; state.modal = null; state.sync = ''; state.error = e.message; render(); }
   }
   function metrics() {
     const now = Date.now();
@@ -322,7 +329,7 @@
       ${list.length?list.map((step,i)=>`<div class="hfo-checklist-row"><input type="checkbox" data-step="${i}" ${step.done?'checked':''} ${mayEditService(s)?'':'disabled'}><span style="flex:1">${escape(step.text)}</span><small class="hfo-muted">${step.done?`${escape(step.actor||'')} · ${formatDate(step.completedAt)}`:''}</small>${mayEditService(s)?`<button class="hfo-btn danger" data-remove-step="${i}">×</button>`:''}</div>`).join(''):'<p class="hfo-muted">No checklist steps yet.</p>'}</div>`;
   }
   function crewTableInput(p, field, label, type='text', editable=false) {
-  return `<input data-person-field="${field}" data-person-id="${p.id}" aria-label="${escape(label)} for ${escape(p.data.name||'crew member')}" type="${type}" value="${escape(p.data[field]||'')}" ${editable?'':'disabled'}>`;
+  return `<input data-person-field="${field}" data-person-id="${p.id}" aria-label="${escape(label)} for ${escape(p.data.name||'crew member')}" type="${type}" value="${escape(p.data[field]||'')}" ${field==='nationality'?'list="hfoNationalities" autocomplete="off"':''} ${editable?'':'disabled'}>`;
 }
   function personRow(p, i, kind) {
   const edit=canEditPeople(kind), expanded=state.personDraft?.id===p.id;
@@ -335,7 +342,7 @@
   function newPersonRow(category, kind) {
   const draft=state.personDraft;
   if (!draft?.newRow || draft.data.category!==category) return '';
-  const input=(field,label,type='text')=>`<input data-new-person-field="${field}" aria-label="${label}" type="${type}" placeholder="${label}">`;
+  const input=(field,label,type='text')=>`<input data-new-person-field="${field}" aria-label="${label}" type="${type}" placeholder="${label}" ${field==='nationality'?'list="hfoNationalities" autocomplete="off"':''}>`;
   return `<tr class="hfo-person-row hfo-new-person"><td data-label="No.">New</td>
     <td data-label="Name – Surname">${input('name','Name – Surname')}</td>
     <td data-label="Nationality">${input('nationality','Nationality')}</td>
@@ -477,15 +484,17 @@
   const s=service(), j=job(); if (!s || !j) return;
   const isCrew=s.data.type==='Crew Change';
   const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
-  const tabs=isCrew?['crew','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:['details','travel','checklist','history'];
+  const tabs=isCrew?['crew','oktb','permit','loi','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:['details','travel','checklist','history'];
   if (!tabs.includes(state.tab)) state.tab=tabs[0];
-  const label={details:'Service details',crew:'Crew members',visitors:'Visitors',travel:'Travel',checklist:'Checklist',history:'History'};
+  const label={details:'Service details',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:'Visitors',travel:'Travel',checklist:'Checklist',history:'History'};
+  const documentTab=['oktb','permit','loi'].includes(state.tab);
   overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
     <div class="hfo-toolbar"><div><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Port Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>← Job</button></div>
     ${isCrew?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
     <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${label[t]}</button>`).join('')}</div>
-    ${state.tab==='details'?serviceDetails(s,mayEditService(s)):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
+    ${documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?serviceDetails(s,mayEditService(s)):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
     '#'+s.seq+' · '+s.data.type,j.data.vessel||'Port Call');
+  if (documentTab) window.HarborFlowDocuments?.mount(document.getElementById('hfoDocument'),{jobId:j.id,serviceId:s.id,type:state.tab,login:state.login});
 }
   async function saveServiceField(target, checked=false) {
     const s=service(); if (!s || !mayEditService(s)) return;
