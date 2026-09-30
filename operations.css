@@ -52,6 +52,24 @@
   .hfo-roster-table tr.hfo-person-details-row>td{display:block;padding:0}
   .hfo-roster-table tfoot tr,.hfo-roster-table tfoot td{display:block}
 }
+
+.hfo-immigration-row{display:grid;grid-template-columns:minmax(100px,120px) max-content minmax(105px,130px) minmax(120px,1fr);gap:8px;align-items:end;margin:10px 0 14px}
+.hfo-person-expanded .hfo-immigration-row .hfo-field{margin:0;min-width:0}
+.hfo-immigration-row .hfo-field select,.hfo-immigration-row .hfo-field textarea{height:36px;min-height:36px;padding:7px;box-sizing:border-box;font-size:12px}
+.hfo-immigration-compact{border:0;margin:0;padding:0;min-width:0}
+.hfo-immigration-compact legend{font-size:12px;font-weight:400;color:#475569;padding:0;margin-bottom:5px}
+.hfo-immigration-compact .hfo-immigration-codes{flex-wrap:nowrap;gap:4px;min-height:36px;align-items:center}
+.hfo-immigration-compact .hfo-immigration-codes label{padding:5px 4px;gap:3px;font-size:10px;white-space:nowrap}
+.hfo-immigration-notes textarea{resize:none}
+.hfo-flight-help{margin:5px 0 12px;font-size:11px;color:#64748b}
+.hfo-flight-help small{display:block;font-size:10px;margin-top:3px}
+.hfo-flight-table th small{white-space:nowrap;font-weight:400}
+@media(max-width:760px){
+  .hfo-immigration-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .hfo-immigration-compact{grid-column:1/-1;grid-row:2}
+  .hfo-immigration-compact .hfo-immigration-codes{flex-wrap:wrap}
+  .hfo-immigration-notes{grid-column:1/-1}
+}
 @media(max-width:600px){
   .hfo-service-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .hfo-service-tile{min-height:135px;padding:10px}
