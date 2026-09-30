@@ -64,6 +64,15 @@
 .hfo-flight-help{margin:5px 0 12px;font-size:11px;color:#64748b}
 .hfo-flight-help small{display:block;font-size:10px;margin-top:3px}
 .hfo-flight-table th small{white-space:nowrap;font-weight:400}
+.hfo-flight-table input[data-code-kind]{text-transform:uppercase}
+.hfo-code-field{position:relative}
+.hfo-code-caption{display:block;margin-top:3px;font-size:9px;color:#64748b;max-width:160px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.hfo-code-results{position:relative;z-index:3;max-height:210px;overflow-y:auto;background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-top:3px;box-shadow:0 4px 10px #10233d16}
+.hfo-code-results[hidden]{display:none}
+.hfo-code-results button{display:flex;flex-direction:column;gap:3px;width:100%;border:0;border-bottom:1px solid #edf2f7;background:#fff;padding:7px;text-align:left;color:#172033;font-size:11px}
+.hfo-code-results button span{font-size:10px;overflow-wrap:anywhere}
+.hfo-code-results button[aria-selected="true"],.hfo-code-results button:hover{background:#e7f4f2;color:#0b6f68}
+.hfo-code-empty{padding:8px;font-size:10px;color:#64748b}
 @media(max-width:760px){
   .hfo-immigration-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
   .hfo-immigration-compact{grid-column:1/-1;grid-row:2}
@@ -79,3 +88,4 @@
   .hfo-immigration-codes{gap:4px}
   .hfo-immigration-codes label{font-size:10px}
 }
+
