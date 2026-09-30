@@ -424,27 +424,16 @@
     closeCodeSuggestions(input);
   }
 
-  function normaliseTime24(value) {
-  const raw=String(value||'').trim().toUpperCase();
-  if(!raw)return '';
-  const match=raw.match(/^(\d{1,2}):([0-5]\d)(?::[0-5]\d)?\s*(AM|PM)?$/);
-  const compact=raw.match(/^(\d{2})([0-5]\d)$/);
-  if(!match&&!compact)return null;
-  let hours=Number((match||compact)[1]),minutes=(match||compact)[2];
-  const suffix=match?.[3];
-  if(suffix){if(hours<1||hours>12)return null;hours=hours%12+(suffix==='PM'?12:0);}
-  if(hours>23)return null;
-  return String(hours).padStart(2,'0')+':'+minutes;
-}
   function flightCell(fl,i,key,label,editable) {
-    const isTime=['departure','arrival'].includes(key),kind=key==='airline'?'airlines':['from','to'].includes(key)?'airports':'';
-    const raw=fl[key]||'',value=key==='date'?dateOnly(raw):isTime?(normaliseTime24(raw)??raw):String(raw).toUpperCase();
-    const timeAttrs=isTime?'inputmode="numeric" maxlength="5" placeholder="HH:MM" pattern="(?:(?:[01]?[0-9]|2[0-3]):[0-5][0-9]|(?:[01][0-9]|2[0-3])[0-5][0-9])" title="24-hour time, HH:MM (00:00–23:59)"':'';
+    const kind=key==='airline'?'airlines':['from','to'].includes(key)?'airports':'';
+    const raw=fl[key]||'',formattedDate=key==='date'?formatDdMmm(raw):'';
+    const value=key==='date'&&formattedDate!=='DDMMM'?formattedDate:String(raw).toUpperCase();
+    const placeholder=key==='date'?'DDMMM':['departure','arrival'].includes(key)?'HH:MM':'';
     const id='hfo-code-'+i+'-'+key;
     const lookupAttrs=kind?`data-code-kind="${kind}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}" autocomplete="off" spellcheck="false"`:'';
-    const input=`<input data-flight="${i}" data-flight-field="${key}" aria-label="${label}, flight ${i+1}" type="${key==='date'?'date':'text'}" ${timeAttrs} ${lookupAttrs} value="${escape(value)}" ${editable?'':'disabled'}>`;
+    const input=`<input data-flight="${i}" data-flight-field="${key}" aria-label="${label}, flight ${i+1}" type="text" ${placeholder?`placeholder="${placeholder}"`:''} ${lookupAttrs} value="${escape(value)}" ${editable?'':'disabled'}>`;
     const row=kind?(flightCodes[kind]||[]).find(item=>item[0]===value):null;
-    return `<td data-label="${label}${isTime?' (24h)':''}">${kind?`<div class="hfo-code-field">${input}<div id="${id}" class="hfo-code-results" role="listbox" aria-label="${label} suggestions" hidden></div><small class="hfo-code-caption">${escape(row?codeLabel(row,kind):'')}</small></div>`:input}${key==='date'?`<small class="hfo-ddmmm">${formatDdMmm(raw)}</small>`:''}</td>`;
+    return `<td data-label="${label}">${kind?`<div class="hfo-code-field">${input}<div id="${id}" class="hfo-code-results" role="listbox" aria-label="${label} suggestions" hidden></div><small class="hfo-code-caption">${escape(row?codeLabel(row,kind):'')}</small></div>`:input}</td>`;
   }
   function personForm() {
   const draft=state.personDraft,p=draft.data,edit=canEditPeople(draft.kind),flights=Array.isArray(p.flights)?p.flights:[];
@@ -581,16 +570,10 @@
   }
   form.querySelectorAll('[data-flight]').forEach(input=>{
     const i=Number(input.dataset.flight),key=input.dataset.flightField;
-    draft.data.flights[i][key]=['departure','arrival'].includes(key)?(normaliseTime24(input.value)??input.value):key==='date'?input.value:input.value.toUpperCase();
+    draft.data.flights[i][key]=input.value.toUpperCase();
   });
 }
   async function savePerson() {
-  const form=document.getElementById('hfoPersonForm');
-  for(const input of form.querySelectorAll('[data-flight-field]')){
-    const key=input.dataset.flightField,value=input.value.trim();
-    if(['departure','arrival'].includes(key)){const time=normaliseTime24(value);input.setCustomValidity(time===null?'ใช้เวลา 24 ชั่วโมง HH:MM':'');if(time!==null)input.value=time;}
-  }
-  if(!form.reportValidity())return;
   capturePersonForm();
   const draft=state.personDraft, old=draft.id && state.people.find(p=>p.id===draft.id);
   if (!old) return;
@@ -747,7 +730,6 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
   });
   document.body.addEventListener('change',async event=>{
     const t=event.target;
-    if(['departure','arrival'].includes(t.dataset.flightField)){const value=normaliseTime24(t.value);t.setCustomValidity(value===null?'ใช้เวลา 24 ชั่วโมง HH:MM เช่น 07:30 หรือ 23:45':'');if(value!==null)t.value=value;return;}
     if(t.id==='hfoView'){state.view=t.value;render();return;}
     if(t.hasAttribute('data-job-field')){await saveJobField(t);return;}
     if(t.hasAttribute('data-person-field')){await saveInlinePerson(t);return;}
@@ -759,8 +741,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     const t=event.target;
     if(!t.hasAttribute('data-flight-field'))return;
     t.setCustomValidity('');
-    if(t.dataset.flightField==='date'){const label=t.parentElement.querySelector('.hfo-ddmmm');if(label)label.textContent=formatDdMmm(t.value);}
-    if(!['date','departure','arrival'].includes(t.dataset.flightField)){const pos=t.selectionStart;t.value=t.value.toUpperCase();if(pos!==null)t.setSelectionRange(pos,pos);}
+    const pos=t.selectionStart;t.value=t.value.toUpperCase();if(pos!==null)t.setSelectionRange(pos,pos);
     if(t.dataset.codeKind){updateCodeCaption(t);showCodeSuggestions(t);}
   });
   document.body.addEventListener('focusin',event=>{
