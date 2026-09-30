@@ -37,7 +37,6 @@
 .hfo-flight-table{min-width:870px}
 .hfo-flight-table input[list]{text-transform:uppercase}
 .hfo-flight-table td:nth-child(4){min-width:125px}
-.hfo-ddmmm{display:block;color:#0b6f68;font-size:10px;margin-top:2px;white-space:nowrap}
 .hfo-new-person{background:#f1fbf8}
 .hfo-roster-table tfoot td{padding:9px}
 @media(max-width:1024px){
