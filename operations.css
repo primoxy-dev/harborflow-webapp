@@ -60,9 +60,6 @@
 .hfo-immigration-compact .hfo-immigration-codes{flex-wrap:nowrap;gap:4px;min-height:36px;align-items:center}
 .hfo-immigration-compact .hfo-immigration-codes label{padding:5px 4px;gap:3px;font-size:10px;white-space:nowrap}
 .hfo-immigration-notes textarea{resize:none}
-.hfo-flight-help{margin:5px 0 12px;font-size:11px;color:#64748b}
-.hfo-flight-help small{display:block;font-size:10px;margin-top:3px}
-.hfo-flight-table th small{white-space:nowrap;font-weight:400}
 .hfo-flight-table input[data-code-kind]{text-transform:uppercase}
 .hfo-code-field{position:relative}
 .hfo-code-caption{display:block;margin-top:3px;font-size:9px;color:#64748b;max-width:160px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
