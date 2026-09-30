@@ -362,23 +362,17 @@
         </table></div></details>`}).join('')}</div>`;
 }
 
-  let flightCodes={airlines:[],airports:[]},flightCodesPromise;
-  function codeStatus(message) {
-    document.querySelectorAll('[data-code-source]').forEach(element=>{element.textContent=message;});
-  }
+  let flightCodes={airlines:[],airports:[]},flightCodesPromise,flightCodesFailed=false;
   async function loadFlightCodes() {
     if(!flightCodesPromise)flightCodesPromise=(async()=>{
-      codeStatus('กำลังโหลดข้อมูลแนะนำ…');
       try {
         const response=await fetch('/data/flight-codes.json',{cache:'no-cache'});
         if(!response.ok)throw Error('Code list unavailable');
         const body=await response.json();
         if(!Array.isArray(body.airlines)||!Array.isArray(body.airports))throw Error('Invalid code list');
         flightCodes={airlines:body.airlines,airports:body.airports};
-        const updated=body.generatedAt?new Date(body.generatedAt).toLocaleDateString('en-GB'):'unknown date';
-        codeStatus('OurAirports + OpenFlights · synced '+updated+' · verify before operational use');
       } catch {
-        codeStatus('โหลดข้อมูลแนะนำไม่ได้ · กรอกรหัสเองได้');
+        flightCodesFailed=true;
       }
       return flightCodes;
     })();
@@ -409,7 +403,7 @@
     list.innerHTML=matches.length?matches.map((row,index)=>{
       const label=codeLabel(row,input.dataset.codeKind);
       return `<button type="button" role="option" aria-selected="${index===0}" tabindex="-1" id="${list.id}-${index}" data-flight-code="${escape(row[0])}" data-code-label="${escape(label)}"><b>${escape(row[0])}</b><span>${escape(label)}</span></button>`;
-    }).join(''):`<div class="hfo-code-empty">${rows.length?'ไม่พบรายการ · กรอกรหัสเองได้':'กำลังโหลดข้อมูลแนะนำ…'}</div>`;
+    }).join(''):`<div class="hfo-code-empty">${rows.length?'ไม่พบรายการ · กรอกรหัสเองได้':flightCodesFailed?'โหลดข้อมูลแนะนำไม่ได้ · กรอกรหัสเองได้':'กำลังโหลดข้อมูลแนะนำ…'}</div>`;
     list.hidden=false;
     input.setAttribute('aria-expanded','true');
     if(matches.length)input.setAttribute('aria-activedescendant',list.id+'-0');
@@ -450,8 +444,7 @@
         <label class="hfo-field hfo-immigration-notes"><span>Notes</span><textarea name="immigrationNotes" rows="1" ${dis}>${escape(p.immigration?.notes||'')}</textarea></label>`:''}
     </div>
     <div class="hfo-toolbar"><h4>Flights · ${flights.length}</h4>${edit?'<button type="button" class="hfo-btn" data-add-flight>+ Add flight</button>':''}</div>
-    <p class="hfo-flight-help">พิมพ์ชื่อหรือรหัสเพื่อเลือกรายการแนะนำ · เวลา HH:MM (24 ชั่วโมง)<small data-code-source>OurAirports + OpenFlights · not official IATA data · verify before operational use</small></p>
-    <div class="hfo-table-wrap"><table class="hfo-table hfo-flight-table"><thead><tr><th>#</th><th>Airline</th><th>Flight No.</th><th>Date (DDMMM)</th><th>From</th><th>To</th><th>Departure <small>(24h)</small></th><th>Arrival <small>(24h)</small></th><th>PNR</th><th></th></tr></thead><tbody>
+    <div class="hfo-table-wrap"><table class="hfo-table hfo-flight-table"><thead><tr><th>#</th><th>Airline</th><th>Flight No.</th><th>Date (DDMMM)</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>PNR</th><th></th></tr></thead><tbody>
     ${flights.map((fl,i)=>`<tr><td data-label="#">${i+1}</td>
       ${[['airline','Airline'],['number','Flight No.'],['date','Date (DDMMM)'],['from','From'],['to','To'],['departure','Departure'],['arrival','Arrival'],['booking','PNR']].map(([key,label])=>flightCell(fl,i,key,label,edit)).join('')}
       <td data-label="Remove">${edit?`<button type="button" class="hfo-btn danger" data-remove-flight="${i}" aria-label="Remove flight ${i+1}">×</button>`:''}</td></tr>`).join('')}
