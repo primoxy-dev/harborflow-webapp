@@ -362,6 +362,68 @@
         </table></div></details>`}).join('')}</div>`;
 }
 
+  let flightCodes={airlines:[],airports:[]},flightCodesPromise;
+  function codeStatus(message) {
+    document.querySelectorAll('[data-code-source]').forEach(element=>{element.textContent=message;});
+  }
+  async function loadFlightCodes() {
+    if(!flightCodesPromise)flightCodesPromise=(async()=>{
+      codeStatus('กำลังโหลดข้อมูลแนะนำ…');
+      try {
+        const response=await fetch('/data/flight-codes.json',{cache:'no-cache'});
+        if(!response.ok)throw Error('Code list unavailable');
+        const body=await response.json();
+        if(!Array.isArray(body.airlines)||!Array.isArray(body.airports))throw Error('Invalid code list');
+        flightCodes={airlines:body.airlines,airports:body.airports};
+        const updated=body.generatedAt?new Date(body.generatedAt).toLocaleDateString('en-GB'):'unknown date';
+        codeStatus('OurAirports + OpenFlights · synced '+updated+' · verify before operational use');
+      } catch {
+        codeStatus('โหลดข้อมูลแนะนำไม่ได้ · กรอกรหัสเองได้');
+      }
+      return flightCodes;
+    })();
+    return flightCodesPromise;
+  }
+  function closeCodeSuggestions(input) {
+    input.setAttribute('aria-expanded','false');
+    input.removeAttribute('aria-activedescendant');
+    const list=document.getElementById(input.getAttribute('aria-controls'));
+    if(list)list.hidden=true;
+  }
+  function codeLabel(row,kind) {
+    return kind==='airlines'?[row[1],row[2],row[3]].filter(Boolean).join(' · '):[row[1],row[2],row[3]].filter(Boolean).join(' · ');
+  }
+  function updateCodeCaption(input) {
+    const row=(flightCodes[input.dataset.codeKind]||[]).find(item=>item[0]===input.value.trim().toUpperCase());
+    const caption=input.closest('.hfo-code-field')?.querySelector('.hfo-code-caption');
+    if(caption)caption.textContent=row?codeLabel(row,input.dataset.codeKind):'';
+  }
+  function showCodeSuggestions(input) {
+    const list=document.getElementById(input.getAttribute('aria-controls'));
+    if(!list)return;
+    const query=input.value.trim().toUpperCase();
+    if(!query){closeCodeSuggestions(input);return;}
+    const rows=flightCodes[input.dataset.codeKind]||[];
+    const rank=row=>row[0]===query?0:row[0].startsWith(query)?1:row[1]?.startsWith(query)?2:row[2]?.startsWith(query)?3:4;
+    const matches=rows.filter(row=>row.some(value=>String(value||'').includes(query))).sort((a,b)=>rank(a)-rank(b)||a[1].localeCompare(b[1])).slice(0,8);
+    list.innerHTML=matches.length?matches.map((row,index)=>{
+      const label=codeLabel(row,input.dataset.codeKind);
+      return `<button type="button" role="option" aria-selected="${index===0}" tabindex="-1" id="${list.id}-${index}" data-flight-code="${escape(row[0])}" data-code-label="${escape(label)}"><b>${escape(row[0])}</b><span>${escape(label)}</span></button>`;
+    }).join(''):`<div class="hfo-code-empty">${rows.length?'ไม่พบรายการ · กรอกรหัสเองได้':'กำลังโหลดข้อมูลแนะนำ…'}</div>`;
+    list.hidden=false;
+    input.setAttribute('aria-expanded','true');
+    if(matches.length)input.setAttribute('aria-activedescendant',list.id+'-0');
+    else input.removeAttribute('aria-activedescendant');
+  }
+  function chooseFlightCode(choice) {
+    const wrap=choice.closest('.hfo-code-field'),input=wrap?.querySelector('input');
+    if(!input)return;
+    input.value=choice.dataset.flightCode;
+    input.setCustomValidity('');
+    wrap.querySelector('.hfo-code-caption').textContent=choice.dataset.codeLabel||'';
+    closeCodeSuggestions(input);
+  }
+
   function normaliseTime24(value) {
   const raw=String(value||'').trim().toUpperCase();
   if(!raw)return '';
@@ -375,10 +437,14 @@
   return String(hours).padStart(2,'0')+':'+minutes;
 }
   function flightCell(fl,i,key,label,editable) {
-    const isTime=['departure','arrival'].includes(key),raw=fl[key]||'';
-    const value=key==='date'?dateOnly(raw):isTime?(normaliseTime24(raw)??raw):String(raw).toUpperCase();
+    const isTime=['departure','arrival'].includes(key),kind=key==='airline'?'airlines':['from','to'].includes(key)?'airports':'';
+    const raw=fl[key]||'',value=key==='date'?dateOnly(raw):isTime?(normaliseTime24(raw)??raw):String(raw).toUpperCase();
     const timeAttrs=isTime?'inputmode="numeric" maxlength="5" placeholder="HH:MM" pattern="(?:(?:[01]?[0-9]|2[0-3]):[0-5][0-9]|(?:[01][0-9]|2[0-3])[0-5][0-9])" title="24-hour time, HH:MM (00:00–23:59)"':'';
-    return `<td data-label="${label}${isTime?' (24h)':''}"><input data-flight="${i}" data-flight-field="${key}" aria-label="${label}, flight ${i+1}" type="${key==='date'?'date':'text'}" ${timeAttrs} value="${escape(value)}" ${editable?'':'disabled'}>${key==='date'?`<small class="hfo-ddmmm">${formatDdMmm(raw)}</small>`:''}</td>`;
+    const id='hfo-code-'+i+'-'+key;
+    const lookupAttrs=kind?`data-code-kind="${kind}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}" autocomplete="off" spellcheck="false"`:'';
+    const input=`<input data-flight="${i}" data-flight-field="${key}" aria-label="${label}, flight ${i+1}" type="${key==='date'?'date':'text'}" ${timeAttrs} ${lookupAttrs} value="${escape(value)}" ${editable?'':'disabled'}>`;
+    const row=kind?(flightCodes[kind]||[]).find(item=>item[0]===value):null;
+    return `<td data-label="${label}${isTime?' (24h)':''}">${kind?`<div class="hfo-code-field">${input}<div id="${id}" class="hfo-code-results" role="listbox" aria-label="${label} suggestions" hidden></div><small class="hfo-code-caption">${escape(row?codeLabel(row,kind):'')}</small></div>`:input}${key==='date'?`<small class="hfo-ddmmm">${formatDdMmm(raw)}</small>`:''}</td>`;
   }
   function personForm() {
   const draft=state.personDraft,p=draft.data,edit=canEditPeople(draft.kind),flights=Array.isArray(p.flights)?p.flights:[];
@@ -395,7 +461,7 @@
         <label class="hfo-field hfo-immigration-notes"><span>Notes</span><textarea name="immigrationNotes" rows="1" ${dis}>${escape(p.immigration?.notes||'')}</textarea></label>`:''}
     </div>
     <div class="hfo-toolbar"><h4>Flights · ${flights.length}</h4>${edit?'<button type="button" class="hfo-btn" data-add-flight>+ Add flight</button>':''}</div>
-    <p class="hfo-flight-help">กรอกรหัส Airline / Airport · เวลา HH:MM (24 ชั่วโมง)<small>Autocomplete จาก IATA ยังไม่เชื่อมต่อ · รอช่องทางข้อมูลที่ได้รับอนุญาต</small></p>
+    <p class="hfo-flight-help">พิมพ์ชื่อหรือรหัสเพื่อเลือกรายการแนะนำ · เวลา HH:MM (24 ชั่วโมง)<small data-code-source>OurAirports + OpenFlights · not official IATA data · verify before operational use</small></p>
     <div class="hfo-table-wrap"><table class="hfo-table hfo-flight-table"><thead><tr><th>#</th><th>Airline</th><th>Flight No.</th><th>Date (DDMMM)</th><th>From</th><th>To</th><th>Departure <small>(24h)</small></th><th>Arrival <small>(24h)</small></th><th>PNR</th><th></th></tr></thead><tbody>
     ${flights.map((fl,i)=>`<tr><td data-label="#">${i+1}</td>
       ${[['airline','Airline'],['number','Flight No.'],['date','Date (DDMMM)'],['from','From'],['to','To'],['departure','Departure'],['arrival','Arrival'],['booking','PNR']].map(([key,label])=>flightCell(fl,i,key,label,edit)).join('')}
@@ -644,6 +710,8 @@
   createButton.onclick=async()=>{if(!isOwner())return;state.modal='create';state.error='';render();await loadPortChoices();};
   document.body.addEventListener('click',async event=>{
 
+    const codeChoice=event.target.closest('[data-flight-code]');if(codeChoice){chooseFlightCode(codeChoice);return;}
+    document.querySelectorAll('[data-code-kind]').forEach(input=>{if(!input.closest('.hfo-code-field').contains(event.target))closeCodeSuggestions(input);});
     if(event.target.closest('[data-calls-toggle]')){state.callsOpen=!state.callsOpen;return;}
     const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder]');
     if(!b)return;
@@ -693,6 +761,38 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     t.setCustomValidity('');
     if(t.dataset.flightField==='date'){const label=t.parentElement.querySelector('.hfo-ddmmm');if(label)label.textContent=formatDdMmm(t.value);}
     if(!['date','departure','arrival'].includes(t.dataset.flightField)){const pos=t.selectionStart;t.value=t.value.toUpperCase();if(pos!==null)t.setSelectionRange(pos,pos);}
+    if(t.dataset.codeKind){updateCodeCaption(t);showCodeSuggestions(t);}
+  });
+  document.body.addEventListener('focusin',event=>{
+    const t=event.target;
+    if(t.dataset.codeKind){
+      showCodeSuggestions(t);
+      loadFlightCodes().then(()=>{if(t.isConnected&&document.activeElement===t){updateCodeCaption(t);showCodeSuggestions(t);}});
+    }
+  });
+  document.body.addEventListener('focusout',event=>{
+    const t=event.target;
+    if(t.dataset.codeKind&&!t.closest('.hfo-code-field').contains(event.relatedTarget))closeCodeSuggestions(t);
+  });
+  document.body.addEventListener('pointerdown',event=>{if(event.target.closest('[data-flight-code]'))event.preventDefault();});
+  document.body.addEventListener('keydown',event=>{
+    const t=event.target;
+    if(!t.dataset.codeKind)return;
+    const list=document.getElementById(t.getAttribute('aria-controls'));
+    if(event.key==='Escape'||event.key==='Tab'){closeCodeSuggestions(t);return;}
+    if(!list||list.hidden)return;
+    const choices=[...list.querySelectorAll('[role="option"]')];if(!choices.length)return;
+    let index=choices.findIndex(choice=>choice.getAttribute('aria-selected')==='true');
+    if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+      event.preventDefault();
+      index=(index+(event.key==='ArrowDown'?1:-1)+choices.length)%choices.length;
+      choices.forEach((choice,i)=>choice.setAttribute('aria-selected',String(i===index)));
+      t.setAttribute('aria-activedescendant',choices[index].id);
+      choices[index].scrollIntoView({block:'nearest'});
+    } else if(event.key==='Enter'){
+      event.preventDefault();
+      chooseFlightCode(choices[Math.max(index,0)]);
+    }
   });
   document.body.addEventListener('submit',async event=>{
     const form=event.target;
@@ -707,3 +807,4 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
   refresh();
   setInterval(refresh,15000);
 })();
+
