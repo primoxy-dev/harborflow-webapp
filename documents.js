@@ -227,7 +227,7 @@
       if (target.hasAttribute('data-flight-group')) {
         const group = groups(preview.people)[Number(target.dataset.flightGroup)];
         ctx.selected = new Set(group.ids);
-        updateSelected(host, preview, ctx);
+        updateSelected(host, preview, ctx, airlineNames);
       }
       if (target.hasAttribute('data-clear-signature') && profile.canSave) { showSignature(host, ''); remember(host, profile, {signature:''}); }
       if (target.hasAttribute('data-download-oktb')) {
