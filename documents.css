@@ -39,7 +39,7 @@
 .hfd-oktb-page table{width:100%;table-layout:fixed;border-collapse:collapse;font:12px/1.2 Calibri,Carlito,Arial,sans-serif}
 .hfd-oktb-page th,.hfd-oktb-page td{border:2px solid #111;padding:4px 3px;height:26px;text-align:center;overflow-wrap:anywhere}
 .hfd-oktb-page th{font-weight:700}
-.hfd-oktb-page td:nth-child(2){text-align:left}
+.hfd-oktb-page .hfd-personal-table td:nth-child(2){text-align:left}
 .hfd-oktb-flights{min-height:140px;text-align:center;padding-top:22px}
 .hfd-oktb-flights div{margin-top:7px}
 .hfd-oktb-signature{min-height:85px;margin:34px 0 20px;color:#69788a}
@@ -64,3 +64,10 @@
 .hfd-oktb-flights table{margin-top:12px}
 @media(max-width:600px){#hfoDocument{padding:10px}.hfd-oktb-editor{padding:10px;gap:9px}.hfd-crew-select{padding:9px}.hfd-flight-groups button{max-width:100%;font-size:11px;overflow-wrap:anywhere}}
 
+
+.hfd-oktb-settings{margin:18px 0;border:1px solid var(--line);border-radius:8px;background:var(--page)}
+.hfd-oktb-settings summary{padding:12px 15px;cursor:pointer;font-weight:700;color:var(--ink)}
+.hfd-oktb-settings summary:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+.hfd-oktb-settings .hfd-oktb-editor{margin:0;border:0;border-top:1px solid var(--line);border-radius:0}
+.hfd-oktb-editor input[readonly]{background:#edf3f6;color:#334155}
+.hfd-oktb-page .hfd-oktb-flights td:nth-child(2){text-align:center}
