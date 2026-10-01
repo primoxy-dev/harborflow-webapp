@@ -1,0 +1,176 @@
+/* Browser-only OKTB draft PDF export. Crew data is never sent to another service. */
+(() => {
+  const PAGE_W=595, PAGE_H=842, SCALE=2.1;
+  const dateOnly=value=>/^\d{4}-\d{2}-\d{2}/.test(String(value||''))?String(value).slice(0,10):'';
+  function displayDate(value){
+    const date=dateOnly(value);
+    if(!date)return '[not set]';
+    const [year,month,day]=date.split('-').map(Number);
+    return String(day).padStart(2,'0')+'-'+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month-1]+'-'+String(year).slice(-2);
+  }
+  function fileName(people,vessel){
+    if(!people.length)throw Error('กรุณาเลือกลูกเรือก่อนดาวน์โหลด');
+    const nationalities=[...new Set(people.map(person=>String(person.nationality||'').trim()).filter(Boolean))];
+    const subject=people.length===1?people[0].name:nationalities.join(' & ')||'CREW';
+    const clean=value=>String(value||'').replace(/[\\/:*?"<>|\x00-\x1f]/g,' ').replace(/\s+/g,' ').trim().toUpperCase().slice(0,120);
+    return 'OKTB - '+(clean(subject)||'CREW')+' ('+(clean(vessel)||'VESSEL')+').PDF';
+  }
+  function image(source){
+    return new Promise((resolve,reject)=>{
+      if(!source){resolve(null);return;}
+      const img=new Image();
+      img.onload=()=>resolve(img);
+      img.onerror=()=>reject(Error('อ่านภาพสำหรับ PDF ไม่สำเร็จ'));
+      img.src=source;
+    });
+  }
+  function logoSource(element){
+    if(!element)return '';
+    const background=getComputedStyle(element).backgroundImage;
+    const match=background.match(/url\(["']?(data:[^"')]+)["']?\)/);
+    return match?.[1]||'';
+  }
+  function pdfFromPages(pages){
+    const encoder=new TextEncoder(),parts=[];let length=0;
+    const append=data=>{const bytes=typeof data==='string'?encoder.encode(data):data;parts.push(bytes);length+=bytes.length;};
+    append('%PDF-1.4\n%HarborFlow\n');
+    const offsets=[0],pageIds=pages.map((_,i)=>3+i*3);
+    function object(id,content){
+      offsets[id]=length;append(id+' 0 obj\n');append(content);append('\nendobj\n');
+    }
+    object(1,'<< /Type /Catalog /Pages 2 0 R >>');
+    object(2,'<< /Type /Pages /Kids ['+pageIds.map(id=>id+' 0 R').join(' ')+'] /Count '+pages.length+' >>');
+    pages.forEach((canvas,i)=>{
+      const pageId=pageIds[i],imageId=pageId+1,contentId=pageId+2;
+      object(pageId,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+PAGE_W+' '+PAGE_H+'] /Resources << /XObject << /Im0 '+imageId+' 0 R >> >> /Contents '+contentId+' 0 R >>');
+      const binary=atob(canvas.toDataURL('image/jpeg',0.94).split(',')[1]);
+      const bytes=Uint8Array.from(binary,char=>char.charCodeAt(0));
+      offsets[imageId]=length;append(imageId+' 0 obj\n');
+      append('<< /Type /XObject /Subtype /Image /Width '+canvas.width+' /Height '+canvas.height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+bytes.length+' >>\nstream\n');
+      append(bytes);append('\nendstream\nendobj\n');
+      const stream='q\n'+PAGE_W+' 0 0 '+PAGE_H+' 0 0 cm\n/Im0 Do\nQ\n';
+      object(contentId,'<< /Length '+encoder.encode(stream).length+' >>\nstream\n'+stream+'endstream');
+    });
+    const start=length,count=2+pages.length*3;
+    append('xref\n0 '+(count+1)+'\n0000000000 65535 f \n');
+    for(let id=1;id<=count;id++)append(String(offsets[id]).padStart(10,'0')+' 00000 n \n');
+    append('trailer\n<< /Size '+(count+1)+' /Root 1 0 R >>\nstartxref\n'+start+'\n%%EOF');
+    return new Blob(parts,{type:'application/pdf'});
+  }
+  async function renderPages({preview,people,ctx,profile,logo}){
+    const logoImage=await image(logoSource(logo));
+    const signatureImage=profile.signature?await image(profile.signature):null;
+    const pages=[];let canvas,pen,y;
+    function newPage(continued=false){
+      canvas=document.createElement('canvas');
+      canvas.width=Math.round(PAGE_W*SCALE);canvas.height=Math.round(PAGE_H*SCALE);
+      pen=canvas.getContext('2d');pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);
+      pen.fillStyle='#111';pages.push(canvas);y=36;
+      if(continued){pen.font='bold 12px Arial';pen.fillText('OK TO BOARD MESSAGE / GUARANTEE LETTER (continued)',36,y);y+=26;}
+    }
+    function ensure(height){
+      if(y+height>PAGE_H-50)newPage(true);
+    }
+    function text(value,x,top,size=10,bold=false,align='left'){
+      pen.fillStyle='#111';pen.font=(bold?'bold ':'')+size+'px Arial, sans-serif';
+      pen.textAlign=align;pen.textBaseline='top';pen.fillText(String(value??''),x,top);
+      pen.textAlign='left';
+    }
+    function wrap(value,maxWidth,size=10,bold=false){
+      pen.font=(bold?'bold ':'')+size+'px Arial, sans-serif';
+      const words=String(value??'').split(/\s+/),lines=[];let line='';
+      for(const word of words){
+        const next=line?line+' '+word:word;
+        if(line&&pen.measureText(next).width>maxWidth){lines.push(line);line=word;}else line=next;
+      }
+      if(line)lines.push(line);
+      return lines.length?lines:[''];
+    }
+    function paragraph(value,size=10,lineHeight=15,bold=false){
+      const lines=wrap(value,PAGE_W-72,size,bold);
+      ensure(lines.length*lineHeight+6);
+      for(const line of lines){text(line,36,y,size,bold);y+=lineHeight;}
+      y+=6;
+    }
+    function cell(value,x,top,width,height,align='center'){
+      pen.strokeStyle='#111';pen.lineWidth=.8;pen.strokeRect(x,top,width,height);
+      const size=8.2,lines=wrap(value,width-8,size).slice(0,2);
+      const start=top+(height-lines.length*11)/2;
+      lines.forEach((line,i)=>{pen.fillStyle='#111';pen.font=size+'px Arial, sans-serif';pen.textAlign=align;pen.textBaseline='top';pen.fillText(line,align==='left'?x+4:x+width/2,start+i*11,width-8);pen.textAlign='left';});
+    }
+    function table(title,headers,rows,widths){
+      ensure(65);
+      text(title,36,y,11,true);y+=20;
+      const drawHeader=()=>{
+        let x=36;headers.forEach((head,i)=>{cell(head,x,y,widths[i],28);x+=widths[i];});y+=28;
+      };
+      drawHeader();
+      if(!rows.length){
+        cell('No details recorded',36,y,widths.reduce((a,b)=>a+b,0),28);y+=28;
+      }
+      for(const row of rows){
+        if(y+34>PAGE_H-50){newPage(true);text(title+' (continued)',36,y,11,true);y+=20;drawHeader();}
+        let x=36;row.forEach((value,i)=>{cell(value,x,y,widths[i],34,i===1&&title==='Personal Details'?'left':'center');x+=widths[i];});y+=34;
+      }
+      y+=24;
+    }
+    newPage();
+    if(logoImage)pen.drawImage(logoImage,38,34,86,68);
+    text('BANGKOK, THAILAND',142,36,15,true);
+    text('GULF AGENCY COMPANY (THAILAND) LTD.',142,55,11,true);
+    text('26/30-31 9th Floor, Orakarn Building, Soi Chidlom,',142,74,8.5);
+    text('Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330',142,88,8.5);
+    text('Tel +66-2-650 7400  Fax +66-2-650 7401',142,102,8.5);
+    y=134;
+    for(const [label,value] of [['Date',displayDate(ctx.issueDate)],['To',ctx.airline||'[airline not set]'],['Attn','All concern']]){
+      text(label,36,y,10);text(':',75,y,10);
+      const lines=wrap(value,PAGE_W-123,10);
+      for(const line of lines){text(line,87,y,10);y+=15;}
+      y+=3;
+    }
+    y+=11;paragraph('Re : "OK TO BOARD MESSAGE / GUARANTEE LETTER"',11,17,true);
+    paragraph('Gulf Agency Company (Thailand) Ltd., as agent for Vessel "'+(preview.job.vessel||'[Vessel from Job]')+'"',10,15);
+    paragraph('The Vessel above will arrive at '+(preview.job.port||'[Port from Job]').toUpperCase()+' on '+displayDate(ctx.arrivalDate)+'.',10,15);
+    paragraph('We confirm that the under mentioned personnel are scheduled to embark the said vessel on '+displayDate(ctx.arrivalDate)+' and are arriving Bangkok on the flights below.',10,15);
+    const personal=people.map((person,i)=>[i+1,person.name,person.nationality,person.rank,displayDate(person.dob),person.seamanBook,person.passport,displayDate(person.passportExpiry)]);
+    table('Personal Details',['No.','Name - Surname','Nationality','Rank','Date of Birth','Seaman Book','Passport','Expire'],personal,[25,118,67,57,66,65,65,60]);
+    const flightMap=new Map();
+    for(const person of people)for(const flight of person.flights||[]){
+      if(!Object.values(flight).some(Boolean))continue;
+      const key=JSON.stringify(['airline','number','date','from','to','departure','arrival'].map(field=>String(flight[field]||'').toUpperCase()));
+      if(!flightMap.has(key))flightMap.set(key,{flight,bookings:[]});
+      const group=flightMap.get(key);
+      if(flight.booking&&!group.bookings.includes(flight.booking))group.bookings.push(flight.booking);
+    }
+    const flights=[...flightMap.values()].map(({flight,bookings})=>[[flight.airline,flight.number].filter(Boolean).join(' '),/^\d{4}-/.test(flight.date)?displayDate(flight.date):flight.date,flight.from,flight.to,flight.departure,flight.arrival,bookings.join(' / ')]);
+    table('Flight Details',['Airline / Flight','Date','From','To','Departure','Arrival','PNR'],flights,[108,64,55,55,72,72,97]);
+    ensure(260);
+    paragraph('Please provide your valuable assistance for departure as per the above flight details. Should you require clarification, please contact '+(profile.contact||'[contact not set]')+' on Tel: '+(profile.phone||'[phone not set]')+'.',10,15);
+    paragraph('Thank you for your kind co-operation.',10,15);
+    paragraph('Yours faithfully,',10,15);
+    if(signatureImage){pen.drawImage(signatureImage,36,y,110,49);y+=55;}
+    else{y+=24;text('Signature pending owner approval',36,y,9);y+=18;}
+    text(profile.signer||'[signatory not set]',36,y,10,true);y+=15;
+    text('Gulf Agency Company (Thailand) Ltd.',36,y,9);y+=13;
+    text('As Agents Only',36,y,9);
+    for(const [index,page] of pages.entries()){
+      const ctx=page.getContext('2d');ctx.save();ctx.setTransform(SCALE,0,0,SCALE,0,0);
+      ctx.fillStyle='rgba(160,0,0,.12)';ctx.font='bold 39px Arial';ctx.textAlign='center';
+      ctx.translate(PAGE_W/2,PAGE_H/2);ctx.rotate(-.32);ctx.fillText('SAMPLE · NOT APPROVED',0,0);ctx.restore();
+      ctx.fillStyle='#555';ctx.font='8px Arial';ctx.textAlign='right';
+      ctx.fillText('DRAFT · '+(index+1)+' / '+pages.length,PAGE_W-36,PAGE_H-23);
+    }
+    return pages;
+  }
+  async function download(input){
+    if(!input.people?.length)throw Error('กรุณาเลือกลูกเรือก่อนดาวน์โหลด');
+    const name=fileName(input.people,input.preview.job.vessel);
+    const pages=await renderPages(input);
+    const blob=pdfFromPages(pages),url=URL.createObjectURL(blob);
+    const link=document.createElement('a');link.href=url;link.download=name;
+    document.body.appendChild(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    return name;
+  }
+  window.HarborFlowOktbPdf={download,fileName};
+})();

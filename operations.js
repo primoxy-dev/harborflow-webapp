@@ -60,6 +60,7 @@
   };
   const portSelect = (current, extra) => '<label class="hfo-field"><span>Port / Terminal</span><select name="port" ' + extra + '>' + portOptions(current) + '</select><small class="hfo-muted" data-port-status>' + escape(state.portStatus) + '</small></label>';
   let state = { login: '', grant: null, public: false, jobs: [], services: [], people: [], peopleLoadedFor: null, trips: [], view: 'month', anchor: new Date(), callsOpen: true, openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…' };
+  let personSaveTimer = null, personSaveQueue = Promise.resolve(), personCreateInFlight = false;
   const isOwner = () => state.grant?.role === 'owner';
   const isEditor = () => isOwner() || state.grant?.role === 'editor';
   const job = () => state.jobs.find(x => x.id === state.openJobId);
@@ -342,7 +343,7 @@
   function newPersonRow(category, kind) {
   const draft=state.personDraft;
   if (!draft?.newRow || draft.data.category!==category) return '';
-  const input=(field,label,type='text')=>`<input data-new-person-field="${field}" aria-label="${label}" type="${type}" placeholder="${label}" ${field==='nationality'?'list="hfoNationalities" autocomplete="off"':''}>`;
+  const input=(field,label,type='text')=>`<input data-new-person-field="${field}" aria-label="${label}" type="${type}" placeholder="${label}" value="${escape(draft.data[field]||'')}" ${field==='nationality'?'list="hfoNationalities" autocomplete="off"':''}>`;
   return `<tr class="hfo-person-row hfo-new-person"><td data-label="No.">New</td>
     <td data-label="Name – Surname">${input('name','Name – Surname')}</td>
     <td data-label="Nationality">${input('nationality','Nationality')}</td>
@@ -351,7 +352,7 @@
     <td data-label="Seaman book">${kind==='crew'?input('seamanBook','Seaman book'):'—'}</td>
     <td data-label="Passport">${input('passport','Passport')}</td>
     <td data-label="PP. EXP">${input('passportExpiry','PP. EXP','date')}</td>
-    <td data-label="Actions"><button type="button" class="hfo-btn primary" data-save-new-person>Save</button><button type="button" class="hfo-btn" data-close-person>Cancel</button></td></tr>`;
+    <td data-label="Actions"><small data-person-save-status role="status">Enter a name to save automatically</small></td></tr>`;
 }
   function rosterHtml(s) {
   const crew=s.data.type==='Crew Change';
@@ -423,6 +424,7 @@
     input.setCustomValidity('');
     wrap.querySelector('.hfo-code-caption').textContent=choice.dataset.codeLabel||'';
     closeCodeSuggestions(input);
+    input.dispatchEvent(new Event('change',{bubbles:true}));
   }
 
   function flightCell(fl,i,key,label,editable) {
@@ -437,7 +439,7 @@
     return `<td data-label="${label}">${kind?`<div class="hfo-code-field">${input}<div id="${id}" class="hfo-code-results" role="listbox" aria-label="${label} suggestions" hidden></div><small class="hfo-code-caption">${escape(row?codeLabel(row,kind):'')}</small></div>`:input}</td>`;
   }
   function personForm() {
-  const draft=state.personDraft,p=draft.data,edit=canEditPeople(draft.kind),flights=Array.isArray(p.flights)?p.flights:[];
+  const draft=state.personDraft,p=draft.data,edit=canEditPeople(draft.kind),flights=Array.isArray(p.flights)?p.flights:[],displayFlights=flights.length?flights:edit?[{}]:[];
   const codes=['VISA','VISA-C','VOA','BG','OKTB','EX'];
   const current=p.immigration?.codes||{};
   const checked=code=>Boolean(current[code]||code==='VISA'&&p.immigration?.visa||code==='OKTB'&&p.immigration?.oktb);
@@ -452,10 +454,10 @@
     </div>
     <div class="hfo-toolbar"><h4>Flights · ${flights.length}</h4>${edit?'<button type="button" class="hfo-btn" data-add-flight>+ Add flight</button>':''}</div>
     <div class="hfo-table-wrap"><table class="hfo-table hfo-flight-table"><thead><tr><th>#</th><th>Airline</th><th>Flight No.</th><th>Date (DDMMM)</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>PNR</th><th></th></tr></thead><tbody>
-    ${flights.map((fl,i)=>`<tr><td data-label="#">${i+1}</td>
+    ${displayFlights.map((fl,i)=>`<tr><td data-label="#">${i+1}</td>
       ${[['airline','Airline'],['number','Flight No.'],['date','Date (DDMMM)'],['from','From'],['to','To'],['departure','Departure'],['arrival','Arrival'],['booking','PNR']].map(([key,label])=>flightCell(fl,i,key,label,edit)).join('')}
-      <td data-label="Remove">${edit?`<button type="button" class="hfo-btn danger" data-remove-flight="${i}" aria-label="Remove flight ${i+1}">×</button>`:''}</td></tr>`).join('')}
-    </tbody></table></div>${edit?'<div class="hfo-actions"><button class="hfo-btn primary">Save details</button></div>':''}</form>`;
+      <td data-label="Remove">${edit&&flights.length?`<button type="button" class="hfo-btn danger" data-remove-flight="${i}" aria-label="Remove flight ${i+1}">×</button>`:''}</td></tr>`).join('')}
+    </tbody></table></div>${edit?'<small data-person-save-status role="status" class="hfo-muted">Changes save automatically</small>':''}</form>`;
 }
   function tripsHtml(s) {
     if (!state.grant?.crewView || !state.grant?.visitorView) return '<div class="hfo-section hfo-alert">Travel with linked passengers requires both separate Crew and Visitor view grants.</div>';
@@ -561,44 +563,100 @@
     try {const out=await api('trips',{jobId:job().id},'GET');state.trips=out.trips;state.error='';render();}
     catch(e){state.trips=[];announce(e.message);}
   }
-  function capturePersonForm() {
-  const draft=state.personDraft, form=document.getElementById('hfoPersonForm'); if (!draft || !form) return;
-  const d=new FormData(form);
-  if (d.has('category')) draft.data.category=String(d.get('category')||'');
-  if (draft.kind==='crew') {
-    const codes=Object.fromEntries(['VISA','VISA-C','VOA','BG','OKTB','EX'].map(code=>[code,d.has('immigration-'+code)]));
-    draft.data.immigration={...(draft.data.immigration||{}),status:String(d.get('immigrationStatus')||'Not started'),codes,notes:String(d.get('immigrationNotes')||'')};
-    delete draft.data.immigration.visa; delete draft.data.immigration.oktb;
+  function personSaveStatus(message, failed = false) {
+    const status=document.querySelector('[data-person-save-status]');
+    if (status) {status.textContent=message;status.classList.toggle('hfo-save-error',failed);}
   }
-  form.querySelectorAll('[data-flight]').forEach(input=>{
-    const i=Number(input.dataset.flight),key=input.dataset.flightField;
-    draft.data.flights[i][key]=input.value.toUpperCase();
-  });
-}
+  function capturePersonForm() {
+    const draft=state.personDraft,form=document.getElementById('hfoPersonForm');if(!draft?.id||!form)return;
+    const d=new FormData(form);
+    if(d.has('category'))draft.data.category=String(d.get('category')||'');
+    if(draft.kind==='crew'){
+      const codes=Object.fromEntries(['VISA','VISA-C','VOA','BG','OKTB','EX'].map(code=>[code,d.has('immigration-'+code)]));
+      draft.data.immigration={...(draft.data.immigration||{}),status:String(d.get('immigrationStatus')||'Not started'),codes,notes:String(d.get('immigrationNotes')||'')};
+      delete draft.data.immigration.visa;delete draft.data.immigration.oktb;
+    }
+    if(!Array.isArray(draft.data.flights))draft.data.flights=[];
+    form.querySelectorAll('[data-flight]').forEach(input=>{
+      const i=Number(input.dataset.flight),key=input.dataset.flightField;
+      if(!draft.data.flights[i])draft.data.flights[i]={airline:'',number:'',date:'',from:'',to:'',departure:'',arrival:'',booking:''};
+      draft.data.flights[i][key]=input.value.toUpperCase();
+    });
+  }
+  function captureNewPersonRow() {
+    const draft=state.personDraft,row=document.querySelector('.hfo-new-person');
+    if(!draft?.newRow||!row)return;
+    row.querySelectorAll('[data-new-person-field]').forEach(input=>{draft.data[input.dataset.newPersonField]=input.value;});
+  }
+  function schedulePersonSave(delay=650) {
+    if(!state.personDraft?.id||state.conflict)return;
+    clearTimeout(personSaveTimer);personSaveStatus('Saving automatically…');
+    personSaveTimer=setTimeout(()=>{void savePerson();},delay);
+  }
+  function scheduleNewPersonSave(delay=850) {
+    if(!state.personDraft?.newRow)return;
+    captureNewPersonRow();clearTimeout(personSaveTimer);
+    personSaveStatus(state.personDraft.data.name?.trim()?'Saving automatically…':'Enter a name to save automatically');
+    if(state.personDraft.data.name?.trim())personSaveTimer=setTimeout(()=>{void saveNewPerson();},delay);
+  }
   async function savePerson() {
-  capturePersonForm();
-  const draft=state.personDraft, old=draft.id && state.people.find(p=>p.id===draft.id);
-  if (!old) return;
-  const data={...draft.data,kind:draft.kind,serviceIds:[...new Set([...(draft.data.serviceIds||[]),service().id])]};
-  const patch=Object.fromEntries(Object.entries(data).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(old.data[key])));
-  if (!Object.keys(patch).length) {state.personDraft=null;render();return;}
-  const base=Object.fromEntries(Object.keys(patch).map(key=>[key,old.data[key]]));
-  try {
-    const out=await api('updatePerson',{id:old.id,kind:draft.kind,patch,base});
-    Object.assign(old,out.record);state.personDraft=null;state.error='';render();
-  } catch(e){handleSaveError(e,{kind:'person',personKind:draft.kind,id:draft.id,patch,base});}
-}
+    clearTimeout(personSaveTimer);personSaveTimer=null;
+    capturePersonForm();
+    const draft=state.personDraft;
+    if(state.conflict)return false;
+    if(!draft?.id)return personSaveQueue.then(()=>true);
+    personSaveQueue=personSaveQueue.catch(()=>{}).then(async()=>{
+      if(state.conflict)return false;
+      const old=state.people.find(p=>p.id===draft.id);
+      if(!old)return false;
+      const data={...structuredClone(draft.data),kind:draft.kind,serviceIds:[...new Set([...(draft.data.serviceIds||[]),service().id])]};
+      data.flights=(data.flights||[]).filter(flight=>Object.values(flight).some(value=>String(value||'').trim()));
+      const patch=Object.fromEntries(Object.entries(data).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(old.data[key])));
+      if(!Object.keys(patch).length){if(state.personDraft===draft)personSaveStatus('Saved automatically');return true;}
+      const base=Object.fromEntries(Object.keys(patch).map(key=>[key,old.data[key]]));
+      try{
+        const out=await api('updatePerson',{id:old.id,kind:draft.kind,patch,base});
+        Object.assign(old,out.record);state.sync='Saved '+new Date().toLocaleTimeString();state.error='';
+        if(state.personDraft===draft)personSaveStatus('Saved automatically');
+        return true;
+      }catch(e){
+        if(state.personDraft===draft)personSaveStatus(e.message,true);
+        handleSaveError(e,{kind:'person',personKind:draft.kind,id:draft.id,patch,base});
+        return false;
+      }
+    });
+    return personSaveQueue;
+  }
   async function saveNewPerson() {
-  const draft=state.personDraft,row=document.querySelector('.hfo-new-person');
-  if (!draft?.newRow || !row || !canEditPeople(draft.kind)) return;
-  const data={...draft.data};
-  row.querySelectorAll('[data-new-person-field]').forEach(input=>{data[input.dataset.newPersonField]=input.value;});
-  if (!data.name?.trim()) {announce('Name is required');return;}
-  try {
-    const out=await api('createPerson',{jobId:job().id,kind:draft.kind,data});
-    state.people.push(out.person);state.personDraft=null;state.peopleLoadedFor=job().id;state.error='';render();
-  } catch(e){announce(e.message);}
-}
+    clearTimeout(personSaveTimer);personSaveTimer=null;
+    const draft=state.personDraft;
+    if(!draft?.newRow||!canEditPeople(draft.kind))return true;
+    captureNewPersonRow();
+    if(!draft.data.name?.trim()){
+      const hasInput=['nationality','rank','dob','seamanBook','passport','passportExpiry'].some(key=>String(draft.data[key]||'').trim());
+      if(hasInput)personSaveStatus('Enter a name before leaving to save this row',true);
+      return !hasInput;
+    }
+    if(personCreateInFlight)return false;
+    personCreateInFlight=true;
+    const data=structuredClone(draft.data);
+    try{
+      const out=await api('createPerson',{jobId:job().id,kind:draft.kind,data});
+      state.people.push(out.person);state.peopleLoadedFor=job().id;state.error='';
+      if(state.personDraft===draft){
+        const focusField=document.activeElement?.dataset.newPersonField;
+        const scrollTop=document.querySelector('.hfo-overlay')?.scrollTop||0;
+        state.personDraft={id:out.person.id,kind:draft.kind,data:draft.data};
+        render();
+        const currentOverlay=document.querySelector('.hfo-overlay');if(currentOverlay)currentOverlay.scrollTop=scrollTop;
+        if(focusField)document.querySelector(`[data-person-id="${out.person.id}"][data-person-field="${focusField}"]`)?.focus();
+        schedulePersonSave(0);
+        return await savePerson();
+      }
+      return true;
+    }catch(e){if(state.personDraft===draft)personSaveStatus(e.message,true);return false;}
+    finally{personCreateInFlight=false;}
+  }
   async function saveInlinePerson(target) {
   const p=state.people.find(x=>x.id===target.dataset.personId), field=target.dataset.personField;
   if (!p || !canEditPeople(p.kind)) return;
@@ -707,21 +765,21 @@ if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null
 if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=service()?.data.type==='Crew Change'?'crew':'details';state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
     if(b.dataset.shift){shift(Number(b.dataset.shift));return;}
     if(b.hasAttribute('data-grants')){state.modal='grants';state.openJobId=null;state.openServiceId=null;render();return;}
-    if(b.hasAttribute('data-close')){state.modal=null;state.openJobId=null;state.openServiceId=null;state.people=[];state.peopleLoadedFor=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
-    if(b.hasAttribute('data-back-job')){state.openServiceId=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];render();return;}
+    if(b.hasAttribute('data-close')){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.modal=null;state.openJobId=null;state.openServiceId=null;state.people=[];state.peopleLoadedFor=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
+    if(b.hasAttribute('data-back-job')){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.openServiceId=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];render();return;}
     if(b.hasAttribute('data-add-service')){state.modal='addService';render();return;}
     if(b.dataset.removeService){const reason=prompt('Reason for removing this erroneous Service entry:');if(reason)await perform('removeService',{id:b.dataset.removeService,reason},out=>{const x=state.services.find(s=>s.id===out.service.id);Object.assign(x,out.service);render();});return;}
     if(b.dataset.restoreService){const reason=prompt('Reason for restoring this Service:');if(reason)await perform('restoreService',{id:b.dataset.restoreService,reason},out=>{const x=state.services.find(s=>s.id===out.service.id);Object.assign(x,out.service);render();});return;}
-    if(b.dataset.tab){state.tab=b.dataset.tab;state.personDraft=null;state.tripDraft=null;state.history=[];render();if(['crew','visitors'].includes(state.tab))await loadPeople();if(state.tab==='travel'){await loadPeople();await loadTrips();}return;}
+    if(b.dataset.tab){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.tab=b.dataset.tab;state.personDraft=null;state.tripDraft=null;state.history=[];render();if(['crew','visitors'].includes(state.tab))await loadPeople();if(state.tab==='travel'){await loadPeople();await loadTrips();}return;}
     if(b.hasAttribute('data-add-step')){const text=prompt('Checklist step:');if(text?.trim())await saveChecklist([...(service().data.checklist||[]),{text:text.trim(),done:false}]);return;}
     if(b.hasAttribute('data-remove-step')){const i=Number(b.dataset.removeStep);const next=[...(service().data.checklist||[])];next.splice(i,1);await saveChecklist(next);return;}
-    if(b.dataset.addPerson){state.personDraft={kind:b.dataset.addPerson,newRow:true,data:{category:b.dataset.personCategory,name:'',flights:[],serviceIds:[service().id]}};render();return;}
-    if(b.dataset.editPerson){const p=state.people.find(x=>x.id===b.dataset.editPerson);state.personDraft=state.personDraft?.id===p.id?null:{id:p.id,kind:p.kind,data:structuredClone(p.data)};render();return;}
+    if(b.dataset.addPerson){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.personDraft={kind:b.dataset.addPerson,newRow:true,data:{category:b.dataset.personCategory,name:'',flights:[],serviceIds:[service().id]}};render();return;}
+    if(b.dataset.editPerson){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;const p=state.people.find(x=>x.id===b.dataset.editPerson);state.personDraft=state.personDraft?.id===p.id?null:{id:p.id,kind:p.kind,data:structuredClone(p.data)};render();return;}
     if(b.dataset.removePerson){const p=state.people.find(x=>x.id===b.dataset.removePerson),reason=prompt('Reason for removing this person:');if(reason)await perform('removePerson',{id:p.id,kind:p.kind,reason},()=>{state.people=state.people.filter(x=>x.id!==p.id);render();});return;}
-    if(b.hasAttribute('data-close-person')){state.personDraft=null;render();return;}
+    if(b.hasAttribute('data-close-person')){if(await savePerson()===false)return;state.personDraft=null;render();return;}
     if(b.hasAttribute('data-save-new-person')){await saveNewPerson();return;}
-    if(b.hasAttribute('data-add-flight')){capturePersonForm();state.personDraft.data.flights.push({airline:'',number:'',date:'',from:'',to:'',departure:'',arrival:'',booking:''});render();return;}
-    if(b.hasAttribute('data-remove-flight')){capturePersonForm();state.personDraft.data.flights.splice(Number(b.dataset.removeFlight),1);render();return;}
+    if(b.hasAttribute('data-add-flight')){capturePersonForm();state.personDraft.data.flights.push({airline:'',number:'',date:'',from:'',to:'',departure:'',arrival:'',booking:''});render();schedulePersonSave(0);return;}
+    if(b.hasAttribute('data-remove-flight')){capturePersonForm();state.personDraft.data.flights.splice(Number(b.dataset.removeFlight),1);render();schedulePersonSave(0);return;}
     if(b.hasAttribute('data-add-trip')){state.tripDraft={data:{kind:'car',origin:'',destination:'',personIds:[]}};render();return;}
     if(b.dataset.editTrip){const t=state.trips.find(x=>x.id===b.dataset.editTrip);state.tripDraft={id:t.id,data:structuredClone(t.data)};render();return;}
     if(b.dataset.removeTrip){const reason=prompt('Reason for removing this trip:');if(reason)await perform('removeTrip',{id:b.dataset.removeTrip,reason},()=>{state.trips=state.trips.filter(x=>x.id!==b.dataset.removeTrip);render();});return;}
@@ -735,16 +793,21 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     if(t.id==='hfoView'){state.view=t.value;render();return;}
     if(t.hasAttribute('data-job-field')){await saveJobField(t);return;}
     if(t.hasAttribute('data-person-field')){await saveInlinePerson(t);return;}
+    if(t.hasAttribute('data-new-person-field')){scheduleNewPersonSave(0);return;}
+    if(t.closest('#hfoPersonForm')){schedulePersonSave(0);return;}
     if(t.hasAttribute('data-service-field')||t.hasAttribute('data-detail-field')){await saveServiceField(t);return;}
     if(t.hasAttribute('data-service-check')){await saveServiceField(t,true);return;}
     if(t.hasAttribute('data-step')){const next=structuredClone(service().data.checklist||[]),i=Number(t.dataset.step);next[i]={...next[i],done:t.checked,actor:state.login,completedAt:t.checked?new Date().toISOString():null};await saveChecklist(next);}
   });
   document.body.addEventListener('input',event=>{
     const t=event.target;
-    if(!t.hasAttribute('data-flight-field'))return;
-    t.setCustomValidity('');
-    const pos=t.selectionStart;t.value=t.value.toUpperCase();if(pos!==null)t.setSelectionRange(pos,pos);
-    if(t.dataset.codeKind){updateCodeCaption(t);showCodeSuggestions(t);}
+    if(t.hasAttribute('data-new-person-field')){scheduleNewPersonSave();return;}
+    if(t.hasAttribute('data-flight-field')){
+      t.setCustomValidity('');
+      const pos=t.selectionStart;t.value=t.value.toUpperCase();if(pos!==null)t.setSelectionRange(pos,pos);
+      if(t.dataset.codeKind){updateCodeCaption(t);showCodeSuggestions(t);}
+    }
+    if(t.closest('#hfoPersonForm'))schedulePersonSave();
   });
   document.body.addEventListener('focusin',event=>{
     const t=event.target;
