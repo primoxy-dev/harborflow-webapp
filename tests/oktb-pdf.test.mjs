@@ -49,3 +49,14 @@ test('download produces a PDF file for selected crew', async () => {
   assert.match(bytes.toString('latin1'), /\/Type \/Page /);
   assert.ok(bytes.length > 1000);
 });
+
+
+test('five crew and two flights fit on one PDF page', async () => {
+  const { api, getDownload } = setup();
+  const people = Array.from({length:5},(_,i)=>({name:'MR. CREW MEMBER '+i,nationality:'INDONESIAN',rank:'MASTER',dob:'1990-10-14',seamanBook:'ABC12345',passport:'DEF12345',passportExpiry:'2030-01-01',flights:i<2?[{airline:'8B',number:'381',date:'26SEP',from:'CGK',to:'BKK',departure:'0820',arrival:'1145',booking:''}]:[]}));
+  people[4].flights=[{airline:'T',number:'',date:'',from:'',to:'',departure:'0900',arrival:'0800+1',booking:''}];
+  await api.download({preview:{job:{vessel:'TASCO TARA',port:'MAP TA PHUT / IRPC'}},people,ctx:{issueDate:'2026-10-02',arrivalDate:'2026-09-25',airline:'BUSINESSAIR / T'},profile:{contact:'[contact not set]',phone:'[phone not set]',signer:'[signatory not set]'},logo:null});
+  const bytes=Buffer.from(await getDownload().pdfBlob.arrayBuffer()).toString('latin1');
+  const pages=(bytes.match(/\/Type \/Page /g)||[]).length;
+  assert.equal(pages,1);
+});

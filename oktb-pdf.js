@@ -99,20 +99,20 @@
       lines.forEach((line,i)=>{pen.fillStyle='#111';pen.font=size+'px Arial, sans-serif';pen.textAlign=align;pen.textBaseline='top';pen.fillText(line,align==='left'?x+4:x+width/2,start+i*11,width-8);pen.textAlign='left';});
     }
     function table(title,headers,rows,widths){
-      ensure(65);
+      ensure(60);
       text(title,36,y,11,true);y+=20;
       const drawHeader=()=>{
-        let x=36;headers.forEach((head,i)=>{cell(head,x,y,widths[i],28);x+=widths[i];});y+=28;
+        let x=36;headers.forEach((head,i)=>{cell(head,x,y,widths[i],24);x+=widths[i];});y+=24;
       };
       drawHeader();
       if(!rows.length){
         cell('No details recorded',36,y,widths.reduce((a,b)=>a+b,0),28);y+=28;
       }
       for(const row of rows){
-        if(y+34>PAGE_H-50){newPage(true);text(title+' (continued)',36,y,11,true);y+=20;drawHeader();}
-        let x=36;row.forEach((value,i)=>{cell(value,x,y,widths[i],34,i===1&&title==='Personal Details'?'left':'center');x+=widths[i];});y+=34;
+        if(y+28>PAGE_H-50){newPage(true);text(title+' (continued)',36,y,11,true);y+=20;drawHeader();}
+        let x=36;row.forEach((value,i)=>{cell(value,x,y,widths[i],28,i===1&&title==='Personal Details'?'left':'center');x+=widths[i];});y+=28;
       }
-      y+=24;
+      y+=16;
     }
     newPage();
     if(logoImage)pen.drawImage(logoImage,38,34,86,68);
@@ -144,8 +144,10 @@
     }
     const flights=[...flightMap.values()].map(({flight,bookings})=>[[flight.airline,flight.number].filter(Boolean).join(' '),/^\d{4}-/.test(flight.date)?displayDate(flight.date):flight.date,flight.from,flight.to,flight.departure,flight.arrival,bookings.join(' / ')]);
     table('Flight Details',['Airline / Flight','Date','From','To','Departure','Arrival','PNR'],flights,[108,64,55,55,72,72,97]);
-    ensure(260);
-    paragraph('Please provide your valuable assistance for departure as per the above flight details. Should you require clarification, please contact '+(profile.contact||'[contact not set]')+' on Tel: '+(profile.phone||'[phone not set]')+'.',10,15);
+    const closing='Please provide your valuable assistance for departure as per the above flight details. Should you require clarification, please contact '+(profile.contact||'[contact not set]')+' on Tel: '+(profile.phone||'[phone not set]')+'.';
+    const closingHeight=wrap(closing,PAGE_W-72,10).length*15+6+21+21+(signatureImage?55:42)+15+13+12;
+    ensure(closingHeight);
+    paragraph(closing,10,15);
     paragraph('Thank you for your kind co-operation.',10,15);
     paragraph('Yours faithfully,',10,15);
     if(signatureImage){pen.drawImage(signatureImage,36,y,110,49);y+=55;}
