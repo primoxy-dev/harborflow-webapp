@@ -50,6 +50,7 @@
   const toast=document.querySelector('#toast');function notify(msg){toast.textContent=msg;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),2200)}document.querySelector('#entryForm').addEventListener('submit',e=>{e.preventDefault();modal.classList.remove('open');notify(modalTitle.textContent+' saved');});document.querySelector('#generateReport').onclick=()=>notify('Monthly management report generated');
 </script>
 <script src="knowledge.js"></script>
+<script src="hotels.js"></script>
 <script src="operations.js"></script>
 <script src="navigation.js"></script>
 <script src="workspaces.js"></script>
