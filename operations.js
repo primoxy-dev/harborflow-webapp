@@ -487,7 +487,7 @@
   const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
   const tabs=isCrew?['crew','oktb','permit','loi','hotel','travel','checklist','history']:isVisitorService?['visitors','hotel','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:['details','travel','checklist','history'];
   if (!tabs.includes(state.tab)) state.tab=tabs[0];
-  const label={details:'Service details',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'HOTEL',travel:'Travel',checklist:'Checklist',history:'History'};
+  const label={details:'Service details',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'Hotel',travel:'Travel',checklist:'Checklist',history:'History'};
   const documentTab=['oktb','permit','loi'].includes(state.tab);
   overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
     <div class="hfo-toolbar"><div><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Port Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>← Job</button></div>
