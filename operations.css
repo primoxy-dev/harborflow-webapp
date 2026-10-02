@@ -97,3 +97,11 @@
 .hfo-hotel-card h4{margin:0}.hfo-hotel-card p{margin:10px 0}
 .hfo-hotel-form output{display:block;padding:10px;font-weight:700}
 @media(max-width:600px){.hfo-hotel-list{grid-template-columns:1fr}.hfo-hotel-form{padding:12px}.hfo-hotel-guests{flex-direction:column}}
+
+.hfo-hotel-search{position:relative;min-width:0}
+.hfo-hotel-search>small{display:block;margin-top:4px;font-size:11px}
+.hfo-hotel-results{position:absolute;z-index:20;top:58px;left:0;right:0;max-height:220px;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 20px #10233d26}
+.hfo-hotel-results[hidden]{display:none}
+.hfo-hotel-results button{display:flex;flex-direction:column;width:100%;padding:9px 10px;border:0;border-bottom:1px solid var(--line);background:#fff;text-align:left;cursor:pointer}
+.hfo-hotel-results button:hover,.hfo-hotel-results button:focus{background:#e7f4f2}
+.hfo-hotel-results button span{font-size:11px;color:#596b80}
