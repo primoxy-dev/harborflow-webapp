@@ -65,9 +65,9 @@
     }
     function composeEmail(data){
       const to=String(data.email||'').trim();
-      if(to&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(to)){notice('Enter a valid hotel email address before opening Outlook.',true);return;}
+      if(to&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)){notice('Enter a valid hotel email address before opening Outlook.',true);return;}
       const subject='Hotel room reservation enquiry'+(data.hotel?' - '+data.hotel:'');
-      const body=['Dear Reservations Team,','','Please advise availability and a quotation for the following booking:', 'Hotel: '+(data.hotel||'To be confirmed'), 'Check-in: '+(data.checkIn||'To be confirmed'), 'Check-out: '+(data.checkOut||'To be confirmed'), 'Room type: '+(data.roomType||'To be confirmed'), 'Number of rooms: '+(data.rooms||'To be confirmed'), '', 'Please confirm the rate, taxes, cancellation terms, and booking reference.','','Best regards,'].join('\\n');
+      const body=['Dear Reservations Team,','','Please advise availability and a quotation for the following booking:', 'Hotel: '+(data.hotel||'To be confirmed'), 'Check-in: '+(data.checkIn||'To be confirmed'), 'Check-out: '+(data.checkOut||'To be confirmed'), 'Room type: '+(data.roomType||'To be confirmed'), 'Number of rooms: '+(data.rooms||'To be confirmed'), '', 'Please confirm the rate, taxes, cancellation terms, and booking reference.','','Best regards,'].join('\n');
       const url=new URL('https://outlook.office.com/mail/deeplink/compose');
       if(to)url.searchParams.set('to',to);
       url.searchParams.set('subject',subject);url.searchParams.set('body',body);
