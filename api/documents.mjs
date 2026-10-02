@@ -59,7 +59,7 @@ export function createDocumentsRoute(deps = {}) {
       const allowedPeople = people.filter(person => (person.kind === 'crew' ? crew : visitor) &&
         (type !== 'oktb' || person.kind === 'crew') && (!serviceId || person.data.serviceIds?.includes(serviceId)));
       // Travel contains passengers from both categories; require both to include it.
-      const trips = crew && visitor ? await sql.query('SELECT data FROM operation_trips WHERE job_id=$1 AND removed_at IS NULL ORDER BY created_at', [jobId]) : [];
+      const trips = crew && visitor ? await sql.query("SELECT data FROM operation_trips WHERE job_id=$1 AND removed_at IS NULL AND data->>'kind' IN ('car','boat') ORDER BY created_at", [jobId]) : [];
       return json({ login, preview: buildDocumentPreview(type, job, allowedPeople, trips, { crewDetails: crew }) });
     } catch {
       return fail('Document service temporarily unavailable. Please retry.', 503);

@@ -22,6 +22,7 @@
   };
   const JOB_STATUSES = ['Draft','Planned','Confirmed','In Progress','On Hold','Completed','Cancelled'];
   const SERVICE_STATUSES = ['Not Started','In Progress','Waiting','Completed','Cancelled'];
+  const FLAT_VISITORS = {'Visitor':'Visitors','SIRE Inspector':'SIRE Inspector','Surveyor':'Surveyor'};
   const CATEGORIES = ['On-signers','Off-signers','Medical visitors','SIRE Inspectors','Surveyors','Service Engineers','Other'];
   const TYPE_FIELDS = {
     'Crew Change': [['changeType','Change type'],['boardingPoint','Boarding point'],['crewNotes','Crew change notes']],
@@ -334,41 +335,38 @@
 }
   function personRow(p, i, kind) {
   const edit=canEditPeople(kind), expanded=state.personDraft?.id===p.id;
-  const fields=[['nationality','Nationality'],['rank','Rank'],['dob','Date of Birth','date'],['seamanBook','Seaman book'],['passport','Passport'],['passportExpiry','PP. EXP','date']];
+  const fields=[['nationality','Nationality'],['rank','Rank'],['dob','Date of Birth','date'],['seamanBook','Seaman book'],['passport','Passport'],['passportExpiry','PP. EXP','date']].filter(([key])=>kind==='crew'||key!=='seamanBook');
   const nameCell=`<input data-person-field="name" data-person-id="${p.id}" aria-label="Name – Surname" value="${escape(p.data.name||'')}" ${edit?'':'disabled'}><button type="button" class="hfo-name-link" data-edit-person="${p.id}" aria-expanded="${expanded}">Immigration & flight details <span aria-hidden="true">${expanded?'▴':'▾'}</span></button>`;
   return `<tr class="hfo-person-row"><td data-label="No.">${i+1}</td><td data-label="Name – Surname">${nameCell}</td>${fields.map(([key,label,type])=>`<td data-label="${label}">${crewTableInput(p,key,label,type||'text',edit)}</td>`).join('')}
     <td data-label="Actions">${edit?`<button type="button" class="hfo-btn danger" data-remove-person="${p.id}" aria-label="Remove ${escape(p.data.name)}">×</button>`:''}</td></tr>
-    ${expanded?`<tr class="hfo-person-details-row"><td colspan="9">${personForm()}</td></tr>`:''}`;
+    ${expanded?`<tr class="hfo-person-details-row"><td colspan="${kind==='crew'?9:8}">${personForm()}</td></tr>`:''}`;
 }
   function newPersonRow(category, kind) {
   const draft=state.personDraft;
-  if (!draft?.newRow || draft.data.category!==category) return '';
+  if (!draft?.newRow || (!FLAT_VISITORS[service()?.data.type] && draft.data.category!==category)) return '';
   const input=(field,label,type='text')=>`<input data-new-person-field="${field}" aria-label="${label}" type="${type}" placeholder="${label}" value="${escape(draft.data[field]||'')}" ${field==='nationality'?'list="hfoNationalities" autocomplete="off"':''}>`;
   return `<tr class="hfo-person-row hfo-new-person"><td data-label="No.">New</td>
     <td data-label="Name – Surname">${input('name','Name – Surname')}</td>
     <td data-label="Nationality">${input('nationality','Nationality')}</td>
     <td data-label="Rank">${input('rank','Rank')}</td>
     <td data-label="Date of Birth">${input('dob','Date of Birth','date')}</td>
-    <td data-label="Seaman book">${input('seamanBook','Seaman book')}</td>
+    ${kind==='crew'?`<td data-label="Seaman book">${input('seamanBook','Seaman book')}</td>`:''}
     <td data-label="Passport">${input('passport','Passport')}</td>
     <td data-label="PP. EXP">${input('passportExpiry','PP. EXP','date')}</td>
     <td data-label="Actions"><small data-person-save-status role="status">Enter a name to save automatically</small></td></tr>`;
 }
   function rosterHtml(s) {
-  const crew=s.data.type==='Crew Change';
-  const kind=crew?'crew':'visitor';
-  if (!canPeople(kind)) return `<div class="hfo-section hfo-alert">Separate ${crew?'Crew':'Visitor'} view permission is required. Job/Service PIC alone does not grant it.</div>`;
-  const categories=crew?CATEGORIES.slice(0,2):CATEGORIES.slice(2);
-  const filtered=state.people.filter(p=>p.kind===kind && Array.isArray(p.data.serviceIds) && p.data.serviceIds.includes(s.id));
-  return `<div class="hfo-section"><div class="hfo-banner">ข้อมูลบุคคลสมมติหรือปกปิดตัวตนเท่านั้น · อย่าใส่เลขเอกสารจริงในช่วงทดลอง</div>
-    <div class="hfo-toolbar"><h3>${crew?'Crew members':'Visitors'}</h3><small class="hfo-muted">${filtered.length} people · คลิก Immigration & flight details to expand</small></div>
-    ${categories.map(category=>{const list=filtered.filter(p=>p.data.category===category);
-      return `<details class="hfo-group" ${crew||list.length||state.personDraft?.data.category===category?'open':''}><summary>${escape(category)} (${list.length})</summary>
-        <div class="hfo-table-wrap"><table class="hfo-table hfo-roster-table"><thead><tr><th>No.</th><th>Name – Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th><th>Seaman book</th><th>Passport</th><th>PP. EXP</th><th></th></tr></thead>
-        <tbody>${list.map((p,i)=>personRow(p,i,kind)).join('')}${newPersonRow(category,kind)}</tbody>
-        ${canEditPeople(kind)?`<tfoot><tr><td colspan="9"><button type="button" class="hfo-btn" data-add-person="${kind}" data-person-category="${escape(category)}">+ Add ${escape(category)}</button></td></tr></tfoot>`:''}
-        </table></div></details>`}).join('')}</div>`;
-}
+    const crew=s.data.type==='Crew Change',kind=crew?'crew':'visitor',title=crew?'Crew members':(FLAT_VISITORS[s.data.type]||'Visitors');
+    if(!canPeople(kind))return '<div class="hfo-section hfo-alert">Separate person view permission required.</div>';
+    const list=state.people.filter(p=>p.kind===kind&&p.data.serviceIds?.includes(s.id));
+    const table=(people,category)=>`<div class="hfo-table-wrap"><table class="hfo-table hfo-roster-table"><thead><tr><th>No.</th><th>Name – Surname</th><th>Nationality</th><th>Rank</th><th>Date of Birth</th>${crew?'<th>Seaman book</th>':''}<th>Passport</th><th>PP. EXP</th><th></th></tr></thead>
+      <tbody>${people.map((p,i)=>personRow(p,i,kind)).join('')}${newPersonRow(category,kind)}</tbody>
+      ${canEditPeople(kind)?`<tfoot><tr><td colspan="${crew?9:8}"><button type="button" class="hfo-btn" data-add-person="${kind}" data-person-category="${escape(category)}">+ Add ${escape(FLAT_VISITORS[s.data.type]||category)}</button></td></tr></tfoot>`:''}</table></div>`;
+    const flat=FLAT_VISITORS[s.data.type];
+    const category=s.data.type==='SIRE Inspector'?'SIRE Inspectors':s.data.type==='Surveyor'?'Surveyors':'Other';
+    return `<div class="hfo-section"><div class="hfo-toolbar"><h3>${escape(title)}</h3><small class="hfo-muted">${list.length} people · Immigration & flight details</small></div>
+      ${flat?table(list,category):(crew?CATEGORIES.slice(0,2):CATEGORIES.slice(2)).map(cat=>`<details class="hfo-group" open><summary>${escape(cat)} (${list.filter(p=>p.data.category===cat).length})</summary>${table(list.filter(p=>p.data.category===cat),cat)}</details>`).join('')}</div>`;
+  }
 
   let flightCodes={airlines:[],airports:[]},flightCodesPromise,flightCodesFailed=false;
   async function loadFlightCodes() {
@@ -447,7 +445,7 @@
   const dis=edit?'':'disabled';
   return `<form id="hfoPersonForm" class="hfo-person-expanded"><div class="hfo-toolbar"><h4>Immigration & flight details · ${escape(p.name)}</h4><button type="button" class="hfo-btn" data-close-person>Close</button></div>
     <div class="hfo-immigration-row">
-      ${sel(draft.kind==='crew'?'Change role':'Visitor role',p.category,'category',draft.kind==='crew'?CATEGORIES.slice(0,2):CATEGORIES.slice(2),dis)}
+      ${FLAT_VISITORS[service()?.data.type]?'':sel(draft.kind==='crew'?'Change role':'Visitor role',p.category,'category',draft.kind==='crew'?CATEGORIES.slice(0,2):CATEGORIES.slice(2),dis)}
       <fieldset class="hfo-immigration-compact"><legend>Immigration</legend><div class="hfo-immigration-codes">${codes.map(code=>`<label><input type="checkbox" name="immigration-${code}" ${checked(code)?'checked':''} ${dis}><span>${code}</span></label>`).join('')}</div></fieldset>
         ${sel('Status',p.immigration?.status||'Not started','immigrationStatus',['Not started','Documents pending','Submitted','Approved','Rejected'],dis)}
         <label class="hfo-field hfo-immigration-notes"><span>Notes</span><textarea name="immigrationNotes" rows="1" ${dis}>${escape(p.immigration?.notes||'')}</textarea></label>
@@ -485,18 +483,19 @@
   function renderService() {
   const s=service(), j=job(); if (!s || !j) return;
   const isCrew=s.data.type==='Crew Change';
-  const isVisitorService=s.data.type==='Visitor';
+  const isVisitorService=Boolean(FLAT_VISITORS[s.data.type]);
   const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
-  const tabs=isCrew?['crew','oktb','permit','loi','travel','checklist','history']:isVisitorService?['visitors','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:['details','travel','checklist','history'];
+  const tabs=isCrew?['crew','oktb','permit','loi','hotel','travel','checklist','history']:isVisitorService?['visitors','hotel','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:['details','travel','checklist','history'];
   if (!tabs.includes(state.tab)) state.tab=tabs[0];
-  const label={details:'Service details',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:'Visitors',travel:'Travel',checklist:'Checklist',history:'History'};
+  const label={details:'Service details',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'HOTEL',travel:'Travel',checklist:'Checklist',history:'History'};
   const documentTab=['oktb','permit','loi'].includes(state.tab);
   overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
     <div class="hfo-toolbar"><div><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Port Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>← Job</button></div>
     ${isCrew||isVisitorService?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
     <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${label[t]}</button>`).join('')}</div>
-    ${documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?serviceDetails(s,mayEditService(s)):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
+    ${state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?serviceDetails(s,mayEditService(s)):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
     '#'+s.seq+' · '+s.data.type,j.data.vessel||'Port Call');
+  if(state.tab==='hotel')window.HarborFlowHotels?.mount(document.getElementById('hfoHotel'),{serviceId:s.id,api});
   if (documentTab) window.HarborFlowDocuments?.mount(document.getElementById('hfoDocument'),{jobId:j.id,serviceId:s.id,type:state.tab,login:state.login});
 }
   async function saveServiceField(target, checked=false) {
@@ -761,7 +760,7 @@ if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null
     if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
     if(b.hasAttribute('data-sync-job-folder')){await perform('syncJobFolder',{id:job().id},out=>{Object.assign(job(),out.record);render();});return;}
     if(b.dataset.imoChoice){const grid=b.closest('.hfo-form-grid'),input=grid?.querySelector('[name="imo"]');if(input){input.value=b.dataset.imoChoice;grid.querySelector('[data-imo-feedback]').textContent='IMO selected. Verify with ship documents.';if(input.hasAttribute('data-job-field'))input.dispatchEvent(new Event('change',{bubbles:true}));}return;}
-if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=service()?.data.type==='Crew Change'?'crew':service()?.data.type==='Visitor'?'visitors':'details';state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
+if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=service()?.data.type==='Crew Change'?'crew':FLAT_VISITORS[service()?.data.type]?'visitors':'details';state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
     if(b.dataset.shift){shift(Number(b.dataset.shift));return;}
     if(b.hasAttribute('data-grants')){state.modal='grants';state.openJobId=null;state.openServiceId=null;render();return;}
     if(b.hasAttribute('data-close')){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.modal=null;state.openJobId=null;state.openServiceId=null;state.people=[];state.peopleLoadedFor=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
@@ -844,7 +843,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     if(!['hfoCreateJob','hfoAddService','hfoPersonForm','hfoTripForm','hfoGrantForm'].includes(form.id))return;
     event.preventDefault();const d=new FormData(form);
     if(form.id==='hfoCreateJob'){const data=Object.fromEntries(d.entries());await perform('createJob',{data},out=>{state.jobs.unshift(out.job);state.modal=null;state.openJobId=out.job.id;render();});}
-    if(form.id==='hfoAddService'){await perform('addService',{jobId:job().id,data:Object.fromEntries(d.entries())},out=>{state.services.push(out.service);state.modal=null;state.openServiceId=out.service.id;state.tab=out.service.data.type==='Crew Change'?'crew':out.service.data.type==='Visitor'?'visitors':'details';render();});}
+    if(form.id==='hfoAddService'){await perform('addService',{jobId:job().id,data:Object.fromEntries(d.entries())},out=>{state.services.push(out.service);state.modal=null;state.openServiceId=out.service.id;state.tab=out.service.data.type==='Crew Change'?'crew':FLAT_VISITORS[out.service.data.type]?'visitors':'details';render();});}
     if(form.id==='hfoPersonForm')await savePerson();
     if(form.id==='hfoTripForm')await saveTrip();
     if(form.id==='hfoGrantForm'){const data=Object.fromEntries(d.entries());for(const key of ['crewView','crewEdit','visitorView','visitorEdit'])data[key]=d.has(key);await perform('grant',data,()=>renderGrants());}

@@ -1,3 +1,4 @@
+import { hotelRoute } from '../lib/hotels.mjs';
 import { randomUUID } from 'node:crypto';
 import { nodeHandler, gh, json, readJson, safeName, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
 import { documentsFolder, moveJobFolder } from '../lib/job-folders.mjs';
@@ -155,11 +156,12 @@ return async function route(request) {
       const people = await rows(sql, 'SELECT * FROM operation_people WHERE job_id=$1 AND kind=ANY($2::text[]) AND removed_at IS NULL ORDER BY created_at', [jobId, kinds]);
       return json({ people, kinds });
     }
+    if(action==='hotels')return hotelRoute({sql,grant,login,input:{serviceId:url.searchParams.get('serviceId')},read:true});
     if (action === 'trips') {
       if (!grant.crewView || !grant.visitorView) return error('Crew and Visitor view permissions required for linked travel', 403);
       const jobId = url.searchParams.get('jobId');
       if (!await loadJob(sql, jobId)) return error('Job not found', 404);
-      return json({ trips: await rows(sql, 'SELECT * FROM operation_trips WHERE job_id=$1 AND removed_at IS NULL ORDER BY created_at', [jobId]) });
+      return json({ trips: await rows(sql, "SELECT * FROM operation_trips WHERE job_id=$1 AND removed_at IS NULL AND data->>'kind' IN ('car','boat') ORDER BY created_at", [jobId]) });
     }
     if (action === 'history') {
       const scope = url.searchParams.get('scope'), id = url.searchParams.get('id');
@@ -186,6 +188,7 @@ return async function route(request) {
   let input;
   try { input = await parse(request); } catch { return error('Invalid or oversized JSON'); }
   const action = input.action;
+  if(action==='saveHotel')return hotelRoute({sql,grant,login,input});
 
   if (action === 'grant') {
     if (grant.role !== 'owner') return error('Owner permission required', 403);
