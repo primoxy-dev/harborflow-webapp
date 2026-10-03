@@ -46,7 +46,7 @@ export function createDocumentsRoute(deps = {}) {
       if (action !== 'preview') return fail('Unknown action', 404);
       const type = url.searchParams.get('type'), jobId = url.searchParams.get('jobId'), serviceId = url.searchParams.get('serviceId');
       if (!Object.hasOwn(documentTypes(), type)) return fail('Unknown document type', 400);
-      if (type === 'oktb' && !crew) return fail('Separate Crew view permission required', 403);
+      if (['oktb','loi'].includes(type) && !crew) return fail('Separate Crew view permission required', 403);
       if (!uuid(jobId)) return fail('Invalid Job', 400);
       const [job] = await sql.query('SELECT id,data FROM operation_jobs WHERE id=$1', [jobId]);
       if (!job) return fail('Job not found', 404);
@@ -57,7 +57,7 @@ export function createDocumentsRoute(deps = {}) {
       }
       const people = await sql.query('SELECT id,kind,data FROM operation_people WHERE job_id=$1 AND removed_at IS NULL ORDER BY created_at', [jobId]);
       const allowedPeople = people.filter(person => (person.kind === 'crew' ? crew : visitor) &&
-        (type !== 'oktb' || person.kind === 'crew') && (!serviceId || person.data.serviceIds?.includes(serviceId)));
+        (!['oktb','loi'].includes(type) || person.kind === 'crew') && (!serviceId || person.data.serviceIds?.includes(serviceId)));
       // Travel contains passengers from both categories; require both to include it.
       const trips = crew && visitor ? await sql.query("SELECT data FROM operation_trips WHERE job_id=$1 AND removed_at IS NULL AND data->>'kind' IN ('car','boat') ORDER BY created_at", [jobId]) : [];
       return json({ login, preview: buildDocumentPreview(type, job, allowedPeople, trips, { crewDetails: crew }) });

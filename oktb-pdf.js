@@ -174,5 +174,62 @@
     setTimeout(()=>URL.revokeObjectURL(url),60000);
     return name;
   }
-  window.HarborFlowOktbPdf={download,fileName};
+  async function downloadLoi({preview,person,ctx,profile,logo}) {
+    if(!person?.id||!ctx.embassy)throw Error('กรุณาเลือกลูกเรือและสถานทูต');
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.round(PAGE_W*SCALE);canvas.height=Math.round(PAGE_H*SCALE);
+    const pen=canvas.getContext('2d');pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);
+    const logoImage=await image(logoSource(logo)),signature=profile.signature?await image(profile.signature):null;
+    const lines=(value,width,size=10)=>{
+      pen.font=size+'px Arial';const output=[];let line='';
+      for(const word of String(value||'[not set]').split(/\s+/)){
+        const next=line?line+' '+word:word;
+        if(line&&pen.measureText(next).width>width){output.push(line);line=word;}else line=next;
+      }
+      if(line)output.push(line);return output;
+    };
+    const text=(value,x,y,size=10,bold=false,align='left')=>{
+      pen.fillStyle='#111';pen.font=(bold?'bold ':'')+size+'px Arial';pen.textBaseline='top';pen.textAlign=align;pen.fillText(String(value||'[not set]'),x,y);pen.textAlign='left';
+    };
+    if(logoImage)pen.drawImage(logoImage,62,40,80,66);
+    text('บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด',156,44,9,true);
+    text('GULF AGENCY COMPANY (THAILAND) LTD.',156,62,8);
+    text('26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road,',156,78,7);
+    text('Lumpinee, Pathumwan, Bangkok 10330',156,89,7);
+    text('Tel +66-2-650 7400  Fax +66-2-650 7401  E-mail shipping.thailand@gac.com',156,102,7);
+    text('INVITATION LETTER',PAGE_W/2,143,14,true,'center');
+    let y=175;
+    const paragraph=(value,gap=8,size=10)=>{
+      for(const line of lines(value,PAGE_W-120,size)){text(line,60,y,size);y+=15;}y+=gap;
+    };
+    paragraph('Date : '+displayDate(ctx.issueDate),3);
+    paragraph('To : '+ctx.embassy,0);y+=65;
+    paragraph('From : Gulf Agency Company (Thailand) Ltd.');
+    paragraph('Subject : VISA Issuance',21);
+    paragraph('Dear Sirs,',4);
+    paragraph('This is to advise that the following person is arriving to Thailand for visit the vessel "'+(preview.job.vessel||'[Vessel from Job]')+'"',0);
+    paragraph('Thailand, '+(preview.job.port||'[Port from Job]').toUpperCase(),20);
+    text('Personal Detail :',60,y,10,true);y+=19;
+    const fields=[['Surname',person.surname,'Given name',person.givenName],['Date of Birth',person.dob,'Place of Birth',person.placeOfBirth],['Nationality',person.nationality,'Passport No.',person.passport],['Issued',person.passportIssued,'Expiry',person.passportExpiry],['Seamans book',person.seamanBook,'Issued',person.seamanBookIssued]];
+    for(const [left,a,right,b] of fields){
+      const l=lines(left+': '+(a||'[not set]'),222,9),r=lines(right+': '+(b||'[not set]'),222,9);
+      l.forEach((v,i)=>text(v,60,y+i*13,9));r.forEach((v,i)=>text(v,303,y+i*13,9));y+=Math.max(l.length,r.length)*13+4;
+    }
+    y+=19;
+    paragraph('On arrival in Thailand, We will meet the above named and assist them in joining the vessel. We will also be responsible for the maintenance and hotel arrangement during his stays in Thailand prior join vessel and arrange for his repatriation to home town in case he is unbable to join vessel.',15,9);
+    paragraph('We, Gulf Agency Company(Thailand) Ltd. Are sponsoring him at the airport',2,9);
+    paragraph('Expenses to be incurred during his stays in Thailand, it will be responed by our company',18,9);
+    // Never silently clip a long draft onto one sheet.
+    if(y+145>PAGE_H-30)throw Error('ข้อมูลยาวเกินหนึ่งหน้า กรุณาตรวจและย่อรายละเอียดก่อนดาวน์โหลด');
+    text('Yours Faithfully,',430,y,10,false,'center');y+=23;
+    if(signature){pen.drawImage(signature,360,y,140,49);y+=55;}else{text('Signature pending owner approval',430,y,8,false,'center');y+=55;}
+    const signoff=['('+(profile.signer||'[signatory not set]')+')',ctx.loiTitle||'Operations Coordinator, Shipping Services','Mobile: '+(profile.phone||'[phone not set]'),'As Agents Only, E.&.O.E.'];
+    for(const value of signoff){for(const line of lines(value,250,9)){text(line,415,y,9,false,'center');y+=13;}y+=5;}
+    pen.save();pen.fillStyle='rgba(160,0,0,.12)';pen.font='bold 37px Arial';pen.textAlign='center';pen.translate(PAGE_W/2,PAGE_H/2);pen.rotate(-.32);pen.fillText('SAMPLE · NOT APPROVED',0,0);pen.restore();
+    text('DRAFT · 1 / 1',PAGE_W-60,PAGE_H-22,8,false,'right');
+    const name=fileName([person],preview.job.vessel).replace(/^OKTB/,'LOI');
+    const blob=pdfFromPages([canvas]),url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
+  }
+  window.HarborFlowOktbPdf={download,fileName,downloadLoi};
 })();

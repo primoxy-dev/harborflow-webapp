@@ -42,7 +42,7 @@ test('OKTB uses the Crew members source within this Service, without requiring V
   assert.deepEqual(data.preview.people.map(p=>p.name),['DEMO CREW']);
   assert.equal(data.preview.people[0].passport,'DEMO-PASSPORT');
   assert.equal(data.preview.people[0].flights[0].airline,'TG');
-  assert.equal(data.preview.downloadAllowed,false);
+  assert.equal(data.preview.downloadAllowed,true);
   assert.ok(!JSON.stringify(data).includes('PRIVATE VISITOR'));
   assert.ok(!sql.queries.some(q=>q.includes('operation_trips')));
 });
@@ -56,6 +56,20 @@ test('anonymous and Operations-only or Visitor-only users cannot access OKTB',as
 test('Service from another Job is rejected before reading people',async()=>{
   const sql=fixtureDb(); const response=await fixtureRoute(sql)(new Request(url.replace(serviceId,otherId)));
   assert.equal(response.status,404); assert.ok(!sql.queries.some(q=>q.includes('operation_people')));
+});
+test('LOI derives one selectable crew roster from its Service and never includes Visitors',async()=>{
+  const response=await fixtureRoute(fixtureDb())(new Request(url.replace('type=oktb','type=loi')));
+  assert.equal(response.status,200);
+  const {preview}=await response.json();
+  assert.equal(preview.type,'loi');assert.equal(preview.downloadAllowed,true);
+  assert.deepEqual(preview.people.map(p=>p.name),['DEMO CREW']);
+  assert.ok(!JSON.stringify(preview).includes('PRIVATE VISITOR'));
+});
+test('LOI requires separate Crew permission, including after revocation',async()=>{
+  for(const [login,grant,status] of [['',null,401],['demo',{role:'viewer'},403],['demo',{role:'viewer',visitorView:true},403],['demo',null,403]]) {
+    const sql=fixtureDb(),response=await fixtureRoute(sql,login,grant)(new Request(url.replace('type=oktb','type=loi')));
+    assert.equal(response.status,status);assert.ok(!sql.queries.some(q=>q.includes('operation_people')));
+  }
 });
 test('the existing masked previews still omit identifiers by default',()=>{
   for(const type of ['oktb','permit','loi']) {
@@ -115,4 +129,3 @@ for (const type of ['oktb','permit','loi']) test(`${type} derives a masked draft
 
 test('unknown document type is rejected', () => assert.throws(() => buildDocumentPreview('other', job), /Unknown document type/));
 }
-

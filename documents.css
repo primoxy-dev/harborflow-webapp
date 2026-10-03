@@ -71,3 +71,20 @@
 .hfd-oktb-settings .hfd-oktb-editor{margin:0;border:0;border-top:1px solid var(--line);border-radius:0}
 .hfd-oktb-editor input[readonly]{background:#edf3f6;color:#334155}
 .hfd-oktb-page .hfd-oktb-flights td:nth-child(2){text-align:center}
+.hfd-loi-editor select {
+  box-sizing: border-box; width: 100%; min-height: 42px; padding: 9px 11px;
+  border: 1px solid #ccd8e6; border-radius: 7px; background: white; color: #17283b;
+}
+.hfd-loi-editor label[hidden] { display: none; }
+.hfd-loi-page { position: relative; font-family: Calibri, Arial, sans-serif; }
+.hfd-loi-letterhead { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 12px; margin-bottom: 48px; }
+.hfd-loi-letterhead p { font-size: 10.5px; line-height: 1.3; margin: 7px 0; }
+.hfd-loi-letterhead b { font-size: 12px; }
+.hfd-loi-heading { text-align: center; font: bold 20px Arial, sans-serif; margin: 24px 0; }
+.hfd-loi-addressee-gap { min-height: 72px; }
+.hfd-loi-intro { line-height: 1.9; }
+.hfd-loi-personal { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 20px; margin-bottom: 30px; overflow-wrap: anywhere; }
+.hfd-loi-undertaking { line-height: 1.9; }
+.hfd-loi-signoff { width: 340px; margin: 25px 0 0 auto; text-align: center; }
+.hfd-loi-signoff .hfd-oktb-signature { margin: 12px auto; }
+.hfd-loi-signoff p { line-height: 1.9; }
