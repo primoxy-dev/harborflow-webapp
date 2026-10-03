@@ -188,6 +188,71 @@
       return data;
     } finally { bitmap.close(); }
   }
+  // A curated starter list, not a complete consular directory. No visa rules implied.
+  const embassies = [
+    ['Colombo, Sri Lanka','https://colombo.thaiembassy.org/en/page/contact'],
+    ['Manila, Philippines','https://thaiembassymnl.ph/index.html'],
+    ['Moscow, Russia','https://moscow.thaiembassy.org/en/'],
+    ['New Delhi, India','https://newdelhi.thaiembassy.org/en/'],
+    ['Singapore','https://singapore.thaiembassy.org/en/']
+  ].map(([city,source])=>({name:'Royal Thai Embassy, '+city,source}));
+  const loiFields = [['surname','Surname'],['givenName','Given name'],['dob','Date of Birth'],['placeOfBirth','Place of Birth'],['nationality','Nationality'],['passport','Passport No.'],['passportIssued','Issued (Passport)'],['passportExpiry','Expiry'],['seamanBook','Seamans book'],['seamanBookIssued','Issued (Seamans book)']];
+  function loiPerson(preview,ctx) {
+    const person=preview.people.find(person=>person.id===ctx.loiPersonId);
+    return person?{...person,...ctx.loiDetails?.[person.id]}:null;
+  }
+  function loiPreview(preview,ctx,profile) {
+    ctx.issueDate ||= localDate();
+    if(!preview.people.some(person=>person.id===ctx.loiPersonId))ctx.loiPersonId=preview.people.find(person=>person.category==='On-signers')?.id||preview.people[0]?.id||'';
+    ctx.loiDetails ||= {};
+    const person=loiPerson(preview,ctx),saved=profile.values,disabled=profile.canSave?'':'disabled';
+    // Reuse only the logo markup; the LOI letterhead follows the uploaded template.
+    const logo='<div class="hfd-oktb-logo" role="img" aria-label="GAC"></div>';
+    const value=key=>escape(person?.[key]||'[not set]');
+    return `<p class="hfd-notice">${escape(preview.notice)}</p>
+      <div class="hfd-oktb-editor hfd-loi-editor">
+        <label>To · สถานทูตไทย<select id="hfdEmbassy"><option value="">เลือกสถานทูต</option>${embassies.map(item=>`<option value="${escape(item.name)}" ${ctx.embassy===item.name?'selected':''}>${escape(item.name)}</option>`).join('')}<option value="other" ${ctx.embassy==='other'?'selected':''}>สถานทูตอื่น · ระบุชื่อ</option></select></label>
+        <label id="hfdCustomEmbassyLabel" ${ctx.embassy==='other'?'':'hidden'}>ชื่อสถานทูตและเมือง/ประเทศ<input id="hfdCustomEmbassy" maxlength="200" value="${escape(ctx.customEmbassy||'')}"></label>
+        <label>ลูกเรือสำหรับ LOI · หนึ่งคนต่อฉบับ<select id="hfdLoiPerson"><option value="">เลือกลูกเรือ</option>${preview.people.map(p=>`<option value="${escape(p.id)}" ${p.id===ctx.loiPersonId?'selected':''}>${escape(p.name)} · ${escape(p.category)}</option>`).join('')}</select></label>
+        <label>Date · วันที่ออกเอกสาร<input id="hfdIssueDate" type="date" value="${ctx.issueDate}"></label>
+        <label>Contact person<input id="hfdContact" maxlength="200" value="${escape(saved.contact||'')}" ${disabled}></label>
+        <label>เบอร์โทร<input id="hfdPhone" maxlength="200" value="${escape(saved.phone||'')}" ${disabled}></label>
+        <label>ชื่อผู้ลงนาม<input id="hfdSigner" maxlength="200" value="${escape(saved.signer||'')}" ${disabled}></label>
+        <label>ตำแหน่งผู้ลงนาม<input id="hfdLoiTitle" maxlength="200" value="${escape(ctx.loiTitle||'Operations Coordinator, Shipping Services')}"></label>
+        <label>ภาพลายเซ็นสำหรับตรวจร่าง<input id="hfdSignature" type="file" accept="image/png,image/jpeg" ${disabled}>${profile.canSave?'<button type="button" class="hfo-btn" data-clear-signature>ลบลายเซ็นที่จำไว้</button>':''}</label>
+      </div>
+      <p class="hfd-notice">รายชื่อสถานทูตชุดเริ่มต้น · เลือก “สถานทูตอื่น” หากไม่มีในรายการ · ตรวจเขตรับผิดชอบกับสถานทูตก่อนใช้</p>
+      <a id="hfdEmbassySource" target="_blank" rel="noopener noreferrer" ${embassies.find(e=>e.name===ctx.embassy)?`href="${embassies.find(e=>e.name===ctx.embassy).source}"`:'hidden'}>เว็บไซต์ทางการของสถานทูตที่เลือก</a>
+      <details class="hfd-oktb-settings"><summary>ตรวจ Personal Detail · ${escape(person?.name||'ยังไม่ได้เลือก')}</summary>
+        <p>กรอก Surname และ Given name ให้ตรงหนังสือเดินทาง ไม่แยกชื่ออัตโนมัติ · ช่องเพิ่มเติมใช้ในร่างนี้ ไม่แก้ Crew members</p>
+        <div class="hfd-oktb-editor">${loiFields.map(([key,label])=>`<label>${label}<input data-loi-field="${key}" maxlength="200" value="${escape(person?.[key]||'')}" ${person?'':'disabled'}></label>`).join('')}</div>
+      </details>
+      <p id="hfdSaveStatus" class="hfd-save-status" role="status">${profile.canSave?'ข้อมูลผู้ติดต่อและลายเซ็นจะจำไว้ในบัญชีนี้':'ดูร่างเท่านั้น · ไม่มีสิทธิ์แก้ค่าเริ่มต้น'}</p>
+      <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page hfd-loi-page">
+        <div class="hfd-loi-letterhead">${logo}<div><b>บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด</b><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p>26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400 &nbsp; Fax +66-2-650 7401 &nbsp; E-mail &nbsp; shipping.thailand@gac.com</p></div></div>
+        <h2 class="hfd-loi-heading">INVITATION LETTER</h2>
+        <p>Date : <span id="hfdIssuedDate">${displayDate(ctx.issueDate)}</span><br>To : <span id="hfdEmbassyOut">${escape(ctx.embassy==='other'?ctx.customEmbassy:ctx.embassy||'[select embassy]')}</span></p>
+        <div class="hfd-loi-addressee-gap"></div>
+        <p>From : Gulf Agency Company (Thailand) Ltd.</p><p>Subject : VISA Issuance</p><br>
+        <p>Dear Sirs,</p><p class="hfd-loi-intro">This is to advise that the following person is arriving to Thailand for visit the vessel "${escape(preview.job.vessel||'[Vessel from Job]')}"<br>Thailand, ${escape((preview.job.port||'[Port from Job]').toUpperCase())}</p>
+        <h3>Personal Detail :</h3><div class="hfd-loi-personal">${loiFields.map(([key,label])=>`<div>${label.replace(' (Passport)','').replace(' (Seamans book)','')} : <span data-loi-out="${key}">${value(key)}</span></div>`).join('')}</div>
+        <p class="hfd-loi-undertaking">On arrival in Thailand, We will meet the above named and assist them in joining the vessel. We will also be responsible for the maintenance and hotel arrangement during his stays in Thailand prior join vessel and arrange for his repatriation to home town in case he is unbable to join vessel.</p>
+        <p>We, Gulf Agency Company(Thailand) Ltd. Are sponsoring him at the airport<br>Expenses to be incurred during his stays in Thailand, it will be responed by our company</p>
+        <div class="hfd-loi-signoff"><p>Yours Faithfully,</p><div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" ${saved.signature?`src="${escape(saved.signature)}"`:'hidden'}><span id="hfdSignaturePlaceholder" ${saved.signature?'hidden':''}>Signature pending owner approval</span></div>
+        <p>(<span id="hfdSignerOut">${escape(saved.signer||'[signatory not set]')}</span>)</p><p><span id="hfdLoiTitleOut">${escape(ctx.loiTitle||'Operations Coordinator, Shipping Services')}</span><br>Mobile: <span id="hfdPhoneOut">${escape(saved.phone||'[phone not set]')}</span><br>As Agents Only, E.&amp;.O.E.</p></div>
+        <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
+      </article></div>
+      <p class="hfd-notice">ข้อความรับผิดชอบตามต้นแบบ LOI ต้องให้เจ้าของตรวจและอนุมัติ · ห้ามใช้ร่างยื่นจริง</p>
+      <button type="button" class="secondary" data-download-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>`;
+  }
+  function updateLoiEmbassy(host,ctx) {
+    const custom=ctx.embassy==='other',text=custom?ctx.customEmbassy:ctx.embassy;
+    host.querySelector('#hfdCustomEmbassyLabel').hidden=!custom;
+    host.querySelector('#hfdEmbassyOut').textContent=text||'[select embassy]';
+    const source=host.querySelector('#hfdEmbassySource'),entry=embassies.find(e=>e.name===ctx.embassy);
+    source.hidden=!entry; if(entry)source.href=entry.source;else source.removeAttribute('href');
+    host.querySelector('[data-download-loi]').disabled=!ctx.loiPersonId||!text;
+  }
   function bind(host, preview, ctx, profile, options, airlineNames) {
     host.addEventListener('input', event => {
       const target = event.target;
@@ -195,11 +260,20 @@
       const output = host.querySelector('#' + fields[target.id]);
       if (output) output.textContent = target.value || '[not set]';
       if (target.id === 'hfdAirline') ctx.airline = target.value;
+      if (target.id === 'hfdCustomEmbassy') { ctx.customEmbassy=target.value.trim(); updateLoiEmbassy(host,ctx); }
+      if (target.id === 'hfdLoiTitle') { ctx.loiTitle=target.value;host.querySelector('#hfdLoiTitleOut').textContent=target.value||'[not set]'; }
+      if (target.dataset.loiField) {
+        ctx.loiDetails[ctx.loiPersonId] ||= {};
+        ctx.loiDetails[ctx.loiPersonId][target.dataset.loiField]=target.value;
+        host.querySelector('[data-loi-out="'+target.dataset.loiField+'"]').textContent=target.value||'[not set]';
+      }
       if (target.id === 'hfdIssueDate') { ctx.issueDate = target.value; host.querySelector('#hfdIssuedDate').textContent = displayDate(target.value); }
       if (target.id === 'hfdArrivalInput') { ctx.arrivalDate = target.value; for (const id of ['hfdArrivalDate','hfdEmbarkDate']) host.querySelector('#' + id).textContent = displayDate(target.value); }
     });
     host.addEventListener('change', async event => {
       const target = event.target;
+      if (target.id === 'hfdEmbassy') {ctx.embassy=target.value;updateLoiEmbassy(host,ctx);}
+      if (target.id === 'hfdLoiPerson') {ctx.loiPersonId=target.value;mount(host,options);return;}
       if (keys[target.id]) remember(host, profile, { [keys[target.id]]:target.value });
       if (target.dataset.oktbPerson) {
         if (target.checked) ctx.selected.add(target.dataset.oktbPerson); else ctx.selected.delete(target.dataset.oktbPerson);
@@ -236,6 +310,21 @@
         try {await window.HarborFlowOktbPdf.download({preview,people:selected,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF ร่างแล้ว');}
         catch(error){message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);}
       }
+      if (target.hasAttribute('data-download-loi')) {
+        const person=loiPerson(preview,ctx),embassy=ctx.embassy==='other'?ctx.customEmbassy:ctx.embassy;
+        if(!person||!embassy)return;
+        try {
+          const fresh=await get({action:'preview',jobId:options.jobId,serviceId:options.serviceId,type:'loi'});
+          if(account!==profile||fresh.login!==options.login)throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
+          const original=preview.people.find(p=>p.id===ctx.loiPersonId),current=fresh.preview.people.find(p=>p.id===ctx.loiPersonId);
+          if(!current||JSON.stringify(current)!==JSON.stringify(original)||JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job))throw Error('ข้อมูล Job หรือลูกเรือเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจร่างก่อนดาวน์โหลด');
+          await window.HarborFlowOktbPdf.downloadLoi({preview,person,ctx:{...ctx,embassy},profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF ร่างแล้ว');
+        }
+        catch(error){
+          if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ Crew ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}
+          else message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);
+        }
+      }
       if (target.hasAttribute('data-document-retry')) mount(host, options);
     });
   }
@@ -252,7 +341,7 @@
       await profile.queue;
       const [data, prefs, airlineNames] = await Promise.all([
         get({action:'preview', jobId:options.jobId, serviceId:options.serviceId, type:options.type}),
-        options.type === 'oktb' ? get({action:'preferences'}) : Promise.resolve(null),
+        ['oktb','loi'].includes(options.type) ? get({action:'preferences'}) : Promise.resolve(null),
         options.type === 'oktb' ? loadAirlineNames() : Promise.resolve(new Map())
       ]);
       if (gen !== generation || !host.isConnected || account !== profile) return;
@@ -264,7 +353,7 @@
         ctx.selected = ctx.selected ? new Set([...ctx.selected].filter(id => available.has(id))) : new Set(data.preview.people.filter(person => person.category === 'On-signers').map(person => person.id));
       }
       host.innerHTML = '<div class="hfd-header"><h3>' + escape(labels[options.type]) + '</h3><span class="hfd-badge">Draft</span></div>' +
-        (options.type === 'oktb' ? oktbPreview(data.preview, ctx, profile, airlineNames) : genericPreview(data.preview));
+        (options.type === 'oktb' ? oktbPreview(data.preview, ctx, profile, airlineNames) : options.type === 'loi' ? loiPreview(data.preview,ctx,profile) : genericPreview(data.preview));
       bind(host, data.preview, ctx, profile, options, airlineNames);
     } catch(error) {
       if (gen !== generation || !host.isConnected) return;
@@ -275,4 +364,3 @@
   }
   window.HarborFlowDocuments = { mount, clear };
 })();
-
