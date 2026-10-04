@@ -256,15 +256,13 @@
       }
       return out.length?out:[''];
     }
-    function page(continued=false){
+    function page(){
       canvas=document.createElement('canvas');canvas.width=Math.round(PAGE_W*SCALE);canvas.height=Math.round(PAGE_H*SCALE);
       pen=canvas.getContext('2d');pen.scale(SCALE,SCALE);pen.fillStyle='white';pen.fillRect(0,0,PAGE_W,PAGE_H);pages.push(canvas);y=36;
-      if(continued){text('TERMINAL PERMIT (continued) - '+(preview.job.vessel||''),36,y,10,true);y+=22;}
     }
-    const ensure=height=>{if(y+height>PAGE_H-42)page(true);};
-    function paragraph(value,size=8,gap=7){
-      const lines=wrap(value,PAGE_W-72,size);
-      for(const line of lines){ensure(size+5);text(line,36,y,size);y+=size+5;}y+=gap;
+    function paragraph(value,size=8,gap=2,indent=0){
+      const lines=wrap(value,PAGE_W-72-indent,size);
+      for(const [i,line] of lines.entries()){text(line,36+(i===0?indent:0),y,size);y+=size+3;}y+=gap;
     }
     function table(table){
       const n=table.headers.length;
@@ -272,26 +270,23 @@
       const total=weights.reduce((a,b)=>a+b,0),widths=weights.map(w=>(PAGE_W-72)*w/total);
       const drawRow=(values,header=false)=>{
         const wrapped=values.map((v,i)=>wrap(v,widths[i]-8,header?7.1:7.4,header));
-        const height=Math.max(header?20:15,Math.max(...wrapped.map(v=>v.length))*10+5);
-        if(height>PAGE_H-100)throw Error('รายละเอียดหนึ่งแถวยาวเกินหนึ่งหน้า กรุณาย่อข้อความก่อนดาวน์โหลด');
+        const height=Math.max(header?16:13,Math.max(...wrapped.map(v=>v.length))*9+4);
         let x=36;
         wrapped.forEach((lines,i)=>{
           if(header){pen.fillStyle='#d8dfe7';pen.fillRect(x,y,widths[i],height);}
           pen.strokeStyle='#111';pen.lineWidth=.5;pen.strokeRect(x,y,widths[i],height);
-          lines.forEach((line,k)=>text(line,x+4,y+3+k*10,header?7.1:7.4,header));x+=widths[i];
+          const top=y+(height-lines.length*9)/2;
+          lines.forEach((line,k)=>text(line,header?x+widths[i]/2:x+4,top+k*9,header?7.1:7.4,header,header?'center':'left'));x+=widths[i];
         });y+=height;return height;
       };
-      const headerHeight=Math.max(20,...table.headers.map((h,i)=>wrap(h,widths[i]-8,7.1,true).length*10+5));
-      ensure(headerHeight+40);
       if(table.title){text(table.title,36,y,8,true);y+=15;}drawRow(table.headers,true);
       for(const row of table.rows){
-        const height=Math.max(15,...row.cells.map((c,i)=>wrap(c,widths[i]-8,7.4).length*10+5));
-        if(y+height>PAGE_H-42){page(true);text((table.title||'Personnel')+' (continued)',36,y,8,true);y+=15;drawRow(table.headers,true);}
         drawRow(row.cells);
       }y+=12;
     }
-    page();
-    if(logoImage)pen.drawImage(logoImage,38,34,68,55);
+    function drawDocument(){
+    y=36;
+    if(logoImage)pen.drawImage(logoImage,38,36,68,55);
     text('บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด',118,37,8,true);
     text('GULF AGENCY COMPANY (THAILAND) LTD.',118,51,7);
     const address='26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330';
@@ -299,15 +294,26 @@
     text('Tel +66-2-650 7400  Fax +66-2-650 7401  E-mail shipping.thailand@gac.com',118,78,6.5);
     text(displayDate(ctx.issueDate),PAGE_W-36,106,8,false,'right');y=128;
     paragraph('Subject: '+draft.subject);paragraph('Dear Marine Operation Division');
-    paragraph('Gulf Agency Company (Thailand) LTD. has been appointed of the subject vessel "'+(preview.job.vessel||'[Vessel not set in Job]')+'"');
-    paragraph('at '+model.permitLocation(preview.job)+' on '+displayDate(ctx.permitDate)+' during her operations',8,15);
+    paragraph('Gulf Agency Company (Thailand) LTD. has been appointed of the subject vessel "'+(preview.job.vessel||'[Vessel not set in Job]')+'"',8,2,22);
+    paragraph('at '+model.permitLocation(preview.job)+' on '+displayDate(ctx.permitDate)+' during her operations',8,12);
     draft.tables.forEach(table);
-    ensure(125);paragraph('We would be grateful to terminal approve permission.',8,16);
+    paragraph('We would be grateful to terminal approve permission.',8,16);
     text('Thank you & Best regards,',440,y,8,false,'center');y+=19;
     if(signature)pen.drawImage(signature,390,y,100,38);else text('Signature pending owner approval',440,y+15,6.8,false,'center');y+=45;
-    for(const line of ['('+(profile.signer||'[signatory not set]')+')','Operations Coordinator, Shipping Services','Mobile: '+(profile.phone||'[phone not set]'),'As Agents Only']){for(const part of wrap(line,230,7.3)){ensure(11);text(part,440,y,7.3,false,'center');y+=11;}}
+    for(const line of ['('+(profile.signer||'[signatory not set]')+')','Operations Coordinator, Shipping Services','Mobile: '+(profile.phone||'[phone not set]'),'As Agents Only']){for(const part of wrap(line,230,7.3)){text(part,440,y,7.3,false,'center');y+=11;}}
+    }
+    // Measure the complete letter first, then render it without page breaks.
+    page();drawDocument();
+    const contentHeight=Math.max(PAGE_H,y+36),fit=Math.min(1,(PAGE_H-72)/(contentHeight-72));
+    if(contentHeight*SCALE>30000)throw Error('ข้อมูลยาวเกินขนาดภาพที่รองรับ กรุณาลดข้อความหรือแถวก่อนดาวน์โหลด');
+    canvas.height=Math.ceil(contentHeight*SCALE);pen=canvas.getContext('2d');pen.scale(SCALE,SCALE);pen.fillStyle='white';pen.fillRect(0,0,PAGE_W,contentHeight);drawDocument();
+    const fitted=document.createElement('canvas');fitted.width=Math.round(PAGE_W*SCALE);fitted.height=Math.round(PAGE_H*SCALE);
+    const fittedPen=fitted.getContext('2d');fittedPen.fillStyle='white';fittedPen.fillRect(0,0,fitted.width,fitted.height);
+    const drawWidth=(PAGE_W-72)*fit*SCALE,drawHeight=(contentHeight-72)*fit*SCALE;
+    fittedPen.drawImage(canvas,36*SCALE,36*SCALE,(PAGE_W-72)*SCALE,(contentHeight-72)*SCALE,(fitted.width-drawWidth)/2,36*SCALE,drawWidth,drawHeight);
+    pages.splice(0,pages.length,fitted);
     for(const [i,p] of pages.entries()){
-      const c=p.getContext('2d');c.save();c.setTransform(SCALE,0,0,SCALE,0,0);c.fillStyle='rgba(160,0,0,.10)';c.font='bold 36px Arial';c.textAlign='center';c.translate(PAGE_W/2,PAGE_H/2);c.rotate(-.32);c.fillText('SAMPLE - NOT APPROVED',0,0);c.restore();c.fillStyle='#555';c.font='8px Arial';c.textAlign='right';c.fillText('DRAFT - '+(i+1)+' / '+pages.length,PAGE_W-36,PAGE_H-22);
+      const c=p.getContext('2d');c.save();c.setTransform(SCALE,0,0,SCALE,0,0);c.fillStyle='rgba(160,0,0,.10)';c.font='bold 36px Arial';c.textAlign='center';c.translate(PAGE_W/2,PAGE_H/2);c.rotate(-.32);c.fillText('SAMPLE - NOT APPROVED',0,0);c.restore();c.save();c.setTransform(SCALE,0,0,SCALE,0,0);c.fillStyle='#555';c.font='8px Arial';c.textAlign='right';c.fillText('DRAFT - '+(i+1)+' / '+pages.length,PAGE_W-36,PAGE_H-22);c.restore();
     }
     const vessel=String(preview.job.vessel||'VESSEL').replace(/[\\/:*?"<>|\x00-\x1f]/g,' ').trim().slice(0,100);
     const name='TERMINAL PERMIT - '+vessel.toUpperCase()+'.PDF';
