@@ -296,7 +296,8 @@
     paragraph('Subject: '+draft.subject);paragraph('Dear Marine Operation Division');
     paragraph('Gulf Agency Company (Thailand) LTD. has been appointed of the subject vessel "'+(preview.job.vessel||'[Vessel not set in Job]')+'"',8,2,22);
     paragraph('at '+model.permitLocation(preview.job)+' on '+displayDate(ctx.permitDate)+' during her operations',8,12);
-    draft.tables.forEach(table);
+    model.visiblePermitTables(draft).forEach(table);
+    y+=11; // One empty body line before the closing request.
     paragraph('We would be grateful to terminal approve permission.',8,16);
     text('Thank you & Best regards,',440,y,8,false,'center');y+=19;
     if(signature)pen.drawImage(signature,390,y,100,38);else text('Signature pending owner approval',440,y+15,6.8,false,'center');y+=45;

@@ -2,6 +2,7 @@ import { nodeHandler, json, sameOrigin, sessionLogin } from '../lib/harborflow.m
 import { canPeople, db, permission, uuid } from '../lib/operations.mjs';
 import { buildDocumentPreview, documentTypes } from '../lib/document-preview.mjs';
 import { readSettings, saveSettings } from '../lib/document-settings.mjs';
+import {readPermitDefaults,savePermitDefaults} from '../lib/permit-defaults.mjs';
 
 const fail = (message, status) => json({ error: message }, status);
 
@@ -23,11 +24,16 @@ export function createDocumentsRoute(deps = {}) {
       if (!crew && !visitor) return fail('Separate Crew or Visitor view permission required', 403);
       const url = new URL(request.url);
       if (request.method === 'POST') {
-        if (!crew || !['owner','editor'].includes(grant.role)) return fail('Crew view and Operations editing permission required', 403);
         const raw = await request.text();
         if (raw.length > 710000) return fail('Request too large', 413);
         let input;
         try { input = JSON.parse(raw); } catch { return fail('Invalid JSON', 400); }
+        if(input.action==='savePermitDefaults'){
+          if(!visitor||grant.role!=='owner')return fail('Owner and separate Visitor view required',403);
+          if(input.login!==login)return fail('Account changed; reopen the document',409);
+          const {status,...body}=await savePermitDefaults(sql,login,input.defaults,input.version);return json(body,status);
+        }
+        if (!crew || !['owner','editor'].includes(grant.role)) return fail('Crew view and Operations editing permission required', 403);
         if (input.action !== 'savePreferences') return fail('Unknown action', 404);
         if (input.login !== login) return fail('Account changed; reopen the document', 409);
         const result = await saveSettings(sql, login, input.patch, input.base);
@@ -35,6 +41,10 @@ export function createDocumentsRoute(deps = {}) {
         return json(body, status);
       }
       const action = url.searchParams.get('action');
+      if(action==='permitDefaults'){
+        if(!visitor)return fail('Separate Visitor view permission required',403);
+        return json({login,...await readPermitDefaults(sql,login),canSave:grant.role==='owner'});
+      }
       if (action === 'preferences') {
         if (!crew) return fail('Separate Crew view permission required', 403);
         return json({ login, preferences: await readSettings(sql, login), canSave: ['owner','editor'].includes(grant.role) });
@@ -68,5 +78,4 @@ export function createDocumentsRoute(deps = {}) {
 }
 
 export default nodeHandler(createDocumentsRoute());
-
 

@@ -2,13 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createDocumentsRoute} from '../api/documents.mjs';
 import {buildDocumentPreview} from '../lib/document-preview.mjs';
-import {DEFAULT_SUBJECT,newPermitDraft,tablePeople,choosePerson,revalidateDraft,blankRow,permitLocation} from '../permit-draft.mjs';
+import {DEFAULT_SUBJECT,newPermitDraft,tablePeople,choosePerson,revalidateDraft,blankRow,permitLocation,visiblePermitTables} from '../permit-draft.mjs';
 const jid='11111111-1111-4111-8111-111111111111',sid='22222222-2222-4222-8222-222222222222';
 const job={id:jid,data:{vessel:'DEMO VESSEL',port:'MAP TA PHUT / LMPT1',eta:'2026-10-04T08:00'}};
 const crew={id:'33333333-3333-4333-8333-333333333333',kind:'crew',data:{name:'DEMO CREW',category:'On-signers',dob:'1990-01-01',passport:'DEMO-PASSPORT',serviceIds:[sid]}};
 const visitor={id:'44444444-4444-4444-8444-444444444444',kind:'visitor',data:{name:'DEMO MEDICAL',category:'Medical visitors',passport:'DEMO-VISITOR-PASSPORT',serviceIds:[sid]}};
 const makeRoute=grant=>createDocumentsRoute({sessionLogin:()=> 'demo',permission:async()=>grant,db:()=>({query:async query=>query.includes('operation_jobs')?[job]:query.includes('operation_services')?[{job_id:jid,data:{type:'Crew Change'}}]:query.includes('operation_people')?[crew,visitor]:[]})});
 const url='https://harborflow.test/api/documents?action=preview&type=permit&jobId='+jid+'&serviceId='+sid;
+test('Document omits empty groups and unnamed rows but retains entered staff and vehicles',()=>{
+ const draft=newPermitDraft();assert.equal(visiblePermitTables(draft).length,0);
+ const on=draft.tables.find(t=>t.key==='on');on.rows[0].cells[2]='THAI';assert.equal(visiblePermitTables(draft).length,0);
+ on.rows[0].cells[1]='DEMO CREW';on.rows.push(blankRow(on,1));
+ const car=draft.tables.find(t=>t.key==='car');car.rows[0].cells[1]='DEMO PLATE';
+ const shown=visiblePermitTables(draft);assert.deepEqual(shown.map(t=>t.key),['on','car']);assert.equal(shown[0].rows.length,1);assert.equal(on.rows.length,2);
+});
 test('Permit details follow independent Crew/Visitor permissions',async()=>{
  for(const [grant,names] of [[{role:'viewer',crewView:true},['DEMO CREW']],[{role:'viewer',visitorView:true},['DEMO MEDICAL']],[{role:'editor',crewView:true,visitorView:true},['DEMO CREW','DEMO MEDICAL']]]){
   const res=await makeRoute(grant)(new Request(url));assert.equal(res.status,200);const {preview}=await res.json();assert.deepEqual(preview.people.map(p=>p.name),names);assert.equal(preview.job.terminal,'LMPT1');assert.equal(preview.downloadAllowed,true);assert(!JSON.stringify(preview).includes('flights'));assert.equal(res.headers.get('Cache-Control'),'no-store');

@@ -16,6 +16,23 @@ export function shortDate(value){
 }
 export function blankRow(table,n){return {id:crypto.randomUUID(),personId:'',cells:table.fields.map(f=>f==='no'?String(n+1)+'.':'')};}
 export function newPermitDraft(){return {subject:DEFAULT_SUBJECT,tables:PERMIT_TABLES.map(t=>({...t,fields:[...t.fields],headers:[...t.headers],rows:[blankRow(t,0)]}))};}
+export function applyPermitDefaults(draft,defaults){
+ for(const key of ['staff','car']){
+  const table=draft.tables.find(t=>t.key===key);
+  table.rows=(defaults?.[key]||[]).map(cells=>({...blankRow(table,0),cells:[...cells]}));
+  if(!table.rows.length)table.rows=[blankRow(table,0)];
+ }
+ return draft;
+}
+export function collectPermitDefaults(draft){return Object.fromEntries(['staff','car'].map(key=>{
+ const table=visiblePermitTables(draft).find(t=>t.key===key);return [key,table?.rows.map(r=>[...r.cells])||[]];
+}));}
+export function visiblePermitTables(draft){
+ return draft.tables.map(table=>({...table,rows:table.rows.filter(row=>{
+  const name=table.fields.indexOf('name');
+  return name>=0?Boolean(String(row.cells[name]||'').trim()):table.fields.some((field,i)=>field!=='no'&&String(row.cells[i]||'').trim());
+ })})).filter(table=>table.rows.length>0);
+}
 export function tablePeople(table,people){
  return people.filter(p=>p.id && (table.key==='on'?p.kind==='crew'&&p.category==='On-signers':table.key==='off'?p.kind==='crew'&&p.category==='Off-signers':table.key==='medical'?/Medical/i.test(p.category):table.key==='inspection'?/SIRE|Surveyor|Engineer/i.test(p.category):table.key==='agent'||table.key==='staff'?p.kind==='visitor':false));
 }
