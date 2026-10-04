@@ -17,6 +17,7 @@
   const labels = { oktb: 'OKTB', permit: 'Terminal Permit', loi: 'LOI' };
   const row = (label, value) => `<div class="hfd-field"><span>${escape(label)}</span><strong>${escape(value || 'ยังไม่มีข้อมูล')}</strong></div>`;
   const contexts = new Map();
+  const activeBindings = new Set();
   let account = null, generation = 0;
   const keys = { hfdContact: 'contact', hfdPhone: 'phone', hfdSigner: 'signer' };
   async function get(params) {
@@ -151,6 +152,8 @@
       <button type="button" class="secondary" data-download-oktb ${selectedPeople.length?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>`;
   }
   function clear() {
+    for(const controller of activeBindings)controller.abort();
+    activeBindings.clear();
     generation++;
     contexts.clear();
     account = null;
@@ -197,6 +200,52 @@
     ['Singapore','https://singapore.thaiembassy.org/en/']
   ].map(([city,source])=>({name:'Royal Thai Embassy, '+city,source}));
   const loiFields = [['surname','Surname'],['givenName','Given name'],['dob','Date of Birth'],['placeOfBirth','Place of Birth'],['nationality','Nationality'],['passport','Passport No.'],['passportIssued','Issued (Passport)'],['passportExpiry','Expiry'],['seamanBook','Seamans book'],['seamanBookIssued','Issued (Seamans book)']];
+  let permitModel;
+  function permitPaperTables(ctx) {
+    return ctx.permitDraft.tables.map(table=>`<section class="hfd-permit-table-block"><h3>${escape(table.title)}</h3><table><thead><tr>${table.headers.map(h=>'<th>'+escape(h)+'</th>').join('')}</tr></thead><tbody>${table.rows.map(r=>'<tr>'+r.cells.map(c=>'<td>'+escape(c||'\u00a0')+'</td>').join('')+'</tr>').join('')}</tbody></table></section>`).join('');
+  }
+  function permitEditors(preview,ctx) {
+    return ctx.permitDraft.tables.map(table=>{
+      const choices=permitModel.tablePeople(table,preview.people);
+      return `<details class="hfd-permit-editor-table" open><summary>${escape(table.title||'Boarding Officer / Driver')} · ${table.rows.length} แถว</summary><label>ชื่อหัวข้อของตาราง<input data-permit-title="${table.key}" maxlength="120" value="${escape(table.title)}"></label><div class="hfd-permit-edit-scroll"><table><thead><tr>${table.headers.map((h,i)=>'<th><input aria-label="'+escape(table.key+' header '+(i+1))+'" data-permit-header="'+table.key+'" data-col="'+i+'" maxlength="80" value="'+escape(h)+'"></th>').join('')}<th>แถว</th></tr></thead><tbody>${table.rows.map((r,n)=>'<tr>'+r.cells.map((c,i)=>'<td>'+(table.fields[i]==='name'?'<select aria-label="เลือกคน '+escape(table.key)+' แถว '+(n+1)+'" data-permit-person="'+table.key+'" data-row="'+r.id+'"><option value="">เลือกคน / กรอกเอง</option>'+choices.map(p=>'<option value="'+escape(p.id)+'" '+(p.id===r.personId?'selected':'')+'>'+escape(p.name+' · '+p.category)+'</option>').join('')+'</select>':'')+'<input aria-label="'+escape(table.key+' row '+r.id+' column '+(i+1))+'" data-permit-cell="'+table.key+'" data-row="'+r.id+'" data-col="'+i+'" maxlength="300" value="'+escape(c)+'"></td>').join('')+'<td><button type="button" class="hfo-btn danger" data-permit-remove="'+table.key+'" data-row="'+r.id+'" aria-label="ลบ '+escape(table.title||table.key)+' แถว '+(n+1)+'">− ลบ</button></td></tr>').join('')}</tbody></table></div><button type="button" class="hfo-btn" data-permit-add="${table.key}">+ เพิ่มแถว</button></details>`;
+    }).join('');
+  }
+  function refreshPermit(host,ctx){
+    host.querySelector('#hfdPermitTables').innerHTML=permitPaperTables(ctx);
+    host.querySelector('#hfdPermitSubjectOut').textContent=ctx.permitDraft.subject;
+  }
+  function permitPreview(preview,ctx,profile) {
+    ctx.issueDate ||= localDate();ctx.permitDate ||= dateOnly(preview.job.eta);
+    const scope=JSON.stringify(preview.scope);
+    if(ctx.permitScope!==scope){ctx.permitDraft=permitModel.newPermitDraft();ctx.permitScope=scope;}
+    ctx.permitDraft=permitModel.revalidateDraft(ctx.permitDraft||permitModel.newPermitDraft(),preview.people);
+    const saved=profile.values,disabled=profile.canSave?'':'disabled';
+    return `<p class="hfd-notice">ร่างทดลอง · ใช้รายชื่อสมมติที่ได้รับสิทธิ์ดู · การแก้ตารางไม่เปลี่ยน Crew members หรือ Job</p>
+      <div class="hfd-oktb-editor hfd-permit-editor">
+        <label class="hfd-permit-subject">Subject<input id="hfdPermitSubject" maxlength="500" value="${escape(ctx.permitDraft.subject)}"></label>
+        <label>Vessel · มาจาก Job<input readonly value="${escape(preview.job.vessel)}"></label>
+        <label>at · Port / Terminal จาก Job<input readonly value="${escape(permitModel.permitLocation(preview.job))}"></label>
+        <label>Date · วันที่ออกเอกสาร<input id="hfdIssueDate" type="date" value="${escape(ctx.issueDate)}"></label>
+        <label>on · วันที่เข้าดำเนินการ<input id="hfdPermitDate" type="date" value="${escape(ctx.permitDate)}"></label>
+        <label>Contact person<input id="hfdContact" maxlength="200" value="${escape(saved.contact||'')}" ${disabled}></label>
+        <label>เบอร์โทร<input id="hfdPhone" maxlength="200" value="${escape(saved.phone||'')}" ${disabled}></label>
+        <label>ชื่อผู้ลงนาม<input id="hfdSigner" maxlength="200" value="${escape(saved.signer||'')}" ${disabled}></label>
+        <label>ภาพลายเซ็นสำหรับตรวจร่าง<input id="hfdSignature" type="file" accept="image/png,image/jpeg" ${disabled}>${profile.canSave?'<button type="button" class="hfo-btn" data-clear-signature>ลบลายเซ็นที่จำไว้</button>':''}</label>
+      </div><p id="hfdSaveStatus" role="status">ข้อมูลผู้ติดต่อใช้ค่าที่จำไว้ตามบัญชี · ตารางแก้เฉพาะร่างนี้</p>
+      <details class="hfd-oktb-settings" open><summary>เลือกคน / แก้ไขหัวข้อและรายละเอียดตาราง</summary><div id="hfdPermitEditors">${permitEditors(preview,ctx)}</div></details>
+      <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page hfd-permit-page" aria-label="Terminal Permit draft">
+        <div class="hfd-loi-letterhead"><div class="hfd-oktb-logo" role="img" aria-label="GAC"></div><div><b>บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด</b><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p>26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400 &nbsp; Fax +66-2-650 7401 &nbsp; E-mail shipping.thailand@gac.com</p></div></div>
+        <p class="hfd-permit-issued"><span id="hfdIssuedDate">${displayDate(ctx.issueDate)}</span></p>
+        <p>Subject: <span id="hfdPermitSubjectOut">${escape(ctx.permitDraft.subject)}</span></p><p>Dear Marine Operation Division</p>
+        <p class="hfd-permit-intro">Gulf Agency Company (Thailand) LTD. has been appointed of the subject vessel "${escape(preview.job.vessel||'[Vessel not set in Job]')}"</p>
+        <p>at ${escape(permitModel.permitLocation(preview.job))} on <span id="hfdPermitDateOut">${displayDate(ctx.permitDate)}</span> during her operations</p>
+        <div id="hfdPermitTables">${permitPaperTables(ctx)}</div>
+        <p class="hfd-permit-closing">We would be grateful to terminal approve permission.</p>
+        <div class="hfd-permit-signoff"><p>Thank you &amp; Best regards,</p><div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" ${saved.signature?`src="${escape(saved.signature)}"`:'hidden'}><span id="hfdSignaturePlaceholder" ${saved.signature?'hidden':''}>Signature pending owner approval</span></div><p>(<span id="hfdSignerOut">${escape(saved.signer||'[signatory not set]')}</span>)<br>Operations Coordinator, Shipping Services<br>Mobile: <span id="hfdPhoneOut">${escape(saved.phone||'[phone not set]')}</span><br>As Agents Only</p></div>
+        <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
+      </article></div><p class="hfd-warning">ร่างยังไม่อนุมัติ ห้ามใช้ยื่นจริง · หัวข้อและแถวที่แก้ใช้ในร่างนี้ ไม่บันทึกข้อมูลบุคคลกลับ Job</p>
+      <button type="button" class="secondary" data-download-permit>ดาวน์โหลด PDF (ร่าง)</button>`;
+  }
   function loiPerson(preview,ctx) {
     const person=preview.people.find(person=>person.id===ctx.loiPersonId);
     return person?{...person,...ctx.loiDetails?.[person.id]}:null;
@@ -254,8 +303,20 @@
     host.querySelector('[data-download-loi]').disabled=!ctx.loiPersonId||!text;
   }
   function bind(host, preview, ctx, profile, options, airlineNames) {
+    if(host._hfdBindings){host._hfdBindings.abort();activeBindings.delete(host._hfdBindings);}
+    const controller=new AbortController();host._hfdBindings=controller;activeBindings.add(controller);
     host.addEventListener('input', event => {
       const target = event.target;
+      if(options.type==='permit'){
+        if(target.id==='hfdPermitSubject'){ctx.permitDraft.subject=target.value;refreshPermit(host,ctx);}
+        if(target.id==='hfdPermitDate'){ctx.permitDate=target.value;host.querySelector('#hfdPermitDateOut').textContent=displayDate(target.value);}
+        const key=target.dataset.permitTitle||target.dataset.permitHeader||target.dataset.permitCell;
+        if(key){const table=ctx.permitDraft.tables.find(t=>t.key===key);if(target.dataset.permitTitle)table.title=target.value;
+          else if(target.dataset.permitHeader)table.headers[Number(target.dataset.col)]=target.value;
+          else table.rows.find(r=>r.id===target.dataset.row).cells[Number(target.dataset.col)]=target.value;
+          refreshPermit(host,ctx);
+        }
+      }
       const fields = { hfdAirline:'hfdAirlineOut', hfdContact:'hfdContactOut', hfdPhone:'hfdPhoneOut', hfdSigner:'hfdSignerOut' };
       const output = host.querySelector('#' + fields[target.id]);
       if (output) output.textContent = target.value || '[not set]';
@@ -269,9 +330,10 @@
       }
       if (target.id === 'hfdIssueDate') { ctx.issueDate = target.value; host.querySelector('#hfdIssuedDate').textContent = displayDate(target.value); }
       if (target.id === 'hfdArrivalInput') { ctx.arrivalDate = target.value; for (const id of ['hfdArrivalDate','hfdEmbarkDate']) host.querySelector('#' + id).textContent = displayDate(target.value); }
-    });
+    },{signal:controller.signal});
     host.addEventListener('change', async event => {
       const target = event.target;
+      if(target.dataset.permitPerson){const table=ctx.permitDraft.tables.find(t=>t.key===target.dataset.permitPerson),r=table.rows.find(r=>r.id===target.dataset.row),person=permitModel.tablePeople(table,preview.people).find(p=>p.id===target.value);permitModel.choosePerson(table,r,person);host.querySelector('#hfdPermitEditors').innerHTML=permitEditors(preview,ctx);refreshPermit(host,ctx);}
       if (target.id === 'hfdEmbassy') {ctx.embassy=target.value;updateLoiEmbassy(host,ctx);}
       if (target.id === 'hfdLoiPerson') {ctx.loiPersonId=target.value;mount(host,options);return;}
       if (keys[target.id]) remember(host, profile, { [keys[target.id]]:target.value });
@@ -290,10 +352,29 @@
           remember(host, profile, { signature });
         } catch(error) { message(host, error.message, true); }
       }
-    });
+    },{signal:controller.signal});
     host.addEventListener('click', async event => {
       const target = event.target.closest('button');
       if (!target) return;
+      if(target.dataset.permitAdd||target.dataset.permitRemove){
+        const table=ctx.permitDraft.tables.find(t=>t.key===(target.dataset.permitAdd||target.dataset.permitRemove));
+        if(target.dataset.permitAdd){if(table.rows.length>=100){message(host,'จำกัด 100 แถวต่อกลุ่มในช่วงทดลอง',true);return;}table.rows.push(permitModel.blankRow(table,table.rows.length));}
+        else table.rows=table.rows.filter(r=>r.id!==target.dataset.row);
+        host.querySelector('#hfdPermitEditors').innerHTML=permitEditors(preview,ctx);refreshPermit(host,ctx);return;
+      }
+      if(target.hasAttribute('data-download-permit')){
+        try{
+          await profile.queue;
+          const fresh=await get({action:'preview',jobId:options.jobId,serviceId:options.serviceId,type:'permit'});
+          if(account!==profile||fresh.login!==options.login)throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
+          if(JSON.stringify(fresh.preview.scope)!==JSON.stringify(preview.scope)){
+            clear();host.replaceChildren();throw Error('สิทธิ์ Crew/Visitor เปลี่ยน กรุณาเปิดเอกสารใหม่');
+          }
+          if(JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job)||JSON.stringify(fresh.preview.people)!==JSON.stringify(preview.people))throw Error('ข้อมูล Job หรือรายชื่อเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจตารางก่อนดาวน์โหลด');
+          await window.HarborFlowOktbPdf.downloadPermit({preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF ร่างแล้ว');
+        }catch(error){if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}else if(host.querySelector('#hfdSaveStatus'))message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);else host.textContent=error.message;}
+        return;
+      }
       if (target.dataset.selectCrew) {
         ctx.selected = target.dataset.selectCrew === 'all' ? new Set(preview.people.map(person => person.id)) : new Set();
         updateSelected(host, preview, ctx, airlineNames);
@@ -326,7 +407,7 @@
         }
       }
       if (target.hasAttribute('data-document-retry')) mount(host, options);
-    });
+    },{signal:controller.signal});
   }
   async function mount(host, options) {
     if (!host) return;
@@ -341,7 +422,7 @@
       await profile.queue;
       const [data, prefs, airlineNames] = await Promise.all([
         get({action:'preview', jobId:options.jobId, serviceId:options.serviceId, type:options.type}),
-        ['oktb','loi'].includes(options.type) ? get({action:'preferences'}) : Promise.resolve(null),
+        ['oktb','loi','permit'].includes(options.type) ? get({action:'preferences'}).catch(error=>{if(options.type==='permit' && error.status===403)return {login:options.login,preferences:{},canSave:false};throw error;}) : Promise.resolve(null),
         options.type === 'oktb' ? loadAirlineNames() : Promise.resolve(new Map())
       ]);
       if (gen !== generation || !host.isConnected || account !== profile) return;
@@ -352,8 +433,10 @@
         const available = new Set(data.preview.people.map(person => person.id));
         ctx.selected = ctx.selected ? new Set([...ctx.selected].filter(id => available.has(id))) : new Set(data.preview.people.filter(person => person.category === 'On-signers').map(person => person.id));
       }
+      if(options.type==='permit')permitModel=await import('./permit-draft.mjs');
+      if(gen!==generation||!host.isConnected||account!==profile)return;
       host.innerHTML = '<div class="hfd-header"><h3>' + escape(labels[options.type]) + '</h3><span class="hfd-badge">Draft</span></div>' +
-        (options.type === 'oktb' ? oktbPreview(data.preview, ctx, profile, airlineNames) : options.type === 'loi' ? loiPreview(data.preview,ctx,profile) : genericPreview(data.preview));
+        (options.type === 'oktb' ? oktbPreview(data.preview, ctx, profile, airlineNames) : options.type === 'loi' ? loiPreview(data.preview,ctx,profile) : options.type==='permit'?permitPreview(data.preview,ctx,profile):genericPreview(data.preview));
       bind(host, data.preview, ctx, profile, options, airlineNames);
     } catch(error) {
       if (gen !== generation || !host.isConnected) return;

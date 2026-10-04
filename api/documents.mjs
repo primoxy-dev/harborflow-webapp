@@ -60,7 +60,7 @@ export function createDocumentsRoute(deps = {}) {
         (!['oktb','loi'].includes(type) || person.kind === 'crew') && (!serviceId || person.data.serviceIds?.includes(serviceId)));
       // Travel contains passengers from both categories; require both to include it.
       const trips = crew && visitor ? await sql.query("SELECT data FROM operation_trips WHERE job_id=$1 AND removed_at IS NULL AND data->>'kind' IN ('car','boat') ORDER BY created_at", [jobId]) : [];
-      return json({ login, preview: buildDocumentPreview(type, job, allowedPeople, trips, { crewDetails: crew }) });
+      return json({ login, preview: buildDocumentPreview(type, job, allowedPeople, trips, { crewDetails: crew, visitorDetails: visitor }) });
     } catch {
       return fail('Document service temporarily unavailable. Please retry.', 503);
     }
