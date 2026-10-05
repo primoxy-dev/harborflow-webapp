@@ -2,7 +2,7 @@ import { nodeHandler, json, sameOrigin, sessionLogin } from '../lib/harborflow.m
 import { canPeople, db, permission, uuid } from '../lib/operations.mjs';
 import { buildDocumentPreview, documentTypes } from '../lib/document-preview.mjs';
 import { readSettings, saveSettings } from '../lib/document-settings.mjs';
-import {readPermitDefaults,savePermitDefaults} from '../lib/permit-defaults.mjs';
+import {readPermitDefaults,savePermitDefaults,configuredPermitSeed} from '../lib/permit-defaults.mjs';
 
 const fail = (message, status) => json({ error: message }, status);
 
@@ -43,7 +43,8 @@ export function createDocumentsRoute(deps = {}) {
       const action = url.searchParams.get('action');
       if(action==='permitDefaults'){
         if(!visitor)return fail('Separate Visitor view permission required',403);
-        return json({login,...await readPermitDefaults(sql,login),canSave:grant.role==='owner'});
+        const seed=grant.role==='owner'?configuredPermitSeed(deps.permitSeed||process.env.HARBORFLOW_PERMIT_DEFAULTS_JSON):null;
+        return json({login,...await readPermitDefaults(sql,login,seed),canSave:grant.role==='owner'});
       }
       if (action === 'preferences') {
         if (!crew) return fail('Separate Crew view permission required', 403);
@@ -78,4 +79,3 @@ export function createDocumentsRoute(deps = {}) {
 }
 
 export default nodeHandler(createDocumentsRoute());
-

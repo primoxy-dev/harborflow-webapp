@@ -17,7 +17,7 @@ export function shortDate(value){
 export function blankRow(table,n){return {id:crypto.randomUUID(),personId:'',cells:table.fields.map(f=>f==='no'?String(n+1)+'.':'')};}
 export function newPermitDraft(){return {subject:DEFAULT_SUBJECT,tables:PERMIT_TABLES.map(t=>({...t,fields:[...t.fields],headers:[...t.headers],rows:[blankRow(t,0)]}))};}
 export function applyPermitDefaults(draft,defaults){
- for(const key of ['staff','car']){
+ for(const key of ['agent','staff','car']){
   const table=draft.tables.find(t=>t.key===key);
   table.rows=(defaults?.[key]||[]).map(cells=>({...blankRow(table,0),cells:[...cells]}));
   if(!table.rows.length)table.rows=[blankRow(table,0)];
