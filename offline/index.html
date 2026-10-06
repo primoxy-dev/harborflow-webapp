@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HarborFlow · Offline Documents</title><link rel="stylesheet" href="../documents.css"><link rel="stylesheet" href="style.css"></head>
+<body><main>
+<header><div><h1>HarborFlow · Documents</h1><p>OKTB / LOI / Terminal Permit · Online & Offline</p></div><a href="/">กลับระบบ Online</a></header>
+<p id="connection" role="status"></p><p id="ready" role="status">กำลังเตรียมแบบฟอร์มสำหรับใช้ Offline…</p>
+<aside>โหมดทดลองบนเครื่อง · ใช้ข้อมูลสมมติเท่านั้น ไม่ดึง Job / ลูกเรือ / ค่าเริ่มต้นส่วนตัวจากเซิร์ฟเวอร์ ไม่ซิงค์และไม่อนุมัติเอกสารอัตโนมัติ ร่างที่บันทึกไม่เข้ารหัสและคนที่ใช้เบราว์เซอร์นี้อาจเปิดดูได้</aside>
+<section class="card"><h2>ข้อมูลเอกสารบนเครื่อง</h2><div id="jobFields" class="fields"></div></section>
+<section class="card"><h2>Crew members</h2><button id="addPerson" type="button">+ เพิ่มคน</button><div id="people"></div></section>
+<section class="card"><div class="toolbar"><label>เอกสาร <select id="type"><option value="oktb">OKTB</option><option value="loi">LOI</option><option value="permit">Terminal Permit</option></select></label><button id="save" type="button">บันทึกร่างบนเครื่อง</button><button id="load" type="button">เปิดร่างที่บันทึก</button><button id="remove" type="button">ลบร่างบนเครื่อง</button></div><label><input id="ack" type="checkbox"> ยืนยันว่าใช้ข้อมูลสมมติ และอนุญาตเก็บร่างในเบราว์เซอร์เครื่องนี้ไม่เกิน 7 วัน</label><p id="status" role="status"></p></section>
+<section id="document" class="card"></section>
+</main><script src="../oktb-pdf.js"></script><script src="../documents.js"></script><script type="module" src="app.mjs"></script></body></html>

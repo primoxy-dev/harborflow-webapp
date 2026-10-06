@@ -36,6 +36,7 @@
   }
   function remember(host, profile, patch) {
     Object.assign(profile.values, patch);
+    if (profile.localOnly) { message(host, 'แก้ร่างบนเครื่องแล้ว · กดบันทึกร่างเพื่อเก็บไว้ ไม่มีการส่งขึ้นเซิร์ฟเวอร์'); return; }
     if (!profile.loaded || !profile.canSave || profile.blocked) return;
     message(host, 'กำลังบันทึก…');
     profile.pending++;
@@ -303,6 +304,7 @@
     host.querySelector('[data-download-loi]').disabled=!ctx.loiPersonId||!text;
   }
   function bind(host, preview, ctx, profile, options, airlineNames) {
+    const get = options.localTransport?.get || window.HarborFlowDocuments.request;
     if(host._hfdBindings){host._hfdBindings.abort();activeBindings.delete(host._hfdBindings);}
     const controller=new AbortController();host._hfdBindings=controller;activeBindings.add(controller);
     host.addEventListener('input', event => {
@@ -414,9 +416,16 @@
     if (!host) return;
     const gen = generation;
     const profile = accountState(options.login);
+    profile.localOnly = Boolean(options.localTransport);
+    const get = options.localTransport?.get || window.HarborFlowDocuments.request;
     const key = [options.login, options.jobId, options.serviceId, options.type].join(':');
     if (!contexts.has(key)) contexts.set(key, {});
     const ctx = contexts.get(key);
+    if (options.initialDraft && !ctx.restored) {
+      Object.assign(ctx, structuredClone(options.initialDraft));
+      if (Array.isArray(ctx.selected)) ctx.selected = new Set(ctx.selected);
+      ctx.restored = true;
+    }
     host.innerHTML = '<p role="status">กำลังโหลด ' + escape(labels[options.type]) + '…</p>';
     try {
       // Finish this account's pending saves before reloading its defaults.
@@ -424,7 +433,7 @@
       const [data, prefs, airlineNames] = await Promise.all([
         get({action:'preview', jobId:options.jobId, serviceId:options.serviceId, type:options.type}),
         ['oktb','loi','permit'].includes(options.type) ? get({action:'preferences'}).catch(error=>{if(options.type==='permit' && error.status===403)return {login:options.login,preferences:{},canSave:false};throw error;}) : Promise.resolve(null),
-        options.type === 'oktb' ? loadAirlineNames() : Promise.resolve(new Map())
+        options.type === 'oktb' && !options.localTransport ? loadAirlineNames() : Promise.resolve(new Map())
       ]);
       if (gen !== generation || !host.isConnected || account !== profile) return;
       if (data.login !== options.login || (prefs && prefs.login !== options.login)) throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
@@ -451,5 +460,9 @@
       host.querySelector('[data-document-retry]').addEventListener('click', () => mount(host, options));
     }
   }
-  window.HarborFlowDocuments = { mount, clear };
+  function snapshot(options) {
+    const ctx = contexts.get([options.login, options.jobId, options.serviceId, options.type].join(':')) || {};
+    return { draft: JSON.parse(JSON.stringify(ctx, (_, value) => value instanceof Set ? [...value] : value)), preferences: { ...(account?.values || {}) } };
+  }
+  window.HarborFlowDocuments = { mount, clear, snapshot, request: get };
 })();

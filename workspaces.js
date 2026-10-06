@@ -44,6 +44,8 @@
   }
   // Insertion after the same anchor reverses order; put Operations first.
   anchor.after(sidebar.querySelectorAll('.workspace-group')[1]);
+  const offlineLink=document.createElement('a');offlineLink.className='nav';offlineLink.href='/offline/';offlineLink.textContent='▧ Documents · Online / Offline';offlineLink.title='แบบฟอร์มบนเครื่อง · ข้อมูลสมมติเท่านั้น';
+  sidebar.querySelector('.workspace-group').append(offlineLink);
   const marketing=sidebar.querySelector('[data-view="marketing"]');
   const business=document.createElement('div'); business.className='group'; business.textContent='Business Development';
   const last=sidebar.querySelectorAll('.workspace-group')[1]; last.after(business); business.after(marketing);
@@ -82,4 +84,3 @@
     } catch(error){if(own===request)section.innerHTML='<div class="panel" role="alert">'+escape(error.message)+'</div>';}
   }
 })();
-
