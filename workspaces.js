@@ -3,7 +3,7 @@
   const sidebar = document.getElementById('primaryNav');
   if (!sidebar) return;
   const groups = [
-    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','All Services','☷'],['alerts','Smart Alerts','⚑']]],
+    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','All Services','☷'],['alerts','Smart Alerts','⚑'],['outlook','Outlook','✉']]],
     ['Quotation & Payments', [['commercial','Quotation / PDA / FDA','◫'],['pv','Payment Voucher','▧'],['price','Price Master','¤'],['approvals','Approvals','✓']]]
   ];
   const title = document.getElementById('title');
@@ -31,6 +31,7 @@
       if (!button) { button=document.createElement('button'); button.type='button'; button.className='nav'; button.dataset.view=id; }
       button.innerHTML=`<i aria-hidden="true">${icon}</i><span class="nav-label">${label}</span>`; button.setAttribute('aria-label',label); button.title=label;
       button.addEventListener('click',()=>{
+        if(id==='outlook') { window.HarborFlowOutlook.open(); return; }
         document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));
         sidebar.querySelectorAll('.nav').forEach(b=>b.classList.toggle('active',b===button));
         title.textContent=label; crumb.textContent=name+' / '+label;
