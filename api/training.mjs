@@ -85,14 +85,17 @@ async function handleCrew({ action, input, vesselId, login, sql }) {
     const { value, error: invalid } = validateCrewProfile(input.data);
     if (invalid) return error(invalid, 400);
     const [row] = await sql.query(`WITH updated AS (
-      UPDATE training_crew SET display_name=$1,rank=$2,department=$3,active=$4,
+      UPDATE training_crew c SET display_name=$1,rank=$2,department=$3,active=$4,
         version=version+1,updated_at=now()
-      WHERE id=$5 AND version=$6 AND removed_at IS NULL RETURNING *
+      WHERE c.id=$5 AND c.version=$6 AND c.removed_at IS NULL
+        AND ($7::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM training_crew_assignments a WHERE a.crew_id=c.id
+            AND a.vessel_id=$7 AND a.removed_at IS NULL)) RETURNING c.*
     ), event AS (
       INSERT INTO training_events(scope,record_id,action,actor,after_data)
-      SELECT 'crew',id,'update',$7,to_jsonb(updated) FROM updated
+      SELECT 'crew',id,'update',$8,to_jsonb(updated) FROM updated
     ) SELECT * FROM updated`,
-    [value.displayName, value.rank, value.department, value.active, input.id, input.version, login]);
+    [value.displayName, value.rank, value.department, value.active, input.id, input.version, vesselId || null, login]);
     return row ? json({ crew: row }) : error('Concurrent change; reload crew profile', 409);
   }
   if (action === 'crew.link') {
@@ -663,7 +666,7 @@ async function handleSetup({ action, input, vesselId, login, grant, sql }) {
   if (action === 'vessels.list') {
     const vessels = vesselId
       ? await sql.query('SELECT * FROM training_vessels WHERE id=$1 AND removed_at IS NULL', [vesselId])
-      : ['officer','viewer'].includes(grant?.role)
+      : ['officer','viewer'].includes(grant?.role) || grant?.vesselIds?.length
         ? await sql.query(`SELECT v.* FROM training_vessels v
             JOIN training_vessel_assignments a ON a.vessel_id=v.id
             WHERE a.officer_login=$1 AND a.removed_at IS NULL AND v.removed_at IS NULL
