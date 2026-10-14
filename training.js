@@ -1,7 +1,7 @@
 /* Crew Training trial: fictional or de-identified records only. No browser storage. */
 (() => {
   const tabs = ['Overview', 'Calendar', 'Crew', 'Training Matrix', 'Courses & Sessions', 'Certificates'];
-  const state = { root: null, tab: 'Overview', vesselId: '', vessels: [],
+  const state = { root: null, tab: 'Overview', vesselId: '', proposingSessionId: '', vessels: [],
     crew: [], courses: [], sessions: [], enrollments: [], certificates: [], rules: [] };
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -64,6 +64,28 @@
     return data;
   }
   const formData = form => Object.fromEntries(new FormData(form).entries());
+  const localDateTimeToIso = value => {
+    const selected = new Date(value);
+    if (!value || Number.isNaN(selected.getTime())) throw Error('Choose a valid date and time');
+    const offset = -selected.getTimezoneOffset();
+    const sign = offset < 0 ? '-' : '+';
+    const hours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
+    const minutes = String(Math.abs(offset) % 60).padStart(2, '0');
+    return `${value.slice(0, 16)}:00${sign}${hours}:${minutes}`;
+  };
+  const withSelectedTimes = data => {
+    const startsAt = localDateTimeToIso(data.startsAt);
+    const endsAt = localDateTimeToIso(data.endsAt);
+    if (Date.parse(endsAt) <= Date.parse(startsAt)) throw Error('End must be after Start');
+    return { ...data, startsAt, endsAt };
+  };
+  const localDateTimeValue = value => {
+    const selected = new Date(value);
+    if (Number.isNaN(selected.getTime())) return '';
+    const pad = part => String(part).padStart(2, '0');
+    return `${selected.getFullYear()}-${pad(selected.getMonth() + 1)}-${pad(selected.getDate())}T${pad(selected.getHours())}:${pad(selected.getMinutes())}`;
+  };
+  const localZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Bangkok';
   const empty = text => `<p class="training-empty">${esc(text)}</p>`;
   const header = (title, note) => `<div class="training-section-head"><div><h3>${title}</h3><p>${note}</p></div></div>`;
 
@@ -169,8 +191,8 @@
         ${select('Crew', 'crewId', crewOptions())}
         ${select('Vessel', 'vesselId', vesselOptions())}
         ${select('Kind', 'kind', ['available','duty','travel','leave'].map(x => option(x,x)).join(''))}
-        ${box('Start (ISO with offset)', 'startsAt', 'required placeholder="2026-10-15T09:00+07:00"')}
-        ${box('End (ISO with offset)', 'endsAt', 'required placeholder="2026-10-15T17:00+07:00"')}
+        ${box('Start date & time (local)', 'startsAt', 'type="datetime-local" required')}
+        ${box('End date & time (local)', 'endsAt', 'type="datetime-local" required')}
         ${box('Source', 'source', 'required placeholder="Officer verified"')}${submit('Record availability')}</form></div>
         <div class="training-card"><h3>Readiness by crew</h3>
         <form data-training-form="readiness" class="training-form">
@@ -213,9 +235,9 @@
         <form data-training-form="session-create" class="training-form">
         ${select('Course', 'courseId', courseOptions())}
         ${select('Vessel', 'vesselId', vesselOptions())}
-        ${box('Start (ISO with offset)', 'startsAt', 'required placeholder="2026-10-15T09:00+07:00"')}
-        ${box('End (ISO with offset)', 'endsAt', 'required placeholder="2026-10-15T12:00+07:00"')}
-        ${box('IANA time zone', 'displayZone', 'required value="Asia/Bangkok"')}
+        ${box('Start date & time (local)', 'startsAt', 'type="datetime-local" required')}
+        ${box('End date & time (local)', 'endsAt', 'type="datetime-local" required')}
+        ${box('Time zone (your device)', 'displayZone', 'required readonly value="' + esc(localZone()) + '"')}
         ${box('Instructor', 'instructor')}${box('Venue', 'venue')}
         ${box('Capacity', 'capacity', 'type="number" min="1" required')}${submit('Create draft')}</form></div></div>
         <div class="training-grid"><div class="training-card"><h3>Enroll crew</h3>
@@ -236,7 +258,11 @@
           `<button type="button" data-training-action="propose-session" data-id="${esc(s.id)}">Propose change</button>` : ''}
         ${s.state === 'proposed' ? `<button type="button" data-training-action="confirm-session" data-id="${esc(s.id)}">Confirm</button>` : ''}
         ${s.state === 'confirmed' ? `<button type="button" data-training-action="complete-session" data-id="${esc(s.id)}">Complete</button>` : ''}
-        ${['draft','proposed','confirmed'].includes(s.state) ? `<button type="button" data-training-action="cancel-session" data-id="${esc(s.id)}">Cancel</button>` : ''}</div></td></tr>`).join('')}</tbody></table></div>
+        ${['draft','proposed','confirmed'].includes(s.state) ? `<button type="button" data-training-action="cancel-session" data-id="${esc(s.id)}">Cancel</button>` : ''}</div></td></tr>
+        ${state.proposingSessionId === s.id ? `<tr><td colspan="5"><form data-training-form="session-propose" data-session-id="${esc(s.id)}" class="training-form">
+          ${box('New start date & time (local)', 'startsAt', 'type="datetime-local" required value="' + esc(localDateTimeValue(s.starts_at)) + '"')}
+          ${box('New end date & time (local)', 'endsAt', 'type="datetime-local" required value="' + esc(localDateTimeValue(s.ends_at)) + '"')}
+          ${submit('Submit proposal')}</form></td></tr>` : ''}`).join('')}</tbody></table></div>
         ${state.sessions.length ? '' : empty('No sessions yet.')}</div>`;
       return;
     }
@@ -269,17 +295,26 @@
       return;
     }
     if (kind === 'certificate-upload') { await upload(form); return; }
+    if (kind === 'session-propose') {
+      const session = state.sessions.find(s => s.id === form.dataset.sessionId);
+      if (!session) throw Error('Session no longer exists');
+      await post('sessions.propose', { id: session.id, version: session.version,
+        data: { ...withSelectedTimes(data), displayZone: localZone(),
+          instructor: session.instructor, venue: session.venue } });
+      state.proposingSessionId = '';
+      return;
+    }
     const actions = {
       'vessel-create': ['vessels.create', { data }],
       'grant-set': ['grants.set', data],
       'officer-assign': ['officers.assign', data],
       'crew-create': ['crew.create', { data }],
       'assignment-create': ['assignments.create', { data }],
-      'availability-set': ['availability.set', { vesselId: data.vesselId, crewId: data.crewId, data }],
+      'availability-set': ['availability.set', { vesselId: data.vesselId, crewId: data.crewId, data: withSelectedTimes(data) }],
       'course-create': ['courses.create', { data: { ...data, durationMinutes: Number(data.durationMinutes) } }],
       'matrix-draft': ['matrix.draft', { data: { ...data, recurrenceMonths: data.recurrenceMonths ? Number(data.recurrenceMonths) : null,
         dueDaysBeforeJoin: Number(data.dueDaysBeforeJoin || 0) } }],
-      'session-create': ['sessions.create', { data: { ...data, vesselId: data.vesselId || state.vesselId || null,
+      'session-create': ['sessions.create', { data: { ...withSelectedTimes(data), vesselId: data.vesselId || state.vesselId || null,
         capacity: Number(data.capacity) } }],
       'enrollment-add': ['enrollments.add', { sessionId: data.sessionId, crewId: data.crewId,
         idempotencyKey: crypto.randomUUID() }],
@@ -311,15 +346,6 @@
         if (!reason) return;
         await post('sessions.cancel', { id, version: session.version, reason });
       }
-      if (action === 'propose-session') {
-        const startsAt = prompt('New start · ISO with offset (example 2026-10-15T09:00+07:00)');
-        if (!startsAt) return;
-        const endsAt = prompt('New end · ISO with offset');
-        if (!endsAt) return;
-        await post('sessions.propose', { id, version: session.version,
-          data: { startsAt, endsAt, displayZone: session.display_zone,
-            instructor: session.instructor, venue: session.venue } });
-      }
     }
   }
 
@@ -335,6 +361,11 @@
       if (event.target.closest('[data-training-refresh]')) { await refresh(); return; }
       const action = event.target.closest('[data-training-action]');
       if (action) {
+        if (action.dataset.trainingAction === 'propose-session') {
+          state.proposingSessionId = action.dataset.id;
+          await render();
+          return;
+        }
         try { await clickAction(action); await refresh(); message('Saved', 'success'); }
         catch (e) { message(e.conflicts ? e.message + ' · ' + JSON.stringify(e.conflicts) : e.message, 'error'); }
       }
