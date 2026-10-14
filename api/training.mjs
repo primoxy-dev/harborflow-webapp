@@ -251,7 +251,7 @@ async function sessionConflicts(sql, row, proposed) {
     'SELECT crew_id FROM training_enrollments WHERE session_id=$1 AND removed_at IS NULL', [row.id]);
   const crewIds = enrollmentRows.map(x => x.crew_id);
   if (!crewIds.length) return { hard: [], unknown: [] };
-  const [otherRows, availabilityRows, assignmentRows] = await Promise.all([
+  const [otherRows, availabilityRows, assignmentRows, courseRows, resultRows] = await Promise.all([
     sql.query(`SELECT e.crew_id,s.starts_at,s.ends_at,s.state FROM training_enrollments e
       JOIN training_sessions s ON s.id=e.session_id
       WHERE e.crew_id=ANY($1::uuid[]) AND e.session_id<>$2 AND e.removed_at IS NULL
@@ -259,15 +259,29 @@ async function sessionConflicts(sql, row, proposed) {
     sql.query(`SELECT crew_id,kind,starts_at,ends_at FROM training_availability
       WHERE crew_id=ANY($1::uuid[]) AND removed_at IS NULL`, [crewIds]),
     sql.query(`SELECT crew_id,joins_on FROM training_crew_assignments
-      WHERE crew_id=ANY($1::uuid[]) AND vessel_id=$2 AND removed_at IS NULL`, [crewIds, row.vessel_id])
+      WHERE crew_id=ANY($1::uuid[]) AND vessel_id=$2 AND removed_at IS NULL`, [crewIds, row.vessel_id]),
+    sql.query('SELECT prerequisites FROM training_courses WHERE id=$1', [row.course_id]),
+    sql.query(`SELECT DISTINCT ON (e.id) e.crew_id,c.code,o.attendance,o.assessment
+      FROM training_outcomes o JOIN training_enrollments e ON e.id=o.enrollment_id
+      JOIN training_sessions s ON s.id=e.session_id
+      JOIN training_courses c ON c.id=s.course_id
+      WHERE e.crew_id=ANY($1::uuid[])
+      ORDER BY e.id,o.version DESC`, [crewIds])
   ]);
+  const requiredCodes = Array.isArray(courseRows[0]?.prerequisites) ? courseRows[0].prerequisites : [];
+  const prerequisites = crewIds.flatMap(crewId => requiredCodes.map(courseId => ({
+    crewId, courseId, satisfied: resultRows.some(result =>
+      result.crew_id === crewId && result.code === courseId &&
+      result.attendance === 'present' && result.assessment === 'passed')
+  })));
   return detectTrainingConflicts({
     session: { startsAt: proposed.startsAt, endsAt: proposed.endsAt,
       displayZone: proposed.displayZone, capacity: row.capacity },
     crewIds, enrolledCount: 0,
     otherSessions: otherRows.map(x => ({ crewId: x.crew_id, startsAt: x.starts_at, endsAt: x.ends_at, state: x.state })),
     availability: availabilityRows.map(x => ({ crewId: x.crew_id, kind: x.kind, startsAt: x.starts_at, endsAt: x.ends_at })),
-    assignments: assignmentRows.map(x => ({ crewId: x.crew_id, joinsOn: x.joins_on }))
+    assignments: assignmentRows.map(x => ({ crewId: x.crew_id, joinsOn: x.joins_on })),
+    prerequisites
   });
 }
 
@@ -294,7 +308,7 @@ async function handleSessions({ action, input, vesselId, login, sql }) {
   }
   if (action === 'sessions.create') {
     const data = input.data || {};
-    if (!uuid(data.courseId) || (data.vesselId && !uuid(data.vesselId)) ||
+    if (!uuid(data.courseId) || !uuid(data.vesselId) ||
         (vesselId && data.vesselId !== vesselId)) return error('Invalid course or vessel', 400);
     const invalid = validateSessionTime(data);
     if (invalid) return error(invalid, 400);
@@ -308,7 +322,7 @@ async function handleSessions({ action, input, vesselId, login, sql }) {
       INSERT INTO training_events(scope,record_id,action,actor,after_data)
       SELECT 'session',id,'create',$10,to_jsonb(created) FROM created
     ) SELECT * FROM created`,
-    [id, data.courseId, data.vesselId || null, utc(data.startsAt), utc(data.endsAt),
+    [id, data.courseId, data.vesselId, utc(data.startsAt), utc(data.endsAt),
       data.displayZone, String(data.instructor || '').slice(0,160),
       String(data.venue || '').slice(0,160), data.capacity, login]);
     return json({ session: row }, 201);
@@ -428,8 +442,8 @@ async function handleOutcomes({ action, input, vesselId, login, sql }) {
   if (!['outcomes.record','outcomes.correct'].includes(action)) return error('Training action is not implemented', 501);
   const enrollment = await loadEnrollment(sql, input.enrollmentId, vesselId);
   if (!enrollment) return error('Enrollment not found', 404);
-  if (enrollment.session_removed_at || enrollment.state === 'cancelled')
-    return error('Session is cancelled or removed', 409);
+  if (enrollment.session_removed_at || !['confirmed','completed'].includes(enrollment.state))
+    return error('Session must be confirmed or completed before recording results', 409);
   const { value, error: invalid } = validateOutcome(input.data);
   if (invalid) return error(invalid, 400);
   let correctionOf = null, version = 1, reason = null;
@@ -760,7 +774,80 @@ async function handleSetup({ action, input, vesselId, login, grant, sql }) {
         : sql.query(`SELECT COUNT(*)::int AS count FROM training_certificates WHERE review_state='pending'`)
     ]);
     return json({ overview: { crew: crew[0]?.count || 0, sessions: sessions[0]?.count || 0,
-      pendingCertificates: certificates[0]?.count || 0 } });
+      pendingCertificates: certificates[0]?.count || 0 }, role: grant?.role || null });
+  }
+  return error('Training action is not implemented', 501);
+}
+
+async function handleTrainingGrants({ action, input, login, sql }) {
+  if (action === 'grants.list') {
+    const [grants, assignments] = await Promise.all([
+      sql.query('SELECT login,role,version,revoked_at FROM training_grants ORDER BY login'),
+      sql.query(`SELECT id,vessel_id,officer_login,version FROM training_vessel_assignments
+        WHERE removed_at IS NULL ORDER BY officer_login`)
+    ]);
+    return json({ grants, assignments });
+  }
+  if (action === 'grants.set') {
+    const target = String(input.login || '').trim().toLowerCase();
+    if (!/^[a-z0-9-]{1,39}$/.test(target) || target === TRAINING_OWNER)
+      return error('Invalid training account', 400);
+    if (!['viewer','coordinator','approver','officer'].includes(input.role))
+      return error('Invalid training role', 400);
+    const [row] = await sql.query(`WITH saved AS (
+      INSERT INTO training_grants(login,role,granted_by) VALUES($1,$2,$3)
+      ON CONFLICT(login) DO UPDATE SET role=EXCLUDED.role,granted_by=EXCLUDED.granted_by,
+        revoked_at=NULL,version=training_grants.version+1,updated_at=now()
+      RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'grant',$1,'set',$3,to_jsonb(saved) FROM saved
+    ) SELECT * FROM saved`, [target, input.role, login]);
+    return json({ grant: row });
+  }
+  if (action === 'grants.revoke') {
+    const target = String(input.login || '').trim().toLowerCase();
+    if (!/^[a-z0-9-]{1,39}$/.test(target) || target === TRAINING_OWNER)
+      return error('Invalid training account', 400);
+    const reason = String(input.reason || '').trim().slice(0,500);
+    if (!reason) return error('Revocation reason is required', 400);
+    const [row] = await sql.query(`WITH revoked AS (
+      UPDATE training_grants SET revoked_at=now(),version=version+1,updated_at=now()
+      WHERE login=$1 AND revoked_at IS NULL RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data,reason)
+      SELECT 'grant',$1,'revoke',$2,to_jsonb(revoked),$3 FROM revoked
+    ) SELECT * FROM revoked`, [target, login, reason]);
+    return row ? json({ grant: row }) : error('Training grant not found', 404);
+  }
+  if (action === 'officers.assign') {
+    if (!uuid(input.vesselId) || !/^[a-z0-9-]{1,39}$/.test(input.officerLogin || ''))
+      return error('Valid vessel and officer account are required', 400);
+    const [grant] = await sql.query(`SELECT role FROM training_grants
+      WHERE login=$1 AND revoked_at IS NULL`, [input.officerLogin]);
+    if (grant?.role !== 'officer') return error('Account needs an officer training grant', 409);
+    const id = randomUUID();
+    const [row] = await sql.query(`WITH saved AS (
+      INSERT INTO training_vessel_assignments(id,vessel_id,officer_login,assigned_by)
+      VALUES($1,$2,$3,$4)
+      ON CONFLICT(vessel_id,officer_login) WHERE removed_at IS NULL
+      DO UPDATE SET updated_at=training_vessel_assignments.updated_at RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'officer-assignment',id,'assign',$4,to_jsonb(saved) FROM saved
+    ) SELECT * FROM saved`, [id, input.vesselId, input.officerLogin, login]);
+    return json({ assignment: row });
+  }
+  if (action === 'officers.remove') {
+    if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid officer assignment', 400);
+    const [row] = await sql.query(`WITH removed AS (
+      UPDATE training_vessel_assignments SET removed_at=now(),version=version+1,updated_at=now()
+      WHERE id=$1 AND version=$2 AND removed_at IS NULL RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'officer-assignment',id,'remove',$3,to_jsonb(removed) FROM removed
+    ) SELECT * FROM removed`, [input.id, input.version, login]);
+    return row ? json({ assignment: row }) : error('Concurrent change; reload assignments', 409);
   }
   return error('Training action is not implemented', 501);
 }
@@ -841,6 +928,10 @@ export function createTrainingRoute({
       return handleSetup({ action, input: request.method === 'GET'
         ? Object.fromEntries(url.searchParams) : input, vesselId: targetVesselId,
         login, grant, sql: await database() });
+    }
+    if (action?.startsWith('grants.') || action?.startsWith('officers.')) {
+      if ((request.method === 'GET') !== (action === 'grants.list')) return error('Method not allowed', 405);
+      return handleTrainingGrants({ action, input, login, sql: await database() });
     }
     return error('Training action is not implemented', 501);
   };
