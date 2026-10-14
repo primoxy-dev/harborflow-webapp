@@ -67,3 +67,18 @@ test('approver records source and version while approving a draft', async () => 
   assert.ok(calls.some(([statement]) => statement.includes("state='approved'") && statement.includes('version=$')));
 });
 
+test('scoped coordinator cannot publish a global matrix draft', async () => {
+  const route = createTrainingRoute({
+    database: () => ({ query: () => { throw Error('No matrix write allowed'); } }),
+    loginFromRequest: () => 'shore',
+    readTrainingGrant: async () => ({ role: 'coordinator', vesselIds: ['vessel-a'] })
+  });
+  const response = await route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' },
+    body: JSON.stringify({ action: 'matrix.draft', vesselId: 'vessel-a', data: {
+      courseId: 'course-1', effectiveFrom: '2026-10-01', source: 'Trial SMS'
+    } })
+  }));
+  assert.equal(response.status, 403);
+});
+
