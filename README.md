@@ -19,6 +19,14 @@ Port Calls and repeated Service instances autosave to Neon. Creating a Port Call
 
 The database schema is in [migrations/001_operations.sql](migrations/001_operations.sql). Run it in the linked Neon database before deploying API changes. Run `node --test tests/*.test.mjs` locally. Never commit `.env` files or connection strings.
 
+## Crew Training development
+
+Crew Training is an online-only trial for fictional or de-identified crew records. Apply [migrations/002_training.sql](migrations/002_training.sql) after `001_operations.sql` in an isolated Preview database before enabling its API. The training tables and grants are separate from Operations Crew/Visitor permissions; existing grants and Job PIC labels do not authorize training access. The module has no anonymous read path. Do not add real names, passports or certificates to trial data.
+
+To try the workflow in Preview, sign in as the owner and open **Operations → Crew Training**. Add a fictional vessel and crew profile, assign the crew to the vessel with a joining date, and record an explicit `available` interval. Create a course and draft a Training Matrix rule, then approve it. Create a session with ISO 8601 start/end offsets and an IANA time zone, enroll the crew, propose and confirm the session after resolving conflicts. Record attendance and assessment, upload a fictional PDF/JPEG/PNG certificate (3 MB maximum), review it, and check readiness. A booking, attendance alone, a failed result, unverified or expired certificate, or incomplete availability never yields `ready`.
+
+The owner can assign training roles to named GitHub logins and map officer accounts to vessels in the Overview. Officers see only assigned vessels. Keep Preview and Production databases isolated, and verify the migration and owner flow in Preview before enabling Production. Offline capture, real personal data, costs/reports, notifications and automated planning remain outside this trial.
+
 ## ส่วนที่แสดงในตัวอย่าง
 
 1. **Operations Control Center** — ปฏิทิน Port Call, Job Detail, Services, Tasks, Documents, Timeline และ Smart Alerts
@@ -92,6 +100,8 @@ harborflow-webapp/
 ├── lib/              # shared server-side validation and GitHub API
 └── README.md         # คู่มือและสถานะโปรเจกต์
 ```
+
+
 
 
 

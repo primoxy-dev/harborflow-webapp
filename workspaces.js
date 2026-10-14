@@ -3,7 +3,7 @@
   const sidebar = document.getElementById('primaryNav');
   if (!sidebar) return;
   const groups = [
-    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','All Services','☷'],['alerts','Smart Alerts','⚑'],['outlook','Outlook','✉']]],
+    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','All Services','☷'],['training','Crew Training','◎'],['alerts','Smart Alerts','⚑'],['outlook','Outlook','✉']]],
     ['Quotation & Payments', [['commercial','Quotation / PDA / FDA','◫'],['pv','Payment Voucher','▧'],['price','Price Master','¤'],['approvals','Approvals','✓']]]
   ];
   const title = document.getElementById('title');
@@ -15,7 +15,8 @@
     pv: empty('Payment Voucher','สาธารณะเห็นเฉพาะตัวอย่างที่เจ้าของเลือกเผยแพร่ · ผู้รับเงิน บัญชีธนาคาร ต้นทุน และหลักฐานจ่ายไม่เปิดสาธารณะ · ดาวน์โหลด PV ต้องลงชื่อเข้าใช้'),
     price: empty('Published selling rates','เผยแพร่เฉพาะราคาขายที่เจ้าของตรวจ · ต้นทุน Supplier, Margin และกฎส่วนลดไม่เปิดสาธารณะ'),
     approvals: empty('Approvals','ข้อมูลการอนุมัติภายในต้องลงชื่อเข้าใช้ · ช่วงทดลองให้เจ้าของอนุมัติเท่านั้น'),
-    allservices: '<div class="panel" role="status">กำลังโหลดรายการ Service…</div>'
+    allservices: '<div class="panel" role="status">กำลังโหลดรายการ Service…</div>',
+    training: '<div class="panel" role="status">กำลังโหลด Crew Training…</div>'
   };
   for (const [id, html] of Object.entries(views)) {
     let section = document.getElementById(id);
@@ -37,6 +38,7 @@
         title.textContent=label; crumb.textContent=name+' / '+label;
         if(id!=='operations') document.getElementById('createJob').hidden=true;
         if(id==='allservices') loadServices();
+        if(id==='training') window.HarborFlowTraining.mount(document.getElementById('training'));
         if(window.matchMedia('(max-width: 900px)').matches) document.getElementById('closeNav').click();
       });
       details.append(button);
@@ -85,3 +87,5 @@
     } catch(error){if(own===request)section.innerHTML='<div class="panel" role="alert">'+escape(error.message)+'</div>';}
   }
 })();
+
+
