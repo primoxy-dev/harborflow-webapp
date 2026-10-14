@@ -5,9 +5,28 @@ import { createTrainingRoute } from '../api/training.mjs';
 
 test('owner has access, viewer is read-only and cannot download', () => {
   assert.equal(trainingAccess({ login: 'primoxy-dev', action: 'crew.list' }), true);
+  assert.equal(trainingAccess({ login: 'primoxy-dev', action: 'grants.set' }), true);
   assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'crew.list' }), true);
+  assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'grants.set' }), false);
   assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'crew.create' }), false);
   assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'certificates.download' }), false);
+});
+
+test('owner can issue a separate training grant', async () => {
+  const calls = [];
+  const route = createTrainingRoute({
+    database: () => ({ query: async (statement, params) => {
+      calls.push([statement, params]);
+      return [{ login: 'training-user', role: 'officer' }];
+    } }),
+    loginFromRequest: () => 'primoxy-dev'
+  });
+  const response = await route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' },
+    body: JSON.stringify({ action: 'grants.set', login: 'training-user', role: 'officer' })
+  }));
+  assert.equal(response.status, 200);
+  assert.ok(calls.some(([statement]) => statement.includes('INSERT INTO training_grants')));
 });
 
 test('shore coordinator can edit, unrelated Operations grants confer no access', () => {
