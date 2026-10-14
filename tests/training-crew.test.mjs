@@ -74,3 +74,21 @@ test('officer crew listing uses vessel filter', async () => {
   assert.match(calls[0][0], /training_crew_assignments/);
 });
 
+test('crew detail requires an assignment in the requested vessel', async () => {
+  const crewId = '3bf79fc8-30f0-43ac-93fb-d635da1a43a6';
+  const calls = [];
+  const route = createTrainingRoute({
+    database: () => ({ query: async (statement, params) => {
+      calls.push([statement, params]);
+      return [];
+    } }),
+    loginFromRequest: () => 'officer',
+    readTrainingGrant: async () => ({ role: 'officer', vesselIds: ['vessel-a'] })
+  });
+  const response = await route(new Request(`https://example.test/api/training?action=crew.get&vesselId=vessel-a&id=${crewId}`));
+  assert.equal(response.status, 404);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0][0], /training_crew_assignments/);
+  assert.deepEqual(calls[0][1], [crewId, 'vessel-a']);
+});
+
