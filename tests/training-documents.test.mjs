@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { defaultDocumentStore } from '../api/training.mjs';
 import { certificatePath, validateCertificateFile } from '../lib/training/documents.mjs';
 import { createTrainingRoute } from '../api/training.mjs';
 
@@ -41,5 +42,28 @@ test('officer cannot download vessel B file while claiming vessel A', async () =
   const response = await route(new Request(`https://example.test/api/training?action=certificates.download&vesselId=vessel-a&id=${certificateId}`));
   assert.equal(response.status, 404);
   assert.equal(downloads, 0);
+});
+
+test('document store downloads a 1.5 MB certificate by Git blob SHA', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldToken = process.env.GITHUB_DOCUMENTS_TOKEN;
+  const sha = 'a'.repeat(40);
+  const bytes = Buffer.alloc(1_500_000, 65);
+  const urls = [];
+  globalThis.fetch = async url => {
+    urls.push(String(url));
+    return new Response(JSON.stringify({ content: bytes.toString('base64'), encoding: 'base64' }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  process.env.GITHUB_DOCUMENTS_TOKEN = 'fictional-test-token';
+  try {
+    const downloaded = await defaultDocumentStore.get('Training/Crew/example/Certificates/example/test.pdf', sha);
+    assert.equal(downloaded.length, bytes.length);
+    assert.equal(urls[0], `https://api.github.com/repos/primoxy-dev/harborflow-job-documents/git/blobs/${sha}`);
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldToken === undefined) delete process.env.GITHUB_DOCUMENTS_TOKEN;
+    else process.env.GITHUB_DOCUMENTS_TOKEN = oldToken;
+  }
 });
 
