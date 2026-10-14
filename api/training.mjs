@@ -343,7 +343,7 @@ async function handleSessions({ action, input, vesselId, login, sql }) {
       String(data.venue || '').slice(0,160), data.capacity, login]);
     return json({ session: row }, 201);
   }
-  if (['sessions.update','sessions.propose','sessions.confirm','sessions.cancel'].includes(action)) {
+  if (['sessions.update','sessions.propose','sessions.confirm','sessions.complete','sessions.cancel'].includes(action)) {
     if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid session ID or version', 400);
     const current = await loadSession(sql, input.id, vesselId);
     if (!current) return error('Session not found', 404);
@@ -405,6 +405,20 @@ async function handleSessions({ action, input, vesselId, login, sql }) {
       ) SELECT * FROM updated`, [input.id, input.version, login, reason]);
       return row ? json({ session: row }) : error('Concurrent change; reload session', 409);
     }
+    if (action === 'sessions.complete') {
+      if (!validateSessionTransition(current.state, 'completed'))
+        return error('Only a confirmed session may be completed', 409);
+      if (current.ends_at && Date.parse(current.ends_at) > Date.now())
+        return error('Session has not ended yet', 409);
+      const [row] = await sql.query(`WITH updated AS (
+        UPDATE training_sessions SET state='completed',version=version+1,updated_at=now()
+        WHERE id=$1 AND version=$2 AND state='confirmed' RETURNING *
+      ), event AS (
+        INSERT INTO training_events(scope,record_id,action,actor,after_data)
+        SELECT 'session',id,'complete',$3,to_jsonb(updated) FROM updated
+      ) SELECT * FROM updated`, [input.id, input.version, login]);
+      return row ? json({ session: row }) : error('Concurrent change; reload session', 409);
+    }
     if (!validateSessionTransition(current.state, 'confirmed')) return error('Only a proposed session may be confirmed', 409);
     const next = current.proposed_change?.next;
     if (!next) return error('Missing proposed change', 409);
@@ -427,17 +441,33 @@ async function handleSessions({ action, input, vesselId, login, sql }) {
       return error('Session, crew and idempotency key are required', 400);
     const session = await loadSession(sql, input.sessionId, vesselId);
     if (!session) return error('Session not found', 404);
-    if (['completed','cancelled'].includes(session.state)) return error('Session is closed', 409);
+    if (!['draft','proposed'].includes(session.state))
+      return error('Enrollment closes when the session is confirmed', 409);
     const [assignment] = await sql.query(
       'SELECT id FROM training_crew_assignments WHERE crew_id=$1 AND vessel_id=$2 AND removed_at IS NULL',
       [input.crewId, session.vessel_id]);
     if (session.vessel_id && !assignment) return error('Crew is not assigned to this vessel', 403);
-    const [row] = await sql.query(`INSERT INTO training_enrollments(id,session_id,crew_id,idempotency_key,created_by)
-      VALUES($1,$2,$3,$4,$5)
-      ON CONFLICT(session_id,crew_id) DO UPDATE SET updated_at=training_enrollments.updated_at
-      RETURNING *`,
-    [randomUUID(), input.sessionId, input.crewId, input.idempotencyKey.slice(0,100), login]);
-    return json({ enrollment: row });
+    const [existing] = await sql.query(
+      'SELECT * FROM training_enrollments WHERE session_id=$1 AND crew_id=$2',
+      [input.sessionId, input.crewId]);
+    if (existing) return existing.removed_at
+      ? error('Removed enrollment cannot be reused', 409) : json({ enrollment: existing });
+    const [{ count }] = await sql.query(
+      'SELECT count(*)::int AS count FROM training_enrollments WHERE session_id=$1 AND removed_at IS NULL',
+      [input.sessionId]);
+    if (count >= session.capacity) return error('Session is full', 409);
+    try {
+      const [row] = await sql.query(`INSERT INTO training_enrollments(id,session_id,crew_id,idempotency_key,created_by)
+        VALUES($1,$2,$3,$4,$5)
+        ON CONFLICT(session_id,crew_id) DO UPDATE SET updated_at=training_enrollments.updated_at
+          WHERE training_enrollments.removed_at IS NULL
+        RETURNING *`,
+      [randomUUID(), input.sessionId, input.crewId, input.idempotencyKey.slice(0,100), login]);
+      return row ? json({ enrollment: row }) : error('Removed enrollment cannot be reused', 409);
+    } catch (e) {
+      if (e.code === '23505') return error('Idempotency key was already used', 409);
+      throw e;
+    }
   }
   if (action === 'enrollments.remove') {
     if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid enrollment ID or version', 400);
