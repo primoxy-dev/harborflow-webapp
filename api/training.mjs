@@ -3,6 +3,7 @@ import { TRAINING_OWNER, trainingAccess } from '../lib/training/access.mjs';
 import { validateCrewProfile, validateCrewLink } from '../lib/training/crew.mjs';
 import { validateCourse, validateRule, deriveRequirements } from '../lib/training/matrix.mjs';
 import { detectTrainingConflicts, validateSessionTime, validateSessionTransition } from '../lib/training/schedule.mjs';
+import { validateOutcome, validateCorrection } from '../lib/training/outcomes.mjs';
 import { randomUUID } from 'node:crypto';
 
 const error = (message, status) => json({ error: message }, status);
@@ -374,6 +375,65 @@ async function handleSessions({ action, input, vesselId, login, sql }) {
   return error('Training action is not implemented', 501);
 }
 
+async function loadEnrollment(sql, enrollmentId, vesselId) {
+  if (!uuid(enrollmentId)) return null;
+  const [row] = await sql.query(`SELECT e.*,s.vessel_id,s.state,s.removed_at AS session_removed_at
+    FROM training_enrollments e JOIN training_sessions s ON s.id=e.session_id
+    WHERE e.id=$1 AND e.removed_at IS NULL`, [enrollmentId]);
+  if (!row || (vesselId && row.vessel_id !== vesselId)) return null;
+  return row;
+}
+
+async function handleOutcomes({ action, input, vesselId, login, sql }) {
+  if (action === 'outcomes.list') {
+    if (!uuid(input.enrollmentId)) return error('Enrollment ID is required', 400);
+    const enrollment = await loadEnrollment(sql, input.enrollmentId, vesselId);
+    if (!enrollment) return error('Enrollment not found', 404);
+    const outcomes = await sql.query(
+      'SELECT * FROM training_outcomes WHERE enrollment_id=$1 ORDER BY created_at,id', [input.enrollmentId]);
+    return json({ outcomes });
+  }
+  if (!['outcomes.record','outcomes.correct'].includes(action)) return error('Training action is not implemented', 501);
+  const enrollment = await loadEnrollment(sql, input.enrollmentId, vesselId);
+  if (!enrollment) return error('Enrollment not found', 404);
+  if (enrollment.session_removed_at || enrollment.state === 'cancelled')
+    return error('Session is cancelled or removed', 409);
+  const { value, error: invalid } = validateOutcome(input.data);
+  if (invalid) return error(invalid, 400);
+  let correctionOf = null, version = 1, reason = null;
+  const existing = await sql.query(
+    'SELECT * FROM training_outcomes WHERE enrollment_id=$1 ORDER BY version DESC LIMIT 1', [input.enrollmentId]);
+  if (action === 'outcomes.record') {
+    if (existing.length) return error('Outcome exists; use a reasoned correction', 409);
+  } else {
+    if (!existing.length) return error('Outcome not found', 404);
+    const current = existing[0];
+    reason = String(input.reason || '').trim().slice(0,500);
+    const problem = validateCorrection({ version: input.version, currentVersion: current.version, reason });
+    if (problem) return error(problem, 409);
+    correctionOf = current.id;
+    version = current.version + 1;
+  }
+  const id = randomUUID();
+  let outcome;
+  try { [outcome] = await sql.query(`WITH created AS (
+    INSERT INTO training_outcomes(id,enrollment_id,attendance,assessment,assessor,evidence_note,
+      correction_of,correction_reason,version,created_by)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
+  ), event AS (
+    INSERT INTO training_events(scope,record_id,action,actor,after_data,reason)
+    SELECT 'outcome',id,$11,$10,to_jsonb(created),$8 FROM created
+  ) SELECT * FROM created`,
+  [id, input.enrollmentId, value.attendance, value.assessment, value.assessor,
+    value.evidence, correctionOf, reason, version, login,
+    action === 'outcomes.correct' ? 'correct' : 'record']); }
+  catch (e) {
+    if (e.code === '23505') return error('Concurrent outcome change; reload', 409);
+    throw e;
+  }
+  return json({ outcome }, 201);
+}
+
 export function createTrainingRoute({
   database = defaultDatabase,
   loginFromRequest = sessionLogin,
@@ -415,6 +475,11 @@ export function createTrainingRoute({
       const readAction = action === 'sessions.list';
       if ((request.method === 'GET') !== readAction) return error('Method not allowed', 405);
       return handleSessions({ action, input, vesselId: targetVesselId, login, sql: await database() });
+    }
+    if (action?.startsWith('outcomes.')) {
+      if ((request.method === 'GET') !== (action === 'outcomes.list')) return error('Method not allowed', 405);
+      return handleOutcomes({ action, input: request.method === 'GET'
+        ? Object.fromEntries(url.searchParams) : input, vesselId: targetVesselId, login, sql: await database() });
     }
     return error('Training action is not implemented', 501);
   };
