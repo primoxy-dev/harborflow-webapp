@@ -120,3 +120,20 @@ test('confirm blocks when an enrolled crew lacks a course prerequisite', async (
   assert.ok(body.conflicts.hard.some(item => item.type === 'prerequisite'));
 });
 
+test('confirmed session cannot be edited directly', async () => {
+  const sessionId = '3bf79fc8-30f0-43ac-93fb-d635da1a43a6';
+  const route = createTrainingRoute({
+    database: () => ({ query: async statement => {
+      if (statement.startsWith('SELECT * FROM training_sessions')) return [{ id: sessionId, state: 'confirmed', version: 3 }];
+      throw Error('Confirmed session must not be updated');
+    } }),
+    loginFromRequest: () => 'primoxy-dev'
+  });
+  const response = await route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' },
+    body: JSON.stringify({ action: 'sessions.update', id: sessionId, version: 3,
+      data: { ...session } })
+  }));
+  assert.equal(response.status, 409);
+});
+
