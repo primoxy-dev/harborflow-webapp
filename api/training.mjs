@@ -2,6 +2,7 @@ import { nodeHandler, json, sameOrigin, sessionLogin } from '../lib/harborflow.m
 import { TRAINING_OWNER, trainingAccess } from '../lib/training/access.mjs';
 import { validateCrewProfile, validateCrewLink } from '../lib/training/crew.mjs';
 import { validateCourse, validateRule, deriveRequirements } from '../lib/training/matrix.mjs';
+import { detectTrainingConflicts, validateSessionTime, validateSessionTransition } from '../lib/training/schedule.mjs';
 import { randomUUID } from 'node:crypto';
 
 const error = (message, status) => json({ error: message }, status);
@@ -217,6 +218,162 @@ async function handleMatrix({ action, input, vesselId, login, sql }) {
   return error('Training action is not implemented', 501);
 }
 
+const utc = value => new Date(value).toISOString();
+async function loadSession(sql, id, vesselId) {
+  if (!uuid(id)) return null;
+  const [row] = await sql.query('SELECT * FROM training_sessions WHERE id=$1 AND removed_at IS NULL', [id]);
+  if (!row) return null;
+  if (vesselId && row.vessel_id !== vesselId) return null;
+  return row;
+}
+
+async function sessionConflicts(sql, row, proposed) {
+  const enrollmentRows = await sql.query(
+    'SELECT crew_id FROM training_enrollments WHERE session_id=$1 AND removed_at IS NULL', [row.id]);
+  const crewIds = enrollmentRows.map(x => x.crew_id);
+  if (!crewIds.length) return { hard: [], unknown: [] };
+  const [otherRows, availabilityRows, assignmentRows] = await Promise.all([
+    sql.query(`SELECT e.crew_id,s.starts_at,s.ends_at,s.state FROM training_enrollments e
+      JOIN training_sessions s ON s.id=e.session_id
+      WHERE e.crew_id=ANY($1::uuid[]) AND e.session_id<>$2 AND e.removed_at IS NULL
+      AND s.removed_at IS NULL AND s.state<>'cancelled'`, [crewIds, row.id]),
+    sql.query(`SELECT crew_id,kind,starts_at,ends_at FROM training_availability
+      WHERE crew_id=ANY($1::uuid[]) AND removed_at IS NULL`, [crewIds]),
+    sql.query(`SELECT crew_id,joins_on FROM training_crew_assignments
+      WHERE crew_id=ANY($1::uuid[]) AND vessel_id=$2 AND removed_at IS NULL`, [crewIds, row.vessel_id])
+  ]);
+  return detectTrainingConflicts({
+    session: { startsAt: proposed.startsAt, endsAt: proposed.endsAt,
+      displayZone: proposed.displayZone, capacity: row.capacity },
+    crewIds, enrolledCount: 0,
+    otherSessions: otherRows.map(x => ({ crewId: x.crew_id, startsAt: x.starts_at, endsAt: x.ends_at, state: x.state })),
+    availability: availabilityRows.map(x => ({ crewId: x.crew_id, kind: x.kind, startsAt: x.starts_at, endsAt: x.ends_at })),
+    assignments: assignmentRows.map(x => ({ crewId: x.crew_id, joinsOn: x.joins_on }))
+  });
+}
+
+async function handleSessions({ action, input, vesselId, login, sql }) {
+  if (action === 'sessions.list') {
+    const sessions = vesselId
+      ? await sql.query('SELECT * FROM training_sessions WHERE vessel_id=$1 AND removed_at IS NULL ORDER BY starts_at DESC LIMIT 300', [vesselId])
+      : await sql.query('SELECT * FROM training_sessions WHERE removed_at IS NULL ORDER BY starts_at DESC LIMIT 300');
+    return json({ sessions });
+  }
+  if (action === 'sessions.create') {
+    const data = input.data || {};
+    if (!uuid(data.courseId) || (data.vesselId && !uuid(data.vesselId)) ||
+        (vesselId && data.vesselId !== vesselId)) return error('Invalid course or vessel', 400);
+    const invalid = validateSessionTime(data);
+    if (invalid) return error(invalid, 400);
+    if (!Number.isInteger(data.capacity) || data.capacity < 1) return error('Capacity is required', 400);
+    const id = randomUUID();
+    const [row] = await sql.query(`WITH created AS (
+      INSERT INTO training_sessions(id,course_id,vessel_id,starts_at,ends_at,display_zone,
+        instructor,venue,capacity,created_by)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'session',id,'create',$10,to_jsonb(created) FROM created
+    ) SELECT * FROM created`,
+    [id, data.courseId, data.vesselId || null, utc(data.startsAt), utc(data.endsAt),
+      data.displayZone, String(data.instructor || '').slice(0,160),
+      String(data.venue || '').slice(0,160), data.capacity, login]);
+    return json({ session: row }, 201);
+  }
+  if (['sessions.propose','sessions.confirm','sessions.cancel'].includes(action)) {
+    if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid session ID or version', 400);
+    const current = await loadSession(sql, input.id, vesselId);
+    if (!current) return error('Session not found', 404);
+    if (current.version !== input.version) return error('Concurrent change; reload session', 409);
+    if (action === 'sessions.propose') {
+      if (!validateSessionTransition(current.state, 'proposed')) return error('Cannot propose this session', 409);
+      const data = input.data || {};
+      const invalid = validateSessionTime(data);
+      if (invalid) return error(invalid, 400);
+      const participants = await sql.query(
+        'SELECT crew_id FROM training_enrollments WHERE session_id=$1 AND removed_at IS NULL', [input.id]);
+      const proposal = {
+        old: { startsAt: current.starts_at, endsAt: current.ends_at,
+          displayZone: current.display_zone, instructor: current.instructor, venue: current.venue },
+        next: { startsAt: data.startsAt, endsAt: data.endsAt,
+          displayZone: data.displayZone, instructor: String(data.instructor ?? current.instructor).slice(0,160),
+          venue: String(data.venue ?? current.venue).slice(0,160) },
+        affectedCrewIds: participants.map(x => x.crew_id), proposedBy: login
+      };
+      const [row] = await sql.query(`WITH updated AS (
+        UPDATE training_sessions SET state='proposed',proposed_change=$1::jsonb,
+          version=version+1,updated_at=now()
+        WHERE id=$2 AND version=$3 AND state IN ('draft','confirmed') RETURNING *
+      ), event AS (
+        INSERT INTO training_events(scope,record_id,action,actor,after_data)
+        SELECT 'session',id,'propose',$4,to_jsonb(updated) FROM updated
+      ) SELECT * FROM updated`, [JSON.stringify(proposal), input.id, input.version, login]);
+      return row ? json({ session: row, proposal }) : error('Concurrent change; reload session', 409);
+    }
+    if (action === 'sessions.cancel') {
+      if (!validateSessionTransition(current.state, 'cancelled')) return error('Cannot cancel this session', 409);
+      const reason = String(input.reason || '').trim().slice(0,500);
+      if (!reason) return error('Cancellation reason is required', 400);
+      const [row] = await sql.query(`WITH updated AS (
+        UPDATE training_sessions SET state='cancelled',version=version+1,updated_at=now()
+        WHERE id=$1 AND version=$2 AND state IN ('draft','proposed','confirmed') RETURNING *
+      ), event AS (
+        INSERT INTO training_events(scope,record_id,action,actor,after_data,reason)
+        SELECT 'session',id,'cancel',$3,to_jsonb(updated),$4 FROM updated
+      ) SELECT * FROM updated`, [input.id, input.version, login, reason]);
+      return row ? json({ session: row }) : error('Concurrent change; reload session', 409);
+    }
+    if (!validateSessionTransition(current.state, 'confirmed')) return error('Only a proposed session may be confirmed', 409);
+    const next = current.proposed_change?.next;
+    if (!next) return error('Missing proposed change', 409);
+    const conflicts = await sessionConflicts(sql, current, next);
+    if (conflicts.hard.length || conflicts.unknown.length) return json({ error: 'Resolve conflicts and unknown availability before confirmation', conflicts }, 409);
+    const [row] = await sql.query(`WITH updated AS (
+      UPDATE training_sessions SET starts_at=$1,ends_at=$2,display_zone=$3,instructor=$4,
+        venue=$5,state='confirmed',proposed_change=NULL,version=version+1,updated_at=now()
+      WHERE id=$6 AND version=$7 AND state='proposed' RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'session',id,'confirm',$8,to_jsonb(updated) FROM updated
+    ) SELECT * FROM updated`,
+    [utc(next.startsAt), utc(next.endsAt), next.displayZone, next.instructor, next.venue, input.id, input.version, login]);
+    return row ? json({ session: row }) : error('Concurrent change; reload session', 409);
+  }
+  if (action === 'enrollments.add') {
+    if (!uuid(input.sessionId) || !uuid(input.crewId) ||
+        typeof input.idempotencyKey !== 'string' || input.idempotencyKey.length < 8)
+      return error('Session, crew and idempotency key are required', 400);
+    const session = await loadSession(sql, input.sessionId, vesselId);
+    if (!session) return error('Session not found', 404);
+    if (['completed','cancelled'].includes(session.state)) return error('Session is closed', 409);
+    const [assignment] = await sql.query(
+      'SELECT id FROM training_crew_assignments WHERE crew_id=$1 AND vessel_id=$2 AND removed_at IS NULL',
+      [input.crewId, session.vessel_id]);
+    if (session.vessel_id && !assignment) return error('Crew is not assigned to this vessel', 403);
+    const [row] = await sql.query(`INSERT INTO training_enrollments(id,session_id,crew_id,idempotency_key,created_by)
+      VALUES($1,$2,$3,$4,$5)
+      ON CONFLICT(session_id,crew_id) DO UPDATE SET updated_at=training_enrollments.updated_at
+      RETURNING *`,
+    [randomUUID(), input.sessionId, input.crewId, input.idempotencyKey.slice(0,100), login]);
+    return json({ enrollment: row });
+  }
+  if (action === 'enrollments.remove') {
+    if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid enrollment ID or version', 400);
+    const [row] = await sql.query(`WITH removed AS (
+      UPDATE training_enrollments e SET removed_at=now(),version=version+1,updated_at=now()
+      FROM training_sessions s
+      WHERE e.id=$1 AND e.version=$2 AND e.session_id=s.id
+        AND ($3::uuid IS NULL OR s.vessel_id=$3) AND e.removed_at IS NULL
+      RETURNING e.*
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'enrollment',id,'remove',$4,to_jsonb(removed) FROM removed
+    ) SELECT * FROM removed`, [input.id, input.version, vesselId || null, login]);
+    return row ? json({ enrollment: row }) : error('Enrollment changed or not in vessel', 409);
+  }
+  return error('Training action is not implemented', 501);
+}
+
 export function createTrainingRoute({
   database = defaultDatabase,
   loginFromRequest = sessionLogin,
@@ -253,6 +410,11 @@ export function createTrainingRoute({
       if ((request.method === 'GET') !== readAction) return error('Method not allowed', 405);
       return handleMatrix({ action, input: request.method === 'GET'
         ? Object.fromEntries(url.searchParams) : input, vesselId: targetVesselId, login, sql: await database() });
+    }
+    if (action?.startsWith('sessions.') || action?.startsWith('enrollments.')) {
+      const readAction = action === 'sessions.list';
+      if ((request.method === 'GET') !== readAction) return error('Method not allowed', 405);
+      return handleSessions({ action, input, vesselId: targetVesselId, login, sql: await database() });
     }
     return error('Training action is not implemented', 501);
   };
