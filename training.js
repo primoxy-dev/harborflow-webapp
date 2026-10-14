@@ -6,14 +6,15 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const date = value => value ? esc(String(value).slice(0, 10)) : '—';
-  const stamp = value => value ? esc(new Date(value).toLocaleString('en-GB', {
-    dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Bangkok'
-  })) + ' ICT' : '—';
+  const stamp = (value, zone = 'Asia/Bangkok') => value
+    ? esc(new Date(value).toLocaleString('en-GB', {
+      dateStyle: 'medium', timeStyle: 'short', timeZone: zone
+    })) + ' ' + esc(zone) : '—';
   const option = (id, label) => `<option value="${esc(id)}">${esc(label)}</option>`;
   const crewOptions = () => state.crew.map(c => option(c.id, c.display_name + ' · ' + c.rank)).join('');
   const courseOptions = () => state.courses.map(c => option(c.id, c.code + ' · ' + c.name)).join('');
   const sessionOptions = () => state.sessions.filter(s => ['draft','proposed'].includes(s.state)).map(s =>
-    option(s.id, (state.courses.find(c => c.id === s.course_id)?.code || 'Course') + ' · ' + stamp(s.starts_at))).join('');
+    option(s.id, (state.courses.find(c => c.id === s.course_id)?.code || 'Course') + ' · ' + stamp(s.starts_at, s.display_zone))).join('');
   const vesselOptions = () => state.vessels.map(v => option(v.id, v.name)).join('');
   const box = (label, name, attrs = '') => `<label>${label}<input name="${name}" ${attrs}></label>`;
   const select = (label, name, options) => `<label>${label}<select name="${name}" required>${options}</select></label>`;
@@ -148,7 +149,7 @@
       const sessions = [...state.sessions].sort((a,b) => String(a.starts_at).localeCompare(String(b.starts_at)));
       body.innerHTML = `${header('Training calendar', 'Sessions in the selected vessel scope · times shown in Bangkok time')}
         <div class="training-card"><div class="training-table-wrap"><table><thead><tr><th>Date and time</th><th>Course</th><th>Vessel</th><th>Venue</th><th>State</th></tr></thead>
-        <tbody>${sessions.map(s => `<tr><td>${stamp(s.starts_at)}</td><td>${esc(state.courses.find(c => c.id === s.course_id)?.name || s.course_id)}</td>
+        <tbody>${sessions.map(s => `<tr><td>${stamp(s.starts_at, s.display_zone)}</td><td>${esc(state.courses.find(c => c.id === s.course_id)?.name || s.course_id)}</td>
         <td>${esc(state.vessels.find(v => v.id === s.vessel_id)?.name || 'Shore')}</td><td>${esc(s.venue)}</td><td>${esc(s.state)}</td></tr>`).join('')}</tbody></table></div>
         ${sessions.length ? '' : empty('No sessions yet.')}</div>`;
       return;
@@ -223,14 +224,14 @@
         ${submit('Enroll')}</form></div>
         <div class="training-card"><h3>Record attendance and result</h3>
         <form data-training-form="outcome-record" class="training-form">
-        ${select('Enrollment', 'enrollmentId', state.enrollments.map(e => option(e.id, e.display_name + ' · ' + stamp(e.starts_at))).join(''))}
+        ${select('Enrollment', 'enrollmentId', state.enrollments.map(e => option(e.id, e.display_name + ' · ' + stamp(e.starts_at, e.display_zone))).join(''))}
         ${select('Attendance', 'attendance', ['pending','present','absent'].map(x => option(x,x)).join(''))}
         ${select('Assessment', 'assessment', ['pending','passed','failed'].map(x => option(x,x)).join(''))}
         ${box('Assessor', 'assessor', 'required')}${box('Evidence note', 'evidence')}
         ${submit('Record result')}</form></div></div>
         <div class="training-card"><h3>Sessions</h3><div class="training-table-wrap"><table><thead><tr><th>Course</th><th>Start</th><th>Capacity</th><th>State</th><th>Actions</th></tr></thead>
         <tbody>${state.sessions.map(s => `<tr><td>${esc(state.courses.find(c => c.id === s.course_id)?.name || s.course_id)}</td>
-        <td>${stamp(s.starts_at)}</td><td>${esc(s.capacity)}</td><td>${esc(s.state)}</td>
+        <td>${stamp(s.starts_at, s.display_zone)}</td><td>${esc(s.capacity)}</td><td>${esc(s.state)}</td>
         <td><div class="training-actions">${['draft','confirmed'].includes(s.state) ?
           `<button type="button" data-training-action="propose-session" data-id="${esc(s.id)}">Propose change</button>` : ''}
         ${s.state === 'proposed' ? `<button type="button" data-training-action="confirm-session" data-id="${esc(s.id)}">Confirm</button>` : ''}
