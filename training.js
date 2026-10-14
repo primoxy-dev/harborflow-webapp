@@ -237,7 +237,7 @@
         ${select('Vessel', 'vesselId', vesselOptions())}
         ${box('Start date & time (local)', 'startsAt', 'type="datetime-local" required')}
         ${box('End date & time (local)', 'endsAt', 'type="datetime-local" required')}
-        ${box('IANA time zone', 'displayZone', 'required value="' + esc(localZone()) + '"')}
+        ${box('Time zone (your device)', 'displayZone', 'required readonly value="' + esc(localZone()) + '"')}
         ${box('Instructor', 'instructor')}${box('Venue', 'venue')}
         ${box('Capacity', 'capacity', 'type="number" min="1" required')}${submit('Create draft')}</form></div></div>
         <div class="training-grid"><div class="training-card"><h3>Enroll crew</h3>
