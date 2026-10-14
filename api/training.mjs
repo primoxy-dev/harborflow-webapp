@@ -1,13 +1,31 @@
-import { nodeHandler, json, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
+import { nodeHandler, json, sameOrigin, sessionLogin, gh, putFile } from '../lib/harborflow.mjs';
 import { TRAINING_OWNER, trainingAccess } from '../lib/training/access.mjs';
 import { validateCrewProfile, validateCrewLink } from '../lib/training/crew.mjs';
 import { validateCourse, validateRule, deriveRequirements } from '../lib/training/matrix.mjs';
 import { detectTrainingConflicts, validateSessionTime, validateSessionTransition } from '../lib/training/schedule.mjs';
 import { validateOutcome, validateCorrection } from '../lib/training/outcomes.mjs';
+import { certificatePath, validateCertificateFile, validateCertificateBytes } from '../lib/training/documents.mjs';
+import { calculateReadiness } from '../lib/training/readiness.mjs';
 import { randomUUID } from 'node:crypto';
 
 const error = (message, status) => json({ error: message }, status);
 const uuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value || '');
+const date = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') &&
+  !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
+const dateString = value => value instanceof Date ? value.toISOString().slice(0,10) : String(value || '').slice(0,10);
+const defaultDocumentStore = {
+  async put(path, bytes) {
+    const result = await putFile(path, bytes, 'Upload fictional training certificate');
+    return result.content?.sha;
+  },
+  async get(path) {
+    const file = await gh('GET', path);
+    return file?.content ? Buffer.from(file.content.replace(/\s/g, ''), 'base64') : null;
+  },
+  async remove(path, sha) {
+    if (sha) await gh('DELETE', path, { message: 'Undo incomplete training certificate upload', sha });
+  }
+};
 
 async function defaultDatabase() {
   if (!process.env.DATABASE_URL) throw Error('Training database is not configured');
@@ -434,10 +452,154 @@ async function handleOutcomes({ action, input, vesselId, login, sql }) {
   return json({ outcome }, 201);
 }
 
+async function scopedCertificate(sql, id, vesselId) {
+  if (!uuid(id)) return null;
+  const [row] = vesselId
+    ? await sql.query(`SELECT c.* FROM training_certificates c
+        JOIN training_crew_assignments a ON a.crew_id=c.crew_id
+        WHERE c.id=$1 AND a.vessel_id=$2 AND a.removed_at IS NULL`, [id, vesselId])
+    : await sql.query('SELECT * FROM training_certificates WHERE id=$1', [id]);
+  return row || null;
+}
+
+async function handleCertificates({ action, input, vesselId, login, sql, documentStore }) {
+  if (action === 'certificates.list') {
+    if (input.crewId && !uuid(input.crewId)) return error('Invalid crew ID', 400);
+    const certificates = vesselId
+      ? await sql.query(`SELECT c.* FROM training_certificates c
+          JOIN training_crew_assignments a ON a.crew_id=c.crew_id
+          WHERE a.vessel_id=$1 AND a.removed_at IS NULL
+            AND ($2::uuid IS NULL OR c.crew_id=$2)
+          ORDER BY c.created_at DESC LIMIT 300`, [vesselId, input.crewId || null])
+      : await sql.query(`SELECT * FROM training_certificates
+          WHERE ($1::uuid IS NULL OR crew_id=$1)
+          ORDER BY created_at DESC LIMIT 300`, [input.crewId || null]);
+    return json({ certificates });
+  }
+  if (action === 'certificates.download') {
+    const certificate = await scopedCertificate(sql, input.id, vesselId);
+    if (!certificate) return error('Certificate not found', 404);
+    const expected = `Training/Crew/${certificate.crew_id}/Certificates/${certificate.id}/`;
+    if (!certificate.file_path?.startsWith(expected)) return error('Invalid certificate reference', 500);
+    const bytes = await documentStore.get(certificate.file_path);
+    if (!bytes) return error('Certificate file not found', 404);
+    return new Response(bytes, { headers: {
+      'Content-Type': certificate.mime_type,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(certificate.file_name)}`,
+      'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff'
+    } });
+  }
+  if (action === 'certificates.upload') {
+    if (!uuid(input.crewId) || !uuid(input.courseId)) return error('Crew and course are required', 400);
+    const file = input.file;
+    const invalid = validateCertificateFile(file);
+    if (invalid) return error(invalid, 400);
+    if (!date(input.issuedOn) || (input.expiresOn && (!date(input.expiresOn) || input.expiresOn < input.issuedOn)))
+      return error('Invalid issue or expiry date', 400);
+    const issuer = String(input.issuer || '').trim().slice(0,160);
+    if (!issuer) return error('Issuer is required', 400);
+    if (vesselId) {
+      const [assignment] = await sql.query(`SELECT id FROM training_crew_assignments
+        WHERE crew_id=$1 AND vessel_id=$2 AND removed_at IS NULL`, [input.crewId, vesselId]);
+      if (!assignment) return error('Crew is not assigned to this vessel', 403);
+    }
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const contentError = validateCertificateBytes(bytes, file.type);
+    if (contentError) return error(contentError, 400);
+    const id = randomUUID();
+    const path = certificatePath(input.crewId, id, file.name);
+    const sha = await documentStore.put(path, bytes);
+    try {
+      const [certificate] = await sql.query(`WITH created AS (
+        INSERT INTO training_certificates(id,crew_id,course_id,outcome_id,issuer,issued_on,
+          expires_on,file_path,file_sha,file_name,mime_type,created_by)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *
+      ), event AS (
+        INSERT INTO training_events(scope,record_id,action,actor,after_data)
+        SELECT 'certificate',id,'upload',$12,to_jsonb(created) FROM created
+      ) SELECT * FROM created`,
+      [id, input.crewId, input.courseId, uuid(input.outcomeId) ? input.outcomeId : null,
+        issuer, input.issuedOn, input.expiresOn || null, path, sha,
+        file.name.slice(0,160), file.type, login]);
+      return json({ certificate }, 201);
+    } catch (e) {
+      await documentStore.remove?.(path, sha).catch(() => {});
+      throw e;
+    }
+  }
+  if (action === 'certificates.review') {
+    if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid certificate ID or version', 400);
+    if (!['verified','rejected'].includes(input.decision)) return error('Invalid review decision', 400);
+    const certificate = await scopedCertificate(sql, input.id, vesselId);
+    if (!certificate) return error('Certificate not found', 404);
+    if (certificate.version !== input.version || certificate.review_state !== 'pending')
+      return error('Certificate changed; reload review queue', 409);
+    const reason = String(input.reason || '').trim().slice(0,500);
+    if (input.decision === 'rejected' && !reason) return error('Rejection reason is required', 400);
+    const [row] = await sql.query(`WITH reviewed AS (
+      UPDATE training_certificates SET review_state=$1,reviewed_by=$2,reviewed_at=now(),
+        review_reason=$3,version=version+1,updated_at=now()
+      WHERE id=$4 AND version=$5 AND review_state='pending' RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data,reason)
+      SELECT 'certificate',id,'review',$2,to_jsonb(reviewed),$3 FROM reviewed
+    ) SELECT * FROM reviewed`, [input.decision, login, reason, input.id, input.version]);
+    return row ? json({ certificate: row }) : error('Concurrent review; reload queue', 409);
+  }
+  return error('Training action is not implemented', 501);
+}
+
+async function handleReadiness({ input, vesselId, sql }) {
+  if (!uuid(input.crewId) || !uuid(vesselId)) return error('Crew and vessel are required', 400);
+  const onDate = input.onDate || new Date().toISOString().slice(0,10);
+  if (!date(onDate)) return error('Invalid selected date', 400);
+  const [crew] = await sql.query('SELECT id,rank FROM training_crew WHERE id=$1 AND removed_at IS NULL', [input.crewId]);
+  const [a] = await sql.query(`SELECT a.*,v.vessel_type FROM training_crew_assignments a
+    JOIN training_vessels v ON v.id=a.vessel_id
+    WHERE a.crew_id=$1 AND a.vessel_id=$2 AND a.removed_at IS NULL
+    ORDER BY a.created_at DESC LIMIT 1`, [input.crewId, vesselId]);
+  if (!crew || !a) return error('Crew assignment not found', 404);
+  const [ruleRows, courseRows, waiverRows, resultRows, certificateRows, availabilityRows] = await Promise.all([
+    sql.query(`SELECT * FROM training_matrix_rules WHERE state='approved'
+      AND (vessel_id IS NULL OR vessel_id=$1)`, [vesselId]),
+    sql.query('SELECT * FROM training_courses WHERE removed_at IS NULL'),
+    sql.query('SELECT * FROM training_waivers WHERE crew_id=$1 AND revoked_at IS NULL', [input.crewId]),
+    sql.query(`SELECT o.*,s.course_id FROM training_outcomes o
+      JOIN training_enrollments e ON e.id=o.enrollment_id
+      JOIN training_sessions s ON s.id=e.session_id
+      WHERE e.crew_id=$1 ORDER BY o.version DESC`, [input.crewId]),
+    sql.query('SELECT * FROM training_certificates WHERE crew_id=$1', [input.crewId]),
+    sql.query('SELECT * FROM training_availability WHERE crew_id=$1 AND removed_at IS NULL', [input.crewId])
+  ]);
+  const requirements = deriveRequirements({
+    crew: { id: crew.id, rank: crew.rank },
+    assignment: { vesselId, vesselType: a.vessel_type, rank: a.rank, joinsOn: dateString(a.joins_on) },
+    rules: ruleRows.map(r => ({ id: r.id, courseId: r.course_id, rank: r.rank, vesselType: r.vessel_type,
+      vesselId: r.vessel_id, effectiveFrom: dateString(r.effective_from),
+      effectiveUntil: r.effective_until && dateString(r.effective_until), state: r.state,
+      source: r.source, version: r.version, approvedBy: r.approved_by,
+      dueDaysBeforeJoin: r.due_days_before_join, recurrenceMonths: r.recurrence_months })),
+    courses: courseRows.map(c => ({ id: c.id, code: c.code, name: c.name, prerequisites: c.prerequisites })),
+    waivers: waiverRows.map(w => ({ crewId: w.crew_id, ruleId: w.rule_id, expiresOn: dateString(w.expires_on),
+      approvedBy: w.approved_by, reason: w.reason })), onDate
+  });
+  const results = resultRows.map(o => ({ crewId: input.crewId, courseId: o.course_id,
+    enrollmentId: o.enrollment_id, version: o.version,
+    attendance: o.attendance, assessment: o.assessment }));
+  const certificates = certificateRows.map(c => ({ crewId: c.crew_id, courseId: c.course_id,
+    reviewState: c.review_state, expiresOn: c.expires_on && dateString(c.expires_on) }));
+  const availability = { verified: Boolean(a.joins_on && availabilityRows.length) };
+  return json({ readiness: calculateReadiness({ requirements, results, certificates,
+    waivers: waiverRows.map(w => ({ crewId: w.crew_id, ruleId: w.rule_id,
+      approvedBy: w.approved_by, expiresOn: dateString(w.expires_on), reason: w.reason })), availability, onDate }),
+    requirements });
+}
+
 export function createTrainingRoute({
   database = defaultDatabase,
   loginFromRequest = sessionLogin,
-  readTrainingGrant = defaultTrainingGrant
+  readTrainingGrant = defaultTrainingGrant,
+  documentStore = defaultDocumentStore
 } = {}) {
   return async function route(request) {
     const login = loginFromRequest(request);
@@ -447,10 +609,17 @@ export function createTrainingRoute({
     const url = new URL(request.url);
     let input = {};
     if (request.method === 'POST') {
-      const raw = await request.text();
-      if (raw.length > 24000) return error('Request too large', 413);
-      try { input = JSON.parse(raw || '{}'); }
-      catch { return error('Invalid JSON', 400); }
+      if (request.headers.get('content-type')?.startsWith('multipart/form-data')) {
+        if (Number(request.headers.get('content-length') || 0) > 3_500_000) return error('Request too large', 413);
+        try { input = Object.fromEntries((await request.formData()).entries()); }
+        catch { return error('Invalid file upload', 400); }
+        if (input.action !== 'certificates.upload') return error('Invalid upload action', 400);
+      } else {
+        const raw = await request.text();
+        if (raw.length > 24000) return error('Request too large', 413);
+        try { input = JSON.parse(raw || '{}'); }
+        catch { return error('Invalid JSON', 400); }
+      }
       if (!input || typeof input !== 'object' || Array.isArray(input)) return error('Invalid request', 400);
     }
     const action = request.method === 'GET' ? url.searchParams.get('action') : input.action;
@@ -481,9 +650,40 @@ export function createTrainingRoute({
       return handleOutcomes({ action, input: request.method === 'GET'
         ? Object.fromEntries(url.searchParams) : input, vesselId: targetVesselId, login, sql: await database() });
     }
+    if (action?.startsWith('certificates.')) {
+      const readAction = ['certificates.list','certificates.download'].includes(action);
+      if ((request.method === 'GET') !== readAction) return error('Method not allowed', 405);
+      if (action === 'certificates.upload' && !(input.file instanceof File))
+        return error('Multipart certificate file is required', 400);
+      return handleCertificates({ action, input: request.method === 'GET'
+        ? Object.fromEntries(url.searchParams) : input, vesselId: targetVesselId,
+        login, sql: await database(), documentStore });
+    }
+    if (action === 'readiness.get') {
+      if (request.method !== 'GET') return error('Method not allowed', 405);
+      return handleReadiness({ input: Object.fromEntries(url.searchParams),
+        vesselId: targetVesselId, sql: await database() });
+    }
     return error('Training action is not implemented', 501);
   };
 }
 
-export default nodeHandler(createTrainingRoute());
+export const config = { api: { bodyParser: false } };
+const nodeRoute = nodeHandler(createTrainingRoute());
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return nodeRoute(req, res);
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > 3_500_000) {
+      res.statusCode = 413;
+      res.end('Request too large');
+      return;
+    }
+    chunks.push(chunk);
+  }
+  return nodeRoute({ url: req.url, method: req.method, headers: req.headers,
+    body: Buffer.concat(chunks) }, res);
+}
 
