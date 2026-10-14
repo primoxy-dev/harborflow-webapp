@@ -1,11 +1,11 @@
-import { nodeHandler, json, sameOrigin, sessionLogin, gh, putFile } from '../lib/harborflow.mjs';
+import { nodeHandler, json, sameOrigin, sessionLogin, gh, gitData, putFile } from '../lib/harborflow.mjs';
 import { TRAINING_OWNER, trainingAccess } from '../lib/training/access.mjs';
 import { validateCrewProfile, validateCrewLink } from '../lib/training/crew.mjs';
 import { validateCourse, validateRule, deriveRequirements } from '../lib/training/matrix.mjs';
 import { detectTrainingConflicts, validateSessionTime, validateSessionTransition } from '../lib/training/schedule.mjs';
 import { validateOutcome, validateCorrection } from '../lib/training/outcomes.mjs';
 import { certificatePath, validateCertificateFile, validateCertificateBytes } from '../lib/training/documents.mjs';
-import { calculateReadiness } from '../lib/training/readiness.mjs';
+import { calculateReadiness, verifiedDayAvailability } from '../lib/training/readiness.mjs';
 import { randomUUID } from 'node:crypto';
 
 const error = (message, status) => json({ error: message }, status);
@@ -13,14 +13,16 @@ const uuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{
 const date = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') &&
   !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
 const dateString = value => value instanceof Date ? value.toISOString().slice(0,10) : String(value || '').slice(0,10);
-const defaultDocumentStore = {
+export const defaultDocumentStore = {
   async put(path, bytes) {
     const result = await putFile(path, bytes, 'Upload fictional training certificate');
     return result.content?.sha;
   },
-  async get(path) {
-    const file = await gh('GET', path);
-    return file?.content ? Buffer.from(file.content.replace(/\s/g, ''), 'base64') : null;
+  async get(_path, sha) {
+    if (!/^[a-f0-9]{40}$/i.test(sha || '')) return null;
+    const file = await gitData('GET', `blobs/${sha}`);
+    return file?.encoding === 'base64' && file.content
+      ? Buffer.from(file.content.replace(/\s/g, ''), 'base64') : null;
   },
   async remove(path, sha) {
     if (sha) await gh('DELETE', path, { message: 'Undo incomplete training certificate upload', sha });
@@ -102,6 +104,11 @@ async function handleCrew({ action, input, vesselId, login, sql }) {
     if (!uuid(input.crewId) || !uuid(input.operationPersonId)) return error('Invalid crew or person ID', 400);
     const reason = typeof input.reason === 'string' ? input.reason.trim().slice(0, 500) : '';
     if (!reason) return error('Review reason is required', 400);
+    if (vesselId) {
+      const [assignment] = await sql.query(`SELECT id FROM training_crew_assignments
+        WHERE crew_id=$1 AND vessel_id=$2 AND removed_at IS NULL`, [input.crewId, vesselId]);
+      if (!assignment) return error('Crew is not assigned to this vessel', 403);
+    }
     const [person] = await sql.query(
       'SELECT id,kind,removed_at FROM operation_people WHERE id=$1', [input.operationPersonId]
     );
@@ -135,12 +142,15 @@ async function handleCrew({ action, input, vesselId, login, sql }) {
     const reason = typeof input.reason === 'string' ? input.reason.trim().slice(0, 500) : '';
     if (!reason) return error('Unlink reason is required', 400);
     const [row] = await sql.query(`WITH unlinked AS (
-      UPDATE training_crew_job_links SET removed_at=now(),version=version+1,updated_at=now()
-      WHERE id=$1 AND version=$2 AND removed_at IS NULL RETURNING *
+      UPDATE training_crew_job_links l SET removed_at=now(),version=version+1,updated_at=now()
+      WHERE l.id=$1 AND l.version=$2 AND l.removed_at IS NULL
+        AND ($3::uuid IS NULL OR EXISTS (
+          SELECT 1 FROM training_crew_assignments a WHERE a.crew_id=l.crew_id
+            AND a.vessel_id=$3 AND a.removed_at IS NULL)) RETURNING l.*
     ), event AS (
       INSERT INTO training_events(scope,record_id,action,actor,after_data,reason)
-      SELECT 'crew-link',id,'unlink',$3,to_jsonb(unlinked),$4 FROM unlinked
-    ) SELECT * FROM unlinked`, [input.id, input.version, login, reason]);
+      SELECT 'crew-link',id,'unlink',$4,to_jsonb(unlinked),$5 FROM unlinked
+    ) SELECT * FROM unlinked`, [input.id, input.version, vesselId || null, login, reason]);
     return row ? json({ link: row }) : error('Concurrent change; reload link', 409);
   }
   return error('Training action is not implemented', 501);
@@ -310,12 +320,12 @@ async function handleSessions({ action, input, vesselId, login, sql }) {
   }
   if (action === 'enrollments.list') {
     const enrollments = vesselId
-      ? await sql.query(`SELECT e.*,s.course_id,s.vessel_id,s.starts_at,c.display_name
+      ? await sql.query(`SELECT e.*,s.course_id,s.vessel_id,s.starts_at,s.display_zone,c.display_name
           FROM training_enrollments e JOIN training_sessions s ON s.id=e.session_id
           JOIN training_crew c ON c.id=e.crew_id
           WHERE s.vessel_id=$1 AND e.removed_at IS NULL AND s.removed_at IS NULL
           ORDER BY s.starts_at DESC LIMIT 300`, [vesselId])
-      : await sql.query(`SELECT e.*,s.course_id,s.vessel_id,s.starts_at,c.display_name
+      : await sql.query(`SELECT e.*,s.course_id,s.vessel_id,s.starts_at,s.display_zone,c.display_name
           FROM training_enrollments e JOIN training_sessions s ON s.id=e.session_id
           JOIN training_crew c ON c.id=e.crew_id
           WHERE e.removed_at IS NULL AND s.removed_at IS NULL
@@ -574,7 +584,7 @@ async function handleCertificates({ action, input, vesselId, login, sql, documen
     if (!certificate) return error('Certificate not found', 404);
     const expected = `Training/Crew/${certificate.crew_id}/Certificates/${certificate.id}/`;
     if (!certificate.file_path?.startsWith(expected)) return error('Invalid certificate reference', 500);
-    const bytes = await documentStore.get(certificate.file_path);
+    const bytes = await documentStore.get(certificate.file_path, certificate.file_sha);
     if (!bytes) return error('Certificate file not found', 404);
     return new Response(bytes, { headers: {
       'Content-Type': certificate.mime_type,
@@ -657,10 +667,11 @@ async function handleReadiness({ input, vesselId, sql }) {
       AND (vessel_id IS NULL OR vessel_id=$1)`, [vesselId]),
     sql.query('SELECT * FROM training_courses WHERE removed_at IS NULL'),
     sql.query('SELECT * FROM training_waivers WHERE crew_id=$1 AND revoked_at IS NULL', [input.crewId]),
-    sql.query(`SELECT o.*,s.course_id FROM training_outcomes o
+    sql.query(`SELECT o.*,s.course_id,s.ends_at AS completed_on FROM training_outcomes o
       JOIN training_enrollments e ON e.id=o.enrollment_id
       JOIN training_sessions s ON s.id=e.session_id
-      WHERE e.crew_id=$1 ORDER BY o.version DESC`, [input.crewId]),
+      WHERE e.crew_id=$1 AND e.removed_at IS NULL AND s.removed_at IS NULL
+        AND s.state IN ('confirmed','completed') ORDER BY o.version DESC`, [input.crewId]),
     sql.query('SELECT * FROM training_certificates WHERE crew_id=$1', [input.crewId]),
     sql.query('SELECT * FROM training_availability WHERE crew_id=$1 AND removed_at IS NULL', [input.crewId])
   ]);
@@ -678,14 +689,11 @@ async function handleReadiness({ input, vesselId, sql }) {
   });
   const results = resultRows.map(o => ({ crewId: input.crewId, courseId: o.course_id,
     enrollmentId: o.enrollment_id, version: o.version,
-    attendance: o.attendance, assessment: o.assessment }));
+    attendance: o.attendance, assessment: o.assessment, completedOn: o.completed_on }));
   const certificates = certificateRows.map(c => ({ crewId: c.crew_id, courseId: c.course_id,
     reviewState: c.review_state, expiresOn: c.expires_on && dateString(c.expires_on) }));
-  const availability = { verified: Boolean(a.joins_on && availabilityRows.some(block =>
-    block.kind === 'available' &&
-    dateString(block.starts_at) <= onDate &&
-    dateString(block.ends_at) >= onDate
-  )) };
+  const availability = { verified: Boolean(a.joins_on &&
+    verifiedDayAvailability(onDate, availabilityRows)) };
   return json({ readiness: calculateReadiness({ requirements, results, certificates,
     waivers: waiverRows.map(w => ({ crewId: w.crew_id, ruleId: w.rule_id,
       approvedBy: w.approved_by, expiresOn: dateString(w.expires_on), reason: w.reason })), availability, onDate }),
