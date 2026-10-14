@@ -55,3 +55,20 @@ test('cancelled session cannot receive an outcome', async () => {
   assert.equal(response.status, 409);
 });
 
+test('draft session cannot receive attendance or assessment', async () => {
+  const enrollmentId = '8f25a70d-50cf-48a4-9383-88a1d1adfd2d';
+  const route = createTrainingRoute({
+    database: () => ({ query: async statement => {
+      if (statement.includes('FROM training_enrollments e')) return [{ id: enrollmentId, state: 'draft', vessel_id: null }];
+      throw Error('Must not write result');
+    } }),
+    loginFromRequest: () => 'primoxy-dev'
+  });
+  const response = await route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' },
+    body: JSON.stringify({ action: 'outcomes.record', enrollmentId,
+      data: { attendance: 'present', assessment: 'passed', assessor: 'Officer', evidence: 'Trial' } })
+  }));
+  assert.equal(response.status, 409);
+});
+
