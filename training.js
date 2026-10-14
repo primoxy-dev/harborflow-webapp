@@ -26,7 +26,7 @@
   async function api(action, params = {}) {
     const url = new URL('/api/training', location.origin);
     url.searchParams.set('action', action);
-    const scoped = state.vesselId || params.vesselId;
+    const scoped = params.vesselId || state.vesselId;
     if (scoped) url.searchParams.set('vesselId', scoped);
     for (const [key, value] of Object.entries(params)) if (value != null && key !== 'vesselId') url.searchParams.set(key, value);
     const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
@@ -83,7 +83,8 @@
     const data = await api('vessels.list');
     state.vessels = data.vessels || [];
     if (state.vesselId && !state.vessels.some(v => v.id === state.vesselId)) state.vesselId = '';
-    if (!state.vesselId && state.vessels.length === 1) state.vesselId = state.vessels[0].id;
+    if (!state.vesselId && ['officer','viewer'].includes(data.role) && state.vessels.length)
+      state.vesselId = state.vessels[0].id;
     const chooser = state.root.querySelector('#trainingVessel');
     chooser.innerHTML = '<option value="">All vessels</option>' + vesselOptions();
     chooser.value = state.vesselId;
@@ -136,9 +137,9 @@
         ${select('Training role', 'role', ['viewer','coordinator','approver','officer'].map(x => option(x,x)).join(''))}
         ${submit('Set training role')}</form>
         <p class="training-small">Operations Crew permissions do not grant access here.</p></div>
-        <div class="training-card"><h3>Assign officer to vessel</h3>
+        <div class="training-card"><h3>Assign viewer or officer to vessel</h3>
         <form data-training-form="officer-assign" class="training-form">
-        ${select('Officer', 'officerLogin', (access.grants || []).filter(g => g.role === 'officer' && !g.revoked_at)
+        ${select('Account', 'officerLogin', (access.grants || []).filter(g => ['officer','viewer'].includes(g.role) && !g.revoked_at)
           .map(g => option(g.login,g.login)).join(''))}
         ${select('Vessel', 'vesselId', vesselOptions())}${submit('Assign vessel')}</form></div></div>` : ''}`;
       return;
@@ -165,13 +166,15 @@
         <div class="training-card"><h3>Availability</h3>
         <form data-training-form="availability-set" class="training-form">
         ${select('Crew', 'crewId', crewOptions())}
+        ${select('Vessel', 'vesselId', vesselOptions())}
         ${select('Kind', 'kind', ['available','duty','travel','leave'].map(x => option(x,x)).join(''))}
         ${box('Start (ISO with offset)', 'startsAt', 'required placeholder="2026-10-15T09:00+07:00"')}
         ${box('End (ISO with offset)', 'endsAt', 'required placeholder="2026-10-15T17:00+07:00"')}
         ${box('Source', 'source', 'required placeholder="Officer verified"')}${submit('Record availability')}</form></div>
         <div class="training-card"><h3>Readiness by crew</h3>
         <form data-training-form="readiness" class="training-form">
-        ${select('Crew', 'crewId', crewOptions())}${box('Selected date', 'onDate', 'type="date" required value="' + new Date().toISOString().slice(0,10) + '"')}
+        ${select('Crew', 'crewId', crewOptions())}${select('Vessel', 'vesselId', vesselOptions())}
+        ${box('Selected date', 'onDate', 'type="date" required value="' + new Date().toISOString().slice(0,10) + '"')}
         ${submit('Check readiness')}</form><div id="trainingReadiness"></div></div>
         <div class="training-card"><h3>Crew profiles</h3><div class="training-table-wrap"><table><thead><tr><th>Name</th><th>Rank</th><th>Department</th><th>Version</th></tr></thead>
         <tbody>${state.crew.map(c => `<tr><td>${esc(c.display_name)}</td><td>${esc(c.rank)}</td><td>${esc(c.department)}</td><td>${esc(c.version)}</td></tr>`).join('')}</tbody></table></div>
@@ -270,7 +273,7 @@
       'officer-assign': ['officers.assign', data],
       'crew-create': ['crew.create', { data }],
       'assignment-create': ['assignments.create', { data }],
-      'availability-set': ['availability.set', { crewId: data.crewId, data }],
+      'availability-set': ['availability.set', { vesselId: data.vesselId, crewId: data.crewId, data }],
       'course-create': ['courses.create', { data: { ...data, durationMinutes: Number(data.durationMinutes) } }],
       'matrix-draft': ['matrix.draft', { data: { ...data, recurrenceMonths: data.recurrenceMonths ? Number(data.recurrenceMonths) : null,
         dueDaysBeforeJoin: Number(data.dueDaysBeforeJoin || 0) } }],
