@@ -11,3 +11,9 @@ test('Operations navigation opens a dedicated Crew Training workspace', () => {
   assert.match(page, /training\.js/);
 });
 
+test('session listings render times in each session display zone', () => {
+  const ui = readFileSync(new URL('../training.js', import.meta.url), 'utf8');
+  assert.match(ui, /stamp\(s\.starts_at, s\.display_zone\)/);
+  assert.match(ui, /stamp\(e\.starts_at, e\.display_zone\)/);
+});
+
