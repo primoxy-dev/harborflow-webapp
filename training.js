@@ -12,7 +12,7 @@
   const option = (id, label) => `<option value="${esc(id)}">${esc(label)}</option>`;
   const crewOptions = () => state.crew.map(c => option(c.id, c.display_name + ' · ' + c.rank)).join('');
   const courseOptions = () => state.courses.map(c => option(c.id, c.code + ' · ' + c.name)).join('');
-  const sessionOptions = () => state.sessions.filter(s => s.state !== 'cancelled').map(s =>
+  const sessionOptions = () => state.sessions.filter(s => ['draft','proposed'].includes(s.state)).map(s =>
     option(s.id, (state.courses.find(c => c.id === s.course_id)?.code || 'Course') + ' · ' + stamp(s.starts_at))).join('');
   const vesselOptions = () => state.vessels.map(v => option(v.id, v.name)).join('');
   const box = (label, name, attrs = '') => `<label>${label}<input name="${name}" ${attrs}></label>`;
@@ -234,6 +234,7 @@
         <td><div class="training-actions">${['draft','confirmed'].includes(s.state) ?
           `<button type="button" data-training-action="propose-session" data-id="${esc(s.id)}">Propose change</button>` : ''}
         ${s.state === 'proposed' ? `<button type="button" data-training-action="confirm-session" data-id="${esc(s.id)}">Confirm</button>` : ''}
+        ${s.state === 'confirmed' ? `<button type="button" data-training-action="complete-session" data-id="${esc(s.id)}">Complete</button>` : ''}
         ${['draft','proposed','confirmed'].includes(s.state) ? `<button type="button" data-training-action="cancel-session" data-id="${esc(s.id)}">Cancel</button>` : ''}</div></td></tr>`).join('')}</tbody></table></div>
         ${state.sessions.length ? '' : empty('No sessions yet.')}</div>`;
       return;
@@ -303,6 +304,7 @@
       const session = state.sessions.find(s => s.id === id);
       if (!session) return;
       if (action === 'confirm-session') await post('sessions.confirm', { id, version: session.version });
+      if (action === 'complete-session') await post('sessions.complete', { id, version: session.version });
       if (action === 'cancel-session') {
         const reason = prompt('Reason for cancellation');
         if (!reason) return;
