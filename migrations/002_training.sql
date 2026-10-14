@@ -184,7 +184,8 @@ CREATE TABLE IF NOT EXISTS training_outcomes (
   version integer NOT NULL DEFAULT 1 CHECK (version > 0),
   created_by text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (enrollment_id, version)
 );
 
 CREATE TABLE IF NOT EXISTS training_certificates (
