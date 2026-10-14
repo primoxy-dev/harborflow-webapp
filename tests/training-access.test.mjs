@@ -36,6 +36,10 @@ test('owner can issue a separate training grant', async () => {
 
 test('shore coordinator can edit, unrelated Operations grants confer no access', () => {
   assert.equal(trainingAccess({ login: 'shore', grant: { role: 'coordinator' }, action: 'crew.create' }), true);
+  assert.equal(trainingAccess({ login: 'shore', grant: { role: 'coordinator', vesselIds: ['vessel-a'] },
+    action: 'vessels.list' }), true);
+  assert.equal(trainingAccess({ login: 'shore', grant: { role: 'coordinator', vesselIds: ['vessel-a'] },
+    action: 'crew.list', targetVesselId: 'vessel-b' }), false);
   assert.equal(trainingAccess({ login: 'operations', grant: { crewEdit: true, role: 'editor', pic: 'operations' }, action: 'crew.list' }), false);
 });
 
