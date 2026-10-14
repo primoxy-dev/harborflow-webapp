@@ -21,6 +21,7 @@ test('officer is scoped to assigned vessel for writes and downloads', () => {
   assert.equal(trainingAccess({ ...input, action: 'outcomes.record', targetVesselId: 'vessel-b' }), false);
   assert.equal(trainingAccess({ ...input, action: 'certificates.download', targetVesselId: 'vessel-b' }), false);
   assert.equal(trainingAccess({ ...input, action: 'crew.list' }), false);
+  assert.equal(trainingAccess({ ...input, action: 'vessels.list' }), true);
   assert.equal(trainingAccess({ ...input, action: 'not.real', targetVesselId: 'vessel-a' }), false);
 });
 
