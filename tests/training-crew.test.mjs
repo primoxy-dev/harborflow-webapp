@@ -110,3 +110,29 @@ test('scoped coordinator update checks crew membership in the vessel', async () 
   assert.ok(calls[0][1].includes('vessel-a'));
 });
 
+test('scoped coordinator cannot link or unlink crew outside the vessel', async () => {
+  const statements = [];
+  const route = createTrainingRoute({
+    database: () => ({ query: async (statement, params) => {
+      statements.push([statement, params]);
+      return [];
+    } }),
+    loginFromRequest: () => 'shore',
+    readTrainingGrant: async () => ({ role: 'coordinator', vesselIds: ['vessel-a'] })
+  });
+  const send = body => route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' }, body: JSON.stringify(body)
+  }));
+  const link = await send({ action: 'crew.link', vesselId: 'vessel-a',
+    crewId: '3bf79fc8-30f0-43ac-93fb-d635da1a43a6',
+    operationPersonId: '549b297e-03f6-4115-97dc-22b24af04ba1', reason: 'Reviewed' });
+  assert.equal(link.status, 403);
+  assert.equal(statements.some(([sql]) => sql.includes('INSERT INTO training_crew_job_links')), false);
+  statements.length = 0;
+  const unlink = await send({ action: 'crew.unlink', vesselId: 'vessel-a',
+    id: '61aa8484-1454-4ca4-abfc-dc9e9116a492', version: 1, reason: 'Correction' });
+  assert.equal(unlink.status, 409);
+  assert.match(statements[0][0], /training_crew_assignments/);
+  assert.equal(statements[0][1].includes('vessel-a'), true);
+});
+
