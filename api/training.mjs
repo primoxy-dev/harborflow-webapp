@@ -174,7 +174,7 @@ async function handleMatrix({ action, input, vesselId, login, sql }) {
     return json({ rules });
   }
   if (action === 'matrix.draft') {
-    const { value, error: invalid } = validateRule(input.data);
+    const { value, error: invalid } = validateRule({ ...input.data, ownerLogin: login });
     if (invalid) return error(invalid, 400);
     const id = randomUUID();
     const [rule] = await sql.query(`WITH created AS (
@@ -277,6 +277,20 @@ async function handleSessions({ action, input, vesselId, login, sql }) {
       ? await sql.query('SELECT * FROM training_sessions WHERE vessel_id=$1 AND removed_at IS NULL ORDER BY starts_at DESC LIMIT 300', [vesselId])
       : await sql.query('SELECT * FROM training_sessions WHERE removed_at IS NULL ORDER BY starts_at DESC LIMIT 300');
     return json({ sessions });
+  }
+  if (action === 'enrollments.list') {
+    const enrollments = vesselId
+      ? await sql.query(`SELECT e.*,s.course_id,s.vessel_id,s.starts_at,c.display_name
+          FROM training_enrollments e JOIN training_sessions s ON s.id=e.session_id
+          JOIN training_crew c ON c.id=e.crew_id
+          WHERE s.vessel_id=$1 AND e.removed_at IS NULL AND s.removed_at IS NULL
+          ORDER BY s.starts_at DESC LIMIT 300`, [vesselId])
+      : await sql.query(`SELECT e.*,s.course_id,s.vessel_id,s.starts_at,c.display_name
+          FROM training_enrollments e JOIN training_sessions s ON s.id=e.session_id
+          JOIN training_crew c ON c.id=e.crew_id
+          WHERE e.removed_at IS NULL AND s.removed_at IS NULL
+          ORDER BY s.starts_at DESC LIMIT 300`);
+    return json({ enrollments });
   }
   if (action === 'sessions.create') {
     const data = input.data || {};
@@ -599,11 +613,16 @@ async function handleReadiness({ input, vesselId, sql }) {
     requirements });
 }
 
-async function handleSetup({ action, input, vesselId, login, sql }) {
+async function handleSetup({ action, input, vesselId, login, grant, sql }) {
   if (action === 'vessels.list') {
     const vessels = vesselId
       ? await sql.query('SELECT * FROM training_vessels WHERE id=$1 AND removed_at IS NULL', [vesselId])
-      : await sql.query('SELECT * FROM training_vessels WHERE removed_at IS NULL ORDER BY name LIMIT 200');
+      : grant?.role === 'officer'
+        ? await sql.query(`SELECT v.* FROM training_vessels v
+            JOIN training_vessel_assignments a ON a.vessel_id=v.id
+            WHERE a.officer_login=$1 AND a.removed_at IS NULL AND v.removed_at IS NULL
+            ORDER BY v.name LIMIT 200`, [login])
+        : await sql.query('SELECT * FROM training_vessels WHERE removed_at IS NULL ORDER BY name LIMIT 200');
     return json({ vessels });
   }
   if (action === 'vessels.create') {
@@ -792,7 +811,7 @@ export function createTrainingRoute({
         ? Object.fromEntries(url.searchParams) : input, vesselId: targetVesselId, login, sql: await database() });
     }
     if (action?.startsWith('sessions.') || action?.startsWith('enrollments.')) {
-      const readAction = action === 'sessions.list';
+      const readAction = ['sessions.list','enrollments.list'].includes(action);
       if ((request.method === 'GET') !== readAction) return error('Method not allowed', 405);
       return handleSessions({ action, input, vesselId: targetVesselId, login, sql: await database() });
     }
@@ -821,7 +840,7 @@ export function createTrainingRoute({
       if ((request.method === 'GET') !== readAction) return error('Method not allowed', 405);
       return handleSetup({ action, input: request.method === 'GET'
         ? Object.fromEntries(url.searchParams) : input, vesselId: targetVesselId,
-        login, sql: await database() });
+        login, grant, sql: await database() });
     }
     return error('Training action is not implemented', 501);
   };
