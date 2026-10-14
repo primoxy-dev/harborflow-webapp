@@ -54,7 +54,7 @@ test('stale crew update returns conflict without an unguarded write', async () =
     })
   }));
   assert.equal(response.status, 409);
-  assert.ok(queries.some(([statement]) => statement.includes('WHERE id=$') && statement.includes('version=')));
+  assert.ok(queries.some(([statement]) => /WHERE c\.id=\$5 AND c\.version=\$6/.test(statement)));
 });
 
 test('officer crew listing uses vessel filter', async () => {
@@ -90,5 +90,23 @@ test('crew detail requires an assignment in the requested vessel', async () => {
   assert.equal(calls.length, 1);
   assert.match(calls[0][0], /training_crew_assignments/);
   assert.deepEqual(calls[0][1], [crewId, 'vessel-a']);
+});
+
+test('scoped coordinator update checks crew membership in the vessel', async () => {
+  const calls = [];
+  const route = createTrainingRoute({
+    database: () => ({ query: async (statement, params) => { calls.push([statement, params]); return []; } }),
+    loginFromRequest: () => 'shore',
+    readTrainingGrant: async () => ({ role: 'coordinator', vesselIds: ['vessel-a'] })
+  });
+  const response = await route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' },
+    body: JSON.stringify({ action: 'crew.update', vesselId: 'vessel-a',
+      id: '3bf79fc8-30f0-43ac-93fb-d635da1a43a6', version: 1,
+      data: { displayName: 'Fictional B', rank: 'Master' } })
+  }));
+  assert.equal(response.status, 409);
+  assert.match(calls[0][0], /training_crew_assignments/);
+  assert.ok(calls[0][1].includes('vessel-a'));
 });
 
