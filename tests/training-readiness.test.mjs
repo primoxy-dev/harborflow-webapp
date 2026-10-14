@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { calculateReadiness, verifiedDayAvailability } from '../lib/training/readiness.mjs';
+import { createTrainingRoute } from '../api/training.mjs';
 
 const base = {
   requirements: [{ crewId: 'crew-a', courseId: 'course-a', ruleId: 'rule-a', dueOn: '2026-10-20' }],
@@ -64,5 +65,27 @@ test('recurrent training expires after the required number of calendar months', 
   const recentPass = { ...passed, completedOn: '2026-04-30' };
   assert.equal(calculateReadiness({ ...base, requirements: [recurring], results: [recentPass],
     certificates: [verified] }).status, 'ready');
+});
+
+test('readiness query excludes cancelled sessions and removed enrollments', async () => {
+  const crewId = '3bf79fc8-30f0-43ac-93fb-d635da1a43a6';
+  const vesselId = '549b297e-03f6-4115-97dc-22b24af04ba1';
+  const statements = [];
+  const route = createTrainingRoute({
+    database: () => ({ query: async statement => {
+      statements.push(statement);
+      if (statement.startsWith('SELECT id,rank FROM training_crew')) return [{ id: crewId, rank: 'Master' }];
+      if (statement.startsWith('SELECT a.*,v.vessel_type'))
+        return [{ crew_id: crewId, vessel_id: vesselId, joins_on: '2026-10-20', vessel_type: 'Tanker' }];
+      return [];
+    } }),
+    loginFromRequest: () => 'primoxy-dev'
+  });
+  const response = await route(new Request(`https://example.test/api/training?action=readiness.get&crewId=${crewId}&vesselId=${vesselId}&onDate=2026-10-15`));
+  assert.equal(response.status, 200);
+  const outcomesSql = statements.find(statement => statement.includes('FROM training_outcomes o'));
+  assert.match(outcomesSql, /e\.removed_at IS NULL/);
+  assert.match(outcomesSql, /s\.removed_at IS NULL/);
+  assert.match(outcomesSql, /s\.state IN \('confirmed','completed'\)/);
 });
 
