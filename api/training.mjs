@@ -1,6 +1,7 @@
 import { nodeHandler, json, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
 import { TRAINING_OWNER, trainingAccess } from '../lib/training/access.mjs';
 import { validateCrewProfile, validateCrewLink } from '../lib/training/crew.mjs';
+import { validateCourse, validateRule, deriveRequirements } from '../lib/training/matrix.mjs';
 import { randomUUID } from 'node:crypto';
 
 const error = (message, status) => json({ error: message }, status);
@@ -112,6 +113,110 @@ async function handleCrew({ action, input, vesselId, login, sql }) {
   return error('Training action is not implemented', 501);
 }
 
+async function handleMatrix({ action, input, vesselId, login, sql }) {
+  if (action === 'courses.list') {
+    const courses = await sql.query('SELECT * FROM training_courses WHERE removed_at IS NULL ORDER BY code LIMIT 300');
+    return json({ courses });
+  }
+  if (action === 'courses.create') {
+    const { value, error: invalid } = validateCourse(input.data);
+    if (invalid) return error(invalid, 400);
+    const id = randomUUID();
+    const [course] = await sql.query(`WITH created AS (
+      INSERT INTO training_courses(id,code,name,duration_minutes,mode,prerequisites,source,owner_login,created_by)
+      VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$8) RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'course',id,'create',$8,to_jsonb(created) FROM created
+    ) SELECT * FROM created`,
+    [id, value.code, value.name, value.durationMinutes, value.mode, JSON.stringify(value.prerequisites), value.source, login]);
+    return json({ course }, 201);
+  }
+  if (action === 'courses.update') {
+    if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid course ID or version', 400);
+    const { value, error: invalid } = validateCourse(input.data);
+    if (invalid) return error(invalid, 400);
+    const [course] = await sql.query(`WITH updated AS (
+      UPDATE training_courses SET code=$1,name=$2,duration_minutes=$3,mode=$4,
+        prerequisites=$5::jsonb,source=$6,version=version+1,updated_at=now()
+      WHERE id=$7 AND version=$8 AND removed_at IS NULL RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'course',id,'update',$9,to_jsonb(updated) FROM updated
+    ) SELECT * FROM updated`,
+    [value.code, value.name, value.durationMinutes, value.mode, JSON.stringify(value.prerequisites), value.source, input.id, input.version, login]);
+    return course ? json({ course }) : error('Concurrent change; reload course', 409);
+  }
+  if (action === 'matrix.list') {
+    const rules = vesselId
+      ? await sql.query('SELECT * FROM training_matrix_rules WHERE vessel_id IS NULL OR vessel_id=$1 ORDER BY effective_from DESC LIMIT 300', [vesselId])
+      : await sql.query('SELECT * FROM training_matrix_rules ORDER BY effective_from DESC LIMIT 300');
+    return json({ rules });
+  }
+  if (action === 'matrix.draft') {
+    const { value, error: invalid } = validateRule(input.data);
+    if (invalid) return error(invalid, 400);
+    const id = randomUUID();
+    const [rule] = await sql.query(`WITH created AS (
+      INSERT INTO training_matrix_rules(id,course_id,rank,vessel_type,vessel_id,effective_from,
+        effective_until,recurrence_months,due_days_before_join,source,owner_login,created_by)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'matrix',id,'draft',$12,to_jsonb(created) FROM created
+    ) SELECT * FROM created`,
+    [id, value.courseId, value.rank, value.vesselType, value.vesselId, value.effectiveFrom,
+      value.effectiveUntil, value.recurrenceMonths, value.dueDaysBeforeJoin, value.source, value.ownerLogin, login]);
+    return json({ rule }, 201);
+  }
+  if (action === 'matrix.approve') {
+    if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid rule ID or version', 400);
+    const [rule] = await sql.query(`WITH approved AS (
+      UPDATE training_matrix_rules SET state='approved',approved_by=$1,approved_at=now(),
+        version=version+1,updated_at=now()
+      WHERE id=$2 AND version=$3 AND state='draft' RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'matrix',id,'approve',$1,to_jsonb(approved) FROM approved
+    ) SELECT * FROM approved`, [login, input.id, input.version]);
+    return rule ? json({ rule }) : error('Rule changed or is no longer a draft', 409);
+  }
+  if (action === 'requirements.list') {
+    if (!uuid(input.crewId) || !uuid(vesselId)) return error('Crew and vessel are required', 400);
+    const onDate = input.onDate || new Date().toISOString().slice(0, 10);
+    const [crewRows, assignmentRows, ruleRows, courseRows, waiverRows] = await Promise.all([
+      sql.query('SELECT * FROM training_crew WHERE id=$1 AND removed_at IS NULL', [input.crewId]),
+      sql.query(`SELECT a.*,v.vessel_type FROM training_crew_assignments a
+        JOIN training_vessels v ON v.id=a.vessel_id
+        WHERE a.crew_id=$1 AND a.vessel_id=$2 AND a.removed_at IS NULL
+        ORDER BY a.created_at DESC LIMIT 1`, [input.crewId, vesselId]),
+      sql.query(`SELECT * FROM training_matrix_rules WHERE state='approved'
+        AND (vessel_id IS NULL OR vessel_id=$1)`, [vesselId]),
+      sql.query('SELECT * FROM training_courses WHERE removed_at IS NULL'),
+      sql.query('SELECT * FROM training_waivers WHERE crew_id=$1 AND revoked_at IS NULL', [input.crewId])
+    ]);
+    if (!crewRows[0] || !assignmentRows[0]) return error('Crew assignment not found', 404);
+    const crew = { id: crewRows[0].id, rank: crewRows[0].rank };
+    const a = assignmentRows[0];
+    const assignment = { vesselId, vesselType: a.vessel_type, rank: a.rank, joinsOn: a.joins_on?.toISOString?.().slice(0,10) || a.joins_on };
+    const rules = ruleRows.map(r => ({
+      id: r.id, courseId: r.course_id, rank: r.rank, vesselType: r.vessel_type,
+      vesselId: r.vessel_id, effectiveFrom: String(r.effective_from).slice(0,10),
+      effectiveUntil: r.effective_until && String(r.effective_until).slice(0,10),
+      recurrenceMonths: r.recurrence_months, dueDaysBeforeJoin: r.due_days_before_join,
+      state: r.state, source: r.source, version: r.version, approvedBy: r.approved_by
+    }));
+    const courses = courseRows.map(c => ({ id: c.id, code: c.code, name: c.name, prerequisites: c.prerequisites }));
+    const waivers = waiverRows.map(w => ({
+      crewId: w.crew_id, ruleId: w.rule_id, expiresOn: String(w.expires_on).slice(0,10),
+      approvedBy: w.approved_by, reason: w.reason, revokedAt: w.revoked_at
+    }));
+    try { return json({ requirements: deriveRequirements({ crew, assignment, rules, courses, onDate, waivers }) }); }
+    catch { return error('Invalid selected date', 400); }
+  }
+  return error('Training action is not implemented', 501);
+}
+
 export function createTrainingRoute({
   database = defaultDatabase,
   loginFromRequest = sessionLogin,
@@ -142,6 +247,12 @@ export function createTrainingRoute({
       if (request.method === 'GET' && action !== 'crew.list') return error('Method not allowed', 405);
       if (request.method === 'POST' && action === 'crew.list') return error('Method not allowed', 405);
       return handleCrew({ action, input, vesselId: targetVesselId, login, sql: await database() });
+    }
+    if (action?.startsWith('courses.') || action?.startsWith('matrix.') || action === 'requirements.list') {
+      const readAction = ['courses.list', 'matrix.list', 'requirements.list'].includes(action);
+      if ((request.method === 'GET') !== readAction) return error('Method not allowed', 405);
+      return handleMatrix({ action, input: request.method === 'GET'
+        ? Object.fromEntries(url.searchParams) : input, vesselId: targetVesselId, login, sql: await database() });
     }
     return error('Training action is not implemented', 501);
   };
