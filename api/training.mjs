@@ -56,6 +56,16 @@ async function handleCrew({ action, input, vesselId, login, sql }) {
       : await sql.query('SELECT * FROM training_crew WHERE removed_at IS NULL ORDER BY display_name LIMIT 200');
     return json({ crew: rows });
   }
+  if (action === 'crew.get') {
+    if (!uuid(input.id)) return error('Invalid crew ID', 400);
+    const [row] = vesselId
+      ? await sql.query(`SELECT c.* FROM training_crew c
+          JOIN training_crew_assignments a ON a.crew_id=c.id
+          WHERE c.id=$1 AND a.vessel_id=$2 AND a.removed_at IS NULL AND c.removed_at IS NULL`,
+        [input.id, vesselId])
+      : await sql.query('SELECT * FROM training_crew WHERE id=$1 AND removed_at IS NULL', [input.id]);
+    return row ? json({ crew: row }) : error('Crew not found', 404);
+  }
   if (action === 'crew.create') {
     const { value, error: invalid } = validateCrewProfile(input.data);
     if (invalid) return error(invalid, 400);
@@ -176,6 +186,8 @@ async function handleMatrix({ action, input, vesselId, login, sql }) {
   if (action === 'matrix.draft') {
     const { value, error: invalid } = validateRule({ ...input.data, ownerLogin: login });
     if (invalid) return error(invalid, 400);
+    if (vesselId && value.vesselId !== vesselId)
+      return error('Matrix rule is outside the selected vessel scope', 403);
     const id = randomUUID();
     const [rule] = await sql.query(`WITH created AS (
       INSERT INTO training_matrix_rules(id,course_id,rank,vessel_type,vessel_id,effective_from,
@@ -194,11 +206,12 @@ async function handleMatrix({ action, input, vesselId, login, sql }) {
     const [rule] = await sql.query(`WITH approved AS (
       UPDATE training_matrix_rules SET state='approved',approved_by=$1,approved_at=now(),
         version=version+1,updated_at=now()
-      WHERE id=$2 AND version=$3 AND state='draft' RETURNING *
+      WHERE id=$2 AND version=$3 AND state='draft'
+        AND ($4::uuid IS NULL OR vessel_id=$4) RETURNING *
     ), event AS (
       INSERT INTO training_events(scope,record_id,action,actor,after_data)
       SELECT 'matrix',id,'approve',$1,to_jsonb(approved) FROM approved
-    ) SELECT * FROM approved`, [login, input.id, input.version]);
+    ) SELECT * FROM approved`, [login, input.id, input.version, vesselId || null]);
     return rule ? json({ rule }) : error('Rule changed or is no longer a draft', 409);
   }
   if (action === 'requirements.list') {
@@ -327,11 +340,30 @@ async function handleSessions({ action, input, vesselId, login, sql }) {
       String(data.venue || '').slice(0,160), data.capacity, login]);
     return json({ session: row }, 201);
   }
-  if (['sessions.propose','sessions.confirm','sessions.cancel'].includes(action)) {
+  if (['sessions.update','sessions.propose','sessions.confirm','sessions.cancel'].includes(action)) {
     if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid session ID or version', 400);
     const current = await loadSession(sql, input.id, vesselId);
     if (!current) return error('Session not found', 404);
     if (current.version !== input.version) return error('Concurrent change; reload session', 409);
+    if (action === 'sessions.update') {
+      if (current.state !== 'draft') return error('Only a draft session may be edited directly', 409);
+      const data = input.data || {};
+      const invalid = validateSessionTime(data);
+      if (invalid) return error(invalid, 400);
+      if (!uuid(data.courseId) || !Number.isInteger(data.capacity) || data.capacity < 1)
+        return error('Course and capacity are required', 400);
+      const [row] = await sql.query(`WITH updated AS (
+        UPDATE training_sessions SET course_id=$1,starts_at=$2,ends_at=$3,display_zone=$4,
+          instructor=$5,venue=$6,capacity=$7,version=version+1,updated_at=now()
+        WHERE id=$8 AND version=$9 AND state='draft' RETURNING *
+      ), event AS (
+        INSERT INTO training_events(scope,record_id,action,actor,after_data)
+        SELECT 'session',id,'update',$10,to_jsonb(updated) FROM updated
+      ) SELECT * FROM updated`, [data.courseId, utc(data.startsAt), utc(data.endsAt),
+        data.displayZone, String(data.instructor || '').slice(0,160),
+        String(data.venue || '').slice(0,160), data.capacity, input.id, input.version, login]);
+      return row ? json({ session: row }) : error('Concurrent change; reload session', 409);
+    }
     if (action === 'sessions.propose') {
       if (!validateSessionTransition(current.state, 'proposed')) return error('Cannot propose this session', 409);
       const data = input.data || {};
@@ -631,13 +663,13 @@ async function handleSetup({ action, input, vesselId, login, grant, sql }) {
   if (action === 'vessels.list') {
     const vessels = vesselId
       ? await sql.query('SELECT * FROM training_vessels WHERE id=$1 AND removed_at IS NULL', [vesselId])
-      : grant?.role === 'officer'
+      : ['officer','viewer'].includes(grant?.role)
         ? await sql.query(`SELECT v.* FROM training_vessels v
             JOIN training_vessel_assignments a ON a.vessel_id=v.id
             WHERE a.officer_login=$1 AND a.removed_at IS NULL AND v.removed_at IS NULL
             ORDER BY v.name LIMIT 200`, [login])
         : await sql.query('SELECT * FROM training_vessels WHERE removed_at IS NULL ORDER BY name LIMIT 200');
-    return json({ vessels });
+    return json({ vessels, role: grant?.role || null });
   }
   if (action === 'vessels.create') {
     const name = String(input.data?.name || '').trim().slice(0,160);
@@ -655,6 +687,7 @@ async function handleSetup({ action, input, vesselId, login, grant, sql }) {
   }
   if (action === 'vessels.update') {
     if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid vessel ID or version', 400);
+    if (vesselId && input.id !== vesselId) return error('Vessel is outside selected scope', 403);
     const name = String(input.data?.name || '').trim().slice(0,160);
     const type = String(input.data?.vesselType || '').trim().slice(0,100);
     if (!name || !type) return error('Vessel name and type are required', 400);
@@ -825,7 +858,8 @@ async function handleTrainingGrants({ action, input, login, sql }) {
       return error('Valid vessel and officer account are required', 400);
     const [grant] = await sql.query(`SELECT role FROM training_grants
       WHERE login=$1 AND revoked_at IS NULL`, [input.officerLogin]);
-    if (grant?.role !== 'officer') return error('Account needs an officer training grant', 409);
+    if (!['officer','viewer'].includes(grant?.role))
+      return error('Account needs a vessel-scoped training grant', 409);
     const id = randomUUID();
     const [row] = await sql.query(`WITH saved AS (
       INSERT INTO training_vessel_assignments(id,vessel_id,officer_login,assigned_by)
@@ -887,9 +921,10 @@ export function createTrainingRoute({
       return error('Training permission denied', 403);
     }
     if (action?.startsWith('crew.')) {
-      if (request.method === 'GET' && action !== 'crew.list') return error('Method not allowed', 405);
-      if (request.method === 'POST' && action === 'crew.list') return error('Method not allowed', 405);
-      return handleCrew({ action, input, vesselId: targetVesselId, login, sql: await database() });
+      const readAction = ['crew.list','crew.get'].includes(action);
+      if ((request.method === 'GET') !== readAction) return error('Method not allowed', 405);
+      return handleCrew({ action, input: readAction ? Object.fromEntries(url.searchParams) : input,
+        vesselId: targetVesselId, login, sql: await database() });
     }
     if (action?.startsWith('courses.') || action?.startsWith('matrix.') || action === 'requirements.list') {
       const readAction = ['courses.list', 'matrix.list', 'requirements.list'].includes(action);
