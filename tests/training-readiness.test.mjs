@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateReadiness } from '../lib/training/readiness.mjs';
+import { calculateReadiness, verifiedDayAvailability } from '../lib/training/readiness.mjs';
 
 const base = {
   requirements: [{ crewId: 'crew-a', courseId: 'course-a', ruleId: 'rule-a', dueOn: '2026-10-20' }],
@@ -42,5 +42,27 @@ test('a later failed correction supersedes an earlier pass', () => {
     certificates: [verified]
   });
   assert.equal(result.status, 'not ready');
+});
+
+test('a one-hour availability block or overlapping duty cannot verify a full day', () => {
+  const day = '2026-10-15';
+  assert.equal(verifiedDayAvailability(day, [{ kind: 'available', starts_at: '2026-10-15T09:00:00Z',
+    ends_at: '2026-10-15T10:00:00Z' }]), false);
+  assert.equal(verifiedDayAvailability(day, [
+    { kind: 'available', starts_at: '2026-10-15T00:00:00Z', ends_at: '2026-10-16T00:00:00Z' },
+    { kind: 'duty', starts_at: '2026-10-15T08:00:00Z', ends_at: '2026-10-15T12:00:00Z' }
+  ]), false);
+  assert.equal(verifiedDayAvailability(day, [{ kind: 'available', starts_at: '2026-10-15T00:00:00Z',
+    ends_at: '2026-10-16T00:00:00Z' }]), true);
+});
+
+test('recurrent training expires after the required number of calendar months', () => {
+  const recurring = { ...base.requirements[0], recurrenceMonths: 6 };
+  const oldPass = { ...passed, completedOn: '2026-03-31' };
+  assert.equal(calculateReadiness({ ...base, requirements: [recurring], results: [oldPass],
+    certificates: [verified] }).status, 'not ready');
+  const recentPass = { ...passed, completedOn: '2026-04-30' };
+  assert.equal(calculateReadiness({ ...base, requirements: [recurring], results: [recentPass],
+    certificates: [verified] }).status, 'ready');
 });
 
