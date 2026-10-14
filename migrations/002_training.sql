@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS training_grants (
   login text PRIMARY KEY CHECK (login ~ '^[a-z0-9-]{1,39}$'),
   role text NOT NULL CHECK (role IN ('viewer','coordinator','approver','officer')),
   granted_by text NOT NULL,
+  version integer NOT NULL DEFAULT 1 CHECK (version > 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   revoked_at timestamptz
@@ -234,7 +235,7 @@ CREATE INDEX IF NOT EXISTS training_availability_crew
 CREATE TABLE IF NOT EXISTS training_events (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   scope text NOT NULL,
-  record_id uuid NOT NULL,
+  record_id text NOT NULL,
   action text NOT NULL,
   actor text NOT NULL,
   before_data jsonb,
