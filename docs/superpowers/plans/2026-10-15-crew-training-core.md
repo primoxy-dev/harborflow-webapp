@@ -55,7 +55,7 @@
 
 - [ ] Write `tests/training-access.test.mjs`: owner access; viewer cannot write/download; shore coordinator may edit; officer assigned vessel A can write A and gets 403 for B; anonymous GET and POST return 401; unrelated Operations Crew Edit and PIC confer no training grant.
 - [ ] Run `node --test tests/training-access.test.mjs`; expect missing module/function failure.
-- [ ] Add training grants and vessel assignments plus versioned training entity tables to `002_training.sql`. Add `trainingAccess`; route every action through session, grant and scope checks before querying or mutating records. Default-deny unknown actions; no public read path.
+- [ ] Add `training_grants`, `training_vessels`, `training_vessel_assignments`, `training_crew`, `training_crew_job_links`, `training_courses`, `training_matrix_rules`, `training_waivers`, `training_sessions`, `training_enrollments`, `training_outcomes`, `training_certificates`, `training_availability`, and `training_events` to `002_training.sql`. Give mutable rows a `version` and audit timestamps; uniquely index active `operation_person_id` links and enrollment `(session_id,crew_id)`. Add `trainingAccess`; route every action through session, grant and scope checks before querying or mutating records. Default-deny unknown actions; no public read path.
 - [ ] Run `node --test tests/training-access.test.mjs`; expect all tests PASS.
 - [ ] Commit schema, API shell, tests and README: `feat: establish guarded training domain`.
 
