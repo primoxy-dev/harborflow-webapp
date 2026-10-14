@@ -137,3 +137,73 @@ test('confirmed session cannot be edited directly', async () => {
   assert.equal(response.status, 409);
 });
 
+test('confirmed session can be marked completed with version guard', async () => {
+  const sessionId = '3bf79fc8-30f0-43ac-93fb-d635da1a43a6';
+  const statements = [];
+  const route = createTrainingRoute({
+    database: () => ({ query: async (statement, params) => {
+      statements.push([statement, params]);
+      if (statement.startsWith('SELECT * FROM training_sessions'))
+        return [{ id: sessionId, state: 'confirmed', version: 3 }];
+      return [{ id: sessionId, state: 'completed', version: 4 }];
+    } }),
+    loginFromRequest: () => 'primoxy-dev'
+  });
+  const response = await route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' },
+    body: JSON.stringify({ action: 'sessions.complete', id: sessionId, version: 3 })
+  }));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).session.state, 'completed');
+  assert.match(statements[1][0], /state='completed'/);
+  assert.match(statements[1][0], /version=version\+1/);
+});
+
+test('confirmed session rejects late enrollment', async () => {
+  const sessionId = '3bf79fc8-30f0-43ac-93fb-d635da1a43a6';
+  const crewId = '549b297e-03f6-4115-97dc-22b24af04ba1';
+  let inserted = false;
+  const route = createTrainingRoute({
+    database: () => ({ query: async statement => {
+      if (statement.startsWith('SELECT * FROM training_sessions'))
+        return [{ id: sessionId, state: 'confirmed', vessel_id: null, capacity: 1 }];
+      if (statement.includes('INSERT INTO training_enrollments')) inserted = true;
+      return [];
+    } }),
+    loginFromRequest: () => 'primoxy-dev'
+  });
+  const response = await route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' },
+    body: JSON.stringify({ action: 'enrollments.add', sessionId, crewId,
+      idempotencyKey: 'unique-request-1' })
+  }));
+  assert.equal(response.status, 409);
+  assert.equal(inserted, false);
+});
+
+test('repeat enrollment returns its existing row even when capacity is full', async () => {
+  const sessionId = '3bf79fc8-30f0-43ac-93fb-d635da1a43a6';
+  const crewId = '549b297e-03f6-4115-97dc-22b24af04ba1';
+  const existing = { id: '61aa8484-1454-4ca4-abfc-dc9e9116a492', session_id: sessionId, crew_id: crewId };
+  let inserted = false;
+  const route = createTrainingRoute({
+    database: () => ({ query: async statement => {
+      if (statement.startsWith('SELECT * FROM training_sessions'))
+        return [{ id: sessionId, state: 'draft', vessel_id: null, capacity: 1 }];
+      if (statement.includes('FROM training_enrollments') && statement.includes('crew_id=')) return [existing];
+      if (statement.includes('count(*)')) return [{ count: 1 }];
+      if (statement.includes('INSERT INTO training_enrollments')) inserted = true;
+      return [];
+    } }),
+    loginFromRequest: () => 'primoxy-dev'
+  });
+  const response = await route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' },
+    body: JSON.stringify({ action: 'enrollments.add', sessionId, crewId,
+      idempotencyKey: 'unique-request-2' })
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).enrollment, existing);
+  assert.equal(inserted, false);
+});
+
