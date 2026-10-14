@@ -588,11 +588,162 @@ async function handleReadiness({ input, vesselId, sql }) {
     attendance: o.attendance, assessment: o.assessment }));
   const certificates = certificateRows.map(c => ({ crewId: c.crew_id, courseId: c.course_id,
     reviewState: c.review_state, expiresOn: c.expires_on && dateString(c.expires_on) }));
-  const availability = { verified: Boolean(a.joins_on && availabilityRows.length) };
+  const availability = { verified: Boolean(a.joins_on && availabilityRows.some(block =>
+    block.kind === 'available' &&
+    dateString(block.starts_at) <= onDate &&
+    dateString(block.ends_at) >= onDate
+  )) };
   return json({ readiness: calculateReadiness({ requirements, results, certificates,
     waivers: waiverRows.map(w => ({ crewId: w.crew_id, ruleId: w.rule_id,
       approvedBy: w.approved_by, expiresOn: dateString(w.expires_on), reason: w.reason })), availability, onDate }),
     requirements });
+}
+
+async function handleSetup({ action, input, vesselId, login, sql }) {
+  if (action === 'vessels.list') {
+    const vessels = vesselId
+      ? await sql.query('SELECT * FROM training_vessels WHERE id=$1 AND removed_at IS NULL', [vesselId])
+      : await sql.query('SELECT * FROM training_vessels WHERE removed_at IS NULL ORDER BY name LIMIT 200');
+    return json({ vessels });
+  }
+  if (action === 'vessels.create') {
+    const name = String(input.data?.name || '').trim().slice(0,160);
+    const type = String(input.data?.vesselType || '').trim().slice(0,100);
+    if (!name || !type) return error('Vessel name and type are required', 400);
+    const id = randomUUID();
+    const [vessel] = await sql.query(`WITH created AS (
+      INSERT INTO training_vessels(id,name,vessel_type,created_by)
+      VALUES($1,$2,$3,$4) RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'vessel',id,'create',$4,to_jsonb(created) FROM created
+    ) SELECT * FROM created`, [id, name, type, login]);
+    return json({ vessel }, 201);
+  }
+  if (action === 'vessels.update') {
+    if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid vessel ID or version', 400);
+    const name = String(input.data?.name || '').trim().slice(0,160);
+    const type = String(input.data?.vesselType || '').trim().slice(0,100);
+    if (!name || !type) return error('Vessel name and type are required', 400);
+    const [vessel] = await sql.query(`WITH updated AS (
+      UPDATE training_vessels SET name=$1,vessel_type=$2,version=version+1,updated_at=now()
+      WHERE id=$3 AND version=$4 AND removed_at IS NULL RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'vessel',id,'update',$5,to_jsonb(updated) FROM updated
+    ) SELECT * FROM updated`, [name, type, input.id, input.version, login]);
+    return vessel ? json({ vessel }) : error('Concurrent change; reload vessel', 409);
+  }
+  if (action === 'assignments.create') {
+    const d = input.data || {};
+    if (!uuid(d.crewId) || !uuid(d.vesselId) || (vesselId && vesselId !== d.vesselId))
+      return error('Crew and vessel are required', 400);
+    if (d.joinsOn && !date(d.joinsOn)) return error('Invalid joining date', 400);
+    if (d.leavesOn && (!date(d.leavesOn) || (d.joinsOn && d.leavesOn < d.joinsOn)))
+      return error('Invalid leaving date', 400);
+    const id = randomUUID();
+    const [assignment] = await sql.query(`WITH created AS (
+      INSERT INTO training_crew_assignments(id,crew_id,vessel_id,joins_on,leaves_on,rank,created_by)
+      VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'assignment',id,'create',$7,to_jsonb(created) FROM created
+    ) SELECT * FROM created`,
+    [id, d.crewId, d.vesselId, d.joinsOn || null, d.leavesOn || null, String(d.rank || '').slice(0,100) || null, login]);
+    return json({ assignment }, 201);
+  }
+  if (action === 'assignments.update') {
+    if (!uuid(input.id) || !Number.isInteger(input.version)) return error('Invalid assignment ID or version', 400);
+    const d = input.data || {};
+    if (d.joinsOn && !date(d.joinsOn)) return error('Invalid joining date', 400);
+    if (d.leavesOn && (!date(d.leavesOn) || (d.joinsOn && d.leavesOn < d.joinsOn)))
+      return error('Invalid leaving date', 400);
+    const [assignment] = await sql.query(`WITH updated AS (
+      UPDATE training_crew_assignments SET joins_on=$1,leaves_on=$2,rank=$3,
+        version=version+1,updated_at=now()
+      WHERE id=$4 AND version=$5 AND removed_at IS NULL
+        AND ($6::uuid IS NULL OR vessel_id=$6) RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'assignment',id,'update',$7,to_jsonb(updated) FROM updated
+    ) SELECT * FROM updated`,
+    [d.joinsOn || null, d.leavesOn || null, String(d.rank || '').slice(0,100) || null,
+      input.id, input.version, vesselId || null, login]);
+    return assignment ? json({ assignment }) : error('Concurrent change; reload assignment', 409);
+  }
+  if (action === 'availability.list') {
+    if (!uuid(input.crewId)) return error('Crew ID is required', 400);
+    if (vesselId) {
+      const [assigned] = await sql.query(`SELECT id FROM training_crew_assignments
+        WHERE crew_id=$1 AND vessel_id=$2 AND removed_at IS NULL`, [input.crewId, vesselId]);
+      if (!assigned) return error('Crew is not assigned to this vessel', 403);
+    }
+    const availability = await sql.query(
+      'SELECT * FROM training_availability WHERE crew_id=$1 AND removed_at IS NULL ORDER BY starts_at DESC',
+      [input.crewId]);
+    return json({ availability });
+  }
+  if (action === 'availability.set') {
+    if (!uuid(input.crewId) || !uuid(vesselId)) return error('Crew and vessel are required', 400);
+    const [assigned] = await sql.query(`SELECT id FROM training_crew_assignments
+      WHERE crew_id=$1 AND vessel_id=$2 AND removed_at IS NULL`, [input.crewId, vesselId]);
+    if (!assigned) return error('Crew is not assigned to this vessel', 403);
+    const d = input.data || {};
+    if (!['duty','travel','leave','available'].includes(d.kind) ||
+        !d.startsAt || !d.endsAt || Number.isNaN(Date.parse(d.startsAt)) ||
+        Number.isNaN(Date.parse(d.endsAt)) || Date.parse(d.endsAt) <= Date.parse(d.startsAt))
+      return error('Invalid availability interval', 400);
+    const source = String(d.source || '').trim().slice(0,200);
+    if (!source) return error('Availability source is required', 400);
+    const id = randomUUID();
+    const [block] = await sql.query(`WITH created AS (
+      INSERT INTO training_availability(id,crew_id,starts_at,ends_at,kind,source,created_by)
+      VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data)
+      SELECT 'availability',id,'set',$7,to_jsonb(created) FROM created
+    ) SELECT * FROM created`,
+    [id, input.crewId, utc(d.startsAt), utc(d.endsAt), d.kind, source, login]);
+    return json({ block }, 201);
+  }
+  if (action === 'waivers.approve') {
+    if (!uuid(input.crewId) || !uuid(input.ruleId) || !date(input.expiresOn))
+      return error('Crew, rule and expiry are required', 400);
+    const reason = String(input.reason || '').trim().slice(0,500);
+    if (!reason) return error('Waiver reason is required', 400);
+    if (vesselId) {
+      const [assigned] = await sql.query(`SELECT id FROM training_crew_assignments
+        WHERE crew_id=$1 AND vessel_id=$2 AND removed_at IS NULL`, [input.crewId, vesselId]);
+      if (!assigned) return error('Crew is not assigned to this vessel', 403);
+    }
+    const id = randomUUID();
+    const [waiver] = await sql.query(`WITH created AS (
+      INSERT INTO training_waivers(id,crew_id,rule_id,reason,expires_on,approved_by,approved_at,created_by)
+      VALUES($1,$2,$3,$4,$5,$6,now(),$6) RETURNING *
+    ), event AS (
+      INSERT INTO training_events(scope,record_id,action,actor,after_data,reason)
+      SELECT 'waiver',id,'approve',$6,to_jsonb(created),$4 FROM created
+    ) SELECT * FROM created`, [id, input.crewId, input.ruleId, reason, input.expiresOn, login]);
+    return json({ waiver }, 201);
+  }
+  if (action === 'overview.get') {
+    const [crew, sessions, certificates] = await Promise.all([
+      vesselId ? sql.query(`SELECT COUNT(DISTINCT crew_id)::int AS count FROM training_crew_assignments
+        WHERE vessel_id=$1 AND removed_at IS NULL`, [vesselId])
+        : sql.query('SELECT COUNT(*)::int AS count FROM training_crew WHERE removed_at IS NULL'),
+      vesselId ? sql.query(`SELECT COUNT(*)::int AS count FROM training_sessions
+        WHERE vessel_id=$1 AND state IN ('draft','proposed','confirmed') AND removed_at IS NULL`, [vesselId])
+        : sql.query(`SELECT COUNT(*)::int AS count FROM training_sessions
+        WHERE state IN ('draft','proposed','confirmed') AND removed_at IS NULL`),
+      vesselId ? sql.query(`SELECT COUNT(DISTINCT c.id)::int AS count FROM training_certificates c
+        JOIN training_crew_assignments a ON a.crew_id=c.crew_id
+        WHERE a.vessel_id=$1 AND a.removed_at IS NULL AND c.review_state='pending'`, [vesselId])
+        : sql.query(`SELECT COUNT(*)::int AS count FROM training_certificates WHERE review_state='pending'`)
+    ]);
+    return json({ overview: { crew: crew[0]?.count || 0, sessions: sessions[0]?.count || 0,
+      pendingCertificates: certificates[0]?.count || 0 } });
+  }
+  return error('Training action is not implemented', 501);
 }
 
 export function createTrainingRoute({
@@ -663,6 +814,14 @@ export function createTrainingRoute({
       if (request.method !== 'GET') return error('Method not allowed', 405);
       return handleReadiness({ input: Object.fromEntries(url.searchParams),
         vesselId: targetVesselId, sql: await database() });
+    }
+    if (action?.startsWith('vessels.') || action?.startsWith('assignments.') ||
+        action?.startsWith('availability.') || action === 'waivers.approve' || action === 'overview.get') {
+      const readAction = ['vessels.list','availability.list','overview.get'].includes(action);
+      if ((request.method === 'GET') !== readAction) return error('Method not allowed', 405);
+      return handleSetup({ action, input: request.method === 'GET'
+        ? Object.fromEntries(url.searchParams) : input, vesselId: targetVesselId,
+        login, sql: await database() });
     }
     return error('Training action is not implemented', 501);
   };
