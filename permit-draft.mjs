@@ -5,7 +5,7 @@ export const PERMIT_TABLES=[
  {key:'medical',title:'Medical Visit',fields:['no','name','nationality','rank','passport'],headers:['NO.','Name - Surname','Nationality','Rank','Passport']},
  {key:'inspection',title:'SIRE Inspector/ Surveyor/ Service Engineer',fields:['no','name','nationality','rank','passport'],headers:['NO.','Name - Surname','Nationality','Rank','Passport']},
  {key:'agent',title:'Agent',fields:['no','name','nationality','licensePlate'],headers:['NO.','Name - Surname','Nationality','License plate']},
- {key:'staff',title:'',fields:['no','name','idCard','rank'],headers:['NO.','Full Name & Family Name','ID Card','Rank']},
+ {key:'staff',title:'',fields:['no','name','idCard','rank'],headers:['NO.','Name - Surname','ID Card','Rank']},
  {key:'car',title:'Car plate',fields:['vehicle','licensePlate'],headers:['Vehicle','License plate']}
 ];
 export function shortDate(value){
@@ -44,11 +44,18 @@ export function choosePerson(table,row,person){
 export function revalidateDraft(draft,people){
  const available=new Set(people.filter(p=>p.id).map(p=>p.id));
  for(const table of draft.tables){
+  const hadRows=table.rows.length>0;
   table.rows=table.rows.filter(row=>!row.personId || available.has(row.personId));
-  if(!table.rows.length)table.rows.push(blankRow(table,0));
+  if(hadRows&&!table.rows.length)table.rows.push(blankRow(table,0));
  }
  return draft;
 }
+export function setManualName(table,row,value){row.personId='';row.cells[table.fields.indexOf('name')]=value;}
+export function personChoices(table,people,query){
+ const search=String(query||'').trim().toLocaleLowerCase();
+ return tablePeople(table,people).filter(p=>String(p.name||'').toLocaleLowerCase().includes(search)).slice(0,15).map(p=>({id:p.id,label:[p.name,p.category,p.id.slice(0,8)].filter(Boolean).join(' · ')}));
+}
+export function normalizePermitHeaders(draft){for(const t of draft.tables)for(let i=0;i<t.headers.length;i++)if(t.headers[i]==='Full Name & Family Name')t.headers[i]='Name - Surname';return draft;}
 export function permitLocation(job){
  const combined=job.port||'';const port=combined.split(/\s+\/\s+/)[0];
  return [port||'[Port not set in Job]',job.terminal||'[Terminal not set in Job]'].join(' / ').toUpperCase();

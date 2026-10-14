@@ -3,6 +3,7 @@ import { canPeople, db, permission, uuid } from '../lib/operations.mjs';
 import { buildDocumentPreview, documentTypes } from '../lib/document-preview.mjs';
 import { readSettings, saveSettings } from '../lib/document-settings.mjs';
 import {readPermitDefaults,savePermitDefaults,configuredPermitSeed} from '../lib/permit-defaults.mjs';
+import {documentRecordRoute} from '../lib/document-records-api.mjs';
 
 const fail = (message, status) => json({ error: message }, status);
 
@@ -28,6 +29,7 @@ export function createDocumentsRoute(deps = {}) {
         if (raw.length > 710000) return fail('Request too large', 413);
         let input;
         try { input = JSON.parse(raw); } catch { return fail('Invalid JSON', 400); }
+        if(input.action==='saveDocumentSection')return documentRecordRoute(request,input,{sql,grant,login,previewRoute:createDocumentsRoute(deps)});
         if(input.action==='savePermitDefaults'){
           if(!visitor||grant.role!=='owner')return fail('Owner and separate Visitor view required',403);
           if(input.login!==login)return fail('Account changed; reopen the document',409);
@@ -41,6 +43,7 @@ export function createDocumentsRoute(deps = {}) {
         return json(body, status);
       }
       const action = url.searchParams.get('action');
+      if(action==='documentState')return documentRecordRoute(request,Object.fromEntries(url.searchParams),{sql,grant,login,previewRoute:createDocumentsRoute(deps)});
       if(action==='permitDefaults'){
         if(!visitor)return fail('Separate Visitor view permission required',403);
         const seed=grant.role==='owner'?configuredPermitSeed(deps.permitSeed||process.env.HARBORFLOW_PERMIT_DEFAULTS_JSON):null;

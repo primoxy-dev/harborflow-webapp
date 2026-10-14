@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import * as permitModel from '../permit-draft.mjs';
 import {createDocumentsRoute} from '../api/documents.mjs';
 import {buildDocumentPreview} from '../lib/document-preview.mjs';
 import {DEFAULT_SUBJECT,newPermitDraft,tablePeople,choosePerson,revalidateDraft,blankRow,permitLocation,visiblePermitTables} from '../permit-draft.mjs';
@@ -35,4 +36,19 @@ test('Person selection copies fields into draft only and scope removal clears li
 });
 test('Port/Terminal is derived rather than guessed',()=>{
  assert.equal(permitLocation({port:'MAP TA PHUT / LMPT1',terminal:'LMPT1'}),'MAP TA PHUT / LMPT1');assert.match(permitLocation({port:'RAYONG'}),/TERMINAL NOT SET/);
+});
+test('typing a manual name unlinks the selected person without touching the roster',()=>{
+ assert.equal(typeof permitModel.setManualName,'function');const table=newPermitDraft().tables[0],row=table.rows[0];choosePerson(table,row,{id:crew.id,...crew.data});
+ permitModel.setManualName(table,row,'MANUAL NAME');assert.equal(row.personId,'');assert.equal(row.cells[1],'MANUAL NAME');assert.equal(crew.data.name,'DEMO CREW');
+});
+test('duplicate-name suggestions carry distinct person IDs',()=>{
+ assert.equal(typeof permitModel.personChoices,'function');const table=newPermitDraft().tables[0],people=[{id:crew.id,kind:'crew',name:'SAME NAME',category:'On-signers'},{id:visitor.id,kind:'crew',name:'SAME NAME',category:'On-signers'}];
+ const choices=permitModel.personChoices(table,people,'SAME');assert.equal(choices.length,2);assert.notEqual(choices[0].id,choices[1].id);assert.notEqual(choices[0].label,choices[1].label);
+});
+test('old default header migrates to Name - Surname but custom headings survive',()=>{
+ assert.equal(typeof permitModel.normalizePermitHeaders,'function');const draft=newPermitDraft(),staff=draft.tables.find(t=>t.key==='staff');staff.headers[1]='Full Name & Family Name';permitModel.normalizePermitHeaders(draft);assert.equal(staff.headers[1],'Name - Surname');staff.headers[1]='CUSTOM';permitModel.normalizePermitHeaders(draft);assert.equal(staff.headers[1],'CUSTOM');
+});
+test('explicitly deleted Permit rows stay empty during roster revalidation',()=>{
+ const draft=newPermitDraft();for(const t of draft.tables)t.rows=[];
+ revalidateDraft(draft,[]);assert.ok(draft.tables.every(t=>t.rows.length===0));
 });

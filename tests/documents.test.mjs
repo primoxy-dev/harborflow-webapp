@@ -42,7 +42,7 @@ test('OKTB uses the Crew members source within this Service, without requiring V
   assert.deepEqual(data.preview.people.map(p=>p.name),['DEMO CREW']);
   assert.equal(data.preview.people[0].passport,'DEMO-PASSPORT');
   assert.equal(data.preview.people[0].flights[0].airline,'TG');
-  assert.equal(data.preview.downloadAllowed,false);
+  assert.equal(data.preview.downloadAllowed,true);
   assert.ok(!JSON.stringify(data).includes('PRIVATE VISITOR'));
   assert.ok(!sql.queries.some(q=>q.includes('operation_trips')));
 });

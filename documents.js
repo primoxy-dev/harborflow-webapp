@@ -18,12 +18,14 @@
   const row = (label, value) => `<div class="hfd-field"><span>${escape(label)}</span><strong>${escape(value || 'ยังไม่มีข้อมูล')}</strong></div>`;
   const contexts = new Map();
   const activeBindings = new Set();
+  const activeSavers = new Set();
+  let formState;
   let account = null, generation = 0;
   const keys = { hfdContact: 'contact', hfdPhone: 'phone', hfdSigner: 'signer' };
   async function get(params) {
     const response = await fetch('/api/documents?' + new URLSearchParams(params), { credentials: 'same-origin', cache: 'no-store' });
     const body = await response.json();
-    if (!response.ok) { const error = new Error(body.error || 'โหลดข้อมูลไม่ได้'); error.status = response.status; throw error; }
+    if (!response.ok) { const error = new Error(body.error || 'โหลดข้อมูลไม่ได้'); error.status = response.status; error.body=body; throw error; }
     return body;
   }
   function message(host, text, failed = false) {
@@ -113,8 +115,8 @@
       <p class="hfd-warning">${escape(preview.notice)}</p><button type="button" class="secondary" disabled>ดาวน์โหลด · รอขั้นอนุมัติจากเจ้าของ</button></div>`;
   }
   function oktbPreview(preview, ctx, profile, airlineNames) {
-    const issueDate = ctx.issueDate || localDate();
-    const arrivalDate = ctx.arrivalDate || dateOnly(preview.job.eta);
+    const issueDate = ctx.issueDate ?? localDate();
+    const arrivalDate = ctx.arrivalDate ?? dateOnly(preview.job.eta);
     ctx.issueDate = issueDate; ctx.arrivalDate = arrivalDate;
     const vessel = escape(preview.job.vessel || '[Vessel from Job]');
     const port = escape((preview.job.port || '[Port from Job]').toUpperCase());
@@ -153,6 +155,7 @@
       <button type="button" class="secondary" data-download-oktb ${selectedPeople.length?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>`;
   }
   function clear() {
+    for(const saver of activeSavers)saver.dispose();activeSavers.clear();
     for(const controller of activeBindings)controller.abort();
     activeBindings.clear();
     generation++;
@@ -192,37 +195,52 @@
       return data;
     } finally { bitmap.close(); }
   }
-  // A curated starter list, not a complete consular directory. No visa rules implied.
-  const embassies = [
-    ['Colombo, Sri Lanka','https://colombo.thaiembassy.org/en/page/contact'],
-    ['Manila, Philippines','https://thaiembassymnl.ph/index.html'],
-    ['Moscow, Russia','https://moscow.thaiembassy.org/en/'],
-    ['New Delhi, India','https://newdelhi.thaiembassy.org/en/'],
-    ['Singapore','https://singapore.thaiembassy.org/en/']
-  ].map(([city,source])=>({name:'Royal Thai Embassy, '+city,source}));
-  const loiFields = [['surname','Surname'],['givenName','Given name'],['dob','Date of Birth'],['placeOfBirth','Place of Birth'],['nationality','Nationality'],['passport','Passport No.'],['passportIssued','Issued (Passport)'],['passportExpiry','Expiry'],['seamanBook','Seamans book'],['seamanBookIssued','Issued (Seamans book)']];
+  let embassies=[],missionModel;
+  const missionFields=[['name','ชื่อสถานทูต'],['address','ที่อยู่'],['phone','โทรศัพท์'],['fax','แฟกซ์'],['general','Email · general inquiries'],['visa','Email · visa inquiries']];
+  function missionLines(ctx){
+    const lines=missionModel?.missionContactLines(ctx.embassySnapshot);
+    return lines?.length?lines:[ctx.embassy==='other'?ctx.customEmbassy:ctx.embassy].filter(Boolean);
+  }
+  const loiFields = [['name','Name - Surname'],['surname','Surname'],['givenName','Given name'],['dob','Date of Birth'],['placeOfBirth','Place of Birth'],['nationality','Nationality'],['passport','Passport No.'],['passportIssued','Issued (Passport)'],['passportExpiry','Expiry'],['seamanBook','Seamans book'],['seamanBookIssued','Issued (Seamans book)']];
   let permitModel;
   function permitPaperTables(ctx) {
     return permitModel.visiblePermitTables(ctx.permitDraft).map(table=>`<section class="hfd-permit-table-block"><h3>${escape(table.title)}</h3><table><thead><tr>${table.headers.map(h=>'<th>'+escape(h)+'</th>').join('')}</tr></thead><tbody>${table.rows.map(r=>'<tr>'+r.cells.map(c=>'<td>'+escape(c||'\u00a0')+'</td>').join('')+'</tr>').join('')}</tbody></table></section>`).join('');
   }
   function permitEditors(preview,ctx) {
-    return ctx.permitDraft.tables.map(table=>{
-      const choices=permitModel.tablePeople(table,preview.people);
-      return `<details class="hfd-permit-editor-table" open><summary>${escape(table.title||'Boarding Officer / Driver')} · ${table.rows.length} แถว</summary><label>ชื่อหัวข้อของตาราง<input data-permit-title="${table.key}" maxlength="120" value="${escape(table.title)}"></label><div class="hfd-permit-edit-scroll"><table><thead><tr>${table.headers.map((h,i)=>'<th><input aria-label="'+escape(table.key+' header '+(i+1))+'" data-permit-header="'+table.key+'" data-col="'+i+'" maxlength="80" value="'+escape(h)+'"></th>').join('')}<th>แถว</th></tr></thead><tbody>${table.rows.map((r,n)=>'<tr>'+r.cells.map((c,i)=>'<td>'+(table.fields[i]==='name'?'<select aria-label="เลือกคน '+escape(table.key)+' แถว '+(n+1)+'" data-permit-person="'+table.key+'" data-row="'+r.id+'"><option value="">เลือกคน / กรอกเอง</option>'+choices.map(p=>'<option value="'+escape(p.id)+'" '+(p.id===r.personId?'selected':'')+'>'+escape(p.name+' · '+p.category)+'</option>').join('')+'</select>':'')+'<input aria-label="'+escape(table.key+' row '+r.id+' column '+(i+1))+'" data-permit-cell="'+table.key+'" data-row="'+r.id+'" data-col="'+i+'" maxlength="300" value="'+escape(c)+'"></td>').join('')+'<td><button type="button" class="hfo-btn danger" data-permit-remove="'+table.key+'" data-row="'+r.id+'" aria-label="ลบ '+escape(table.title||table.key)+' แถว '+(n+1)+'">− ลบ</button></td></tr>').join('')}</tbody></table></div><button type="button" class="hfo-btn" data-permit-add="${table.key}">+ เพิ่มแถว</button></details>`;
+    return ctx.permitDraft.tables.filter(t=>['on','off'].includes(t.key)?preview.scope?.crewView:preview.scope?.visitorView).map(table=>{
+      return `<details class="hfd-permit-editor-table" data-permit-table="${table.key}" ${ctx.openPermitTables?.includes(table.key)?'open':''}><summary>${escape(table.title||'Boarding Officer / Driver')} · ${table.rows.length} แถว</summary><label>ชื่อหัวข้อของตาราง<input data-permit-title="${table.key}" maxlength="120" value="${escape(table.title)}"></label><div class="hfd-permit-edit-scroll"><table><thead><tr>${table.headers.map((h,i)=>'<th><input aria-label="'+escape(table.key+' header '+(i+1))+'" data-permit-header="'+table.key+'" data-col="'+i+'" maxlength="80" value="'+escape(h)+'"></th>').join('')}<th>แถว</th></tr></thead><tbody>${table.rows.map((r,n)=>'<tr>'+r.cells.map((c,i)=>'<td class="'+(table.fields[i]==='name'?'hfd-name-cell':'')+'"><input aria-label="'+escape(table.fields[i]==='name'?'Name - Surname '+table.key+' แถว '+(n+1):table.key+' row '+r.id+' column '+(i+1))+'" data-permit-cell="'+table.key+'" data-row="'+r.id+'" data-col="'+i+'" maxlength="300" value="'+escape(c)+'" '+(table.fields[i]==='name'?'data-permit-name="'+table.key+'" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="names-'+r.id+'" autocomplete="off"':'')+'>'+(table.fields[i]==='name'?'<div class="hfd-name-options" role="listbox" id="names-'+r.id+'" hidden></div>':'')+'</td>').join('')+'<td><button type="button" class="hfo-btn danger" data-permit-remove="'+table.key+'" data-row="'+r.id+'" aria-label="ลบ '+escape(table.title||table.key)+' แถว '+(n+1)+'">− ลบ</button></td></tr>').join('')}</tbody></table></div><button type="button" class="hfo-btn" data-permit-add="${table.key}">+ เพิ่มแถว</button></details>`;
     }).join('');
+  }
+  function repaintPermitEditors(host,preview,ctx){
+    ctx.openPermitTables=[...host.querySelectorAll('[data-permit-table][open]')].map(t=>t.dataset.permitTable);
+    host.querySelector('#hfdPermitEditors').innerHTML=permitEditors(preview,ctx);setDocumentEditability(host);
+  }
+  function nameSuggestions(host,input,preview,ctx){
+    const table=ctx.permitDraft.tables.find(t=>t.key===input.dataset.permitName),list=host.querySelector('#'+input.getAttribute('aria-controls'));
+    const choices=permitModel.personChoices(table,preview.people,input.value);list.innerHTML=choices.map((p,i)=>`<button type="button" role="option" id="${list.id}-${i}" data-permit-choice="${escape(p.id)}" data-table="${table.key}" data-row="${input.dataset.row}">${escape(p.label)}</button>`).join('');
+    list.hidden=!choices.length;input.setAttribute('aria-expanded',String(choices.length>0));input.dataset.choiceIndex='-1';input.removeAttribute('aria-activedescendant');
+  }
+  function setDocumentEditability(host){
+    if(!host._hfdCanEdit)return;
+    for(const el of host.querySelectorAll('[data-permit-cell],[data-permit-title],[data-permit-header],[data-permit-add],[data-permit-remove],[data-permit-choice]')){
+      const key=el.dataset.permitCell||el.dataset.permitTitle||el.dataset.permitHeader||el.dataset.permitAdd||el.dataset.permitRemove||el.dataset.table;el.disabled=!host._hfdCanEdit[['on','off'].includes(key)?'crew':'visitor'];
+    }
+    for(const el of host.querySelectorAll('[data-oktb-person],[data-select-crew],[data-flight-group],#hfdLoiPerson,[data-loi-field]'))el.disabled=!host._hfdCanEdit.crew;
+    for(const id of ['hfdIssueDate','hfdArrivalInput','hfdPermitDate','hfdPermitSubject','hfdEmbassy','hfdCustomEmbassy','hfdLoiTitle']){const el=host.querySelector('#'+id);if(el)el.disabled=!host._hfdCanEdit.common;}
   }
   function refreshPermit(host,ctx){
     host.querySelector('#hfdPermitTables').innerHTML=permitPaperTables(ctx);
     host.querySelector('#hfdPermitSubjectOut').textContent=ctx.permitDraft.subject;
   }
   function permitPreview(preview,ctx,profile) {
-    ctx.issueDate ||= localDate();ctx.permitDate ||= dateOnly(preview.job.eta);
+    ctx.issueDate ??= localDate();ctx.permitDate ??= dateOnly(preview.job.eta);
     const scope=JSON.stringify(preview.scope);
     if(ctx.permitScope!==scope){ctx.permitDraft=permitModel.applyPermitDefaults(permitModel.newPermitDraft(),preview.scope?.visitorView?ctx.permitDefaults?.defaults:null);ctx.permitScope=scope;}
     ctx.permitDraft=permitModel.revalidateDraft(ctx.permitDraft||permitModel.newPermitDraft(),preview.people);
+    permitModel.normalizePermitHeaders(ctx.permitDraft);
     const saved=profile.values,disabled=profile.canSave?'':'disabled';
     return `<p class="hfd-notice">ร่างทดลอง · ใช้รายชื่อสมมติที่ได้รับสิทธิ์ดู · การแก้ตารางไม่เปลี่ยน Crew members หรือ Job</p>
-      <div class="hfd-oktb-editor hfd-permit-editor">
+      <details class="hfd-oktb-settings hfd-permit-settings"><summary>รายละเอียดเอกสาร Terminal Permit</summary><div class="hfd-oktb-editor hfd-permit-editor">
         <label class="hfd-permit-subject">Subject<input id="hfdPermitSubject" maxlength="500" value="${escape(ctx.permitDraft.subject)}"></label>
         <label>Vessel · มาจาก Job<input readonly value="${escape(preview.job.vessel)}"></label>
         <label>at · Port / Terminal จาก Job<input readonly value="${escape(permitModel.permitLocation(preview.job))}"></label>
@@ -232,8 +250,8 @@
         <label>เบอร์โทร<input id="hfdPhone" maxlength="200" value="${escape(saved.phone||'')}" ${disabled}></label>
         <label>ชื่อผู้ลงนาม<input id="hfdSigner" maxlength="200" value="${escape(saved.signer||'')}" ${disabled}></label>
         <label>ภาพลายเซ็นสำหรับตรวจร่าง<input id="hfdSignature" type="file" accept="image/png,image/jpeg" ${disabled}>${profile.canSave?'<button type="button" class="hfo-btn" data-clear-signature>ลบลายเซ็นที่จำไว้</button>':''}</label>
-      </div><p id="hfdSaveStatus" role="status">ข้อมูลผู้ติดต่อใช้ค่าที่จำไว้ตามบัญชี · ตารางแก้เฉพาะร่างนี้</p>
-      <details class="hfd-oktb-settings" open><summary>เลือกคน / แก้ไขหัวข้อและรายละเอียดตาราง</summary><div id="hfdPermitEditors">${permitEditors(preview,ctx)}</div></details>
+      </div></details><p id="hfdSaveStatus" role="status">ข้อมูลผู้ติดต่อใช้ค่าที่จำไว้ตามบัญชี</p>
+      <details class="hfd-oktb-settings"><summary>เลือกคน / แก้ไขหัวข้อและรายละเอียดตาราง</summary><div id="hfdPermitEditors">${permitEditors(preview,ctx)}</div></details>
       <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page hfd-permit-page" aria-label="Terminal Permit draft">
         <div class="hfd-loi-letterhead"><div class="hfd-oktb-logo" role="img" aria-label="GAC"></div><div><b>บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด</b><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p>26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400 &nbsp; Fax +66-2-650 7401 &nbsp; E-mail shipping.thailand@gac.com</p></div></div>
         <p class="hfd-permit-issued"><span id="hfdIssuedDate">${displayDate(ctx.issueDate)}</span></p>
@@ -252,8 +270,9 @@
     return person?{...person,...ctx.loiDetails?.[person.id]}:null;
   }
   function loiPreview(preview,ctx,profile) {
-    ctx.issueDate ||= localDate();
-    if(!preview.people.some(person=>person.id===ctx.loiPersonId))ctx.loiPersonId=preview.people.find(person=>person.category==='On-signers')?.id||preview.people[0]?.id||'';
+    ctx.issueDate ??= localDate();
+    if(!Object.hasOwn(ctx,'loiPersonId'))ctx.loiPersonId=preview.people.find(person=>person.category==='On-signers')?.id||preview.people[0]?.id||'';
+    if(ctx.loiPersonId&&!preview.people.some(person=>person.id===ctx.loiPersonId))ctx.loiPersonId='';
     ctx.loiDetails ||= {};
     const person=loiPerson(preview,ctx),saved=profile.values,disabled=profile.canSave?'':'disabled';
     // Reuse only the logo markup; the LOI letterhead follows the uploaded template.
@@ -261,19 +280,21 @@
     const value=key=>escape(person?.[key]||'[not set]');
     return `<p class="hfd-notice">${escape(preview.notice)}</p>
       <div class="hfd-oktb-editor hfd-loi-editor">
-        <label>To · สถานทูตไทย<select id="hfdEmbassy"><option value="">เลือกสถานทูต</option>${embassies.map(item=>`<option value="${escape(item.name)}" ${ctx.embassy===item.name?'selected':''}>${escape(item.name)}</option>`).join('')}<option value="other" ${ctx.embassy==='other'?'selected':''}>สถานทูตอื่น · ระบุชื่อ</option></select></label>
+        <label>To · สถานทูตไทย<select id="hfdEmbassy"><option value="">เลือกสถานทูต</option>${embassies.map(item=>`<option value="${escape(item.id)}" ${ctx.embassy===item.id?'selected':''}>${escape(item.name)}${item.status==='incomplete'?' · ข้อมูลติดต่อยังไม่ครบ':''}</option>`).join('')}<option value="other" ${ctx.embassy==='other'?'selected':''}>สถานทูตอื่น · ระบุชื่อ</option></select></label>
         <label id="hfdCustomEmbassyLabel" ${ctx.embassy==='other'?'':'hidden'}>ชื่อสถานทูตและเมือง/ประเทศ<input id="hfdCustomEmbassy" maxlength="200" value="${escape(ctx.customEmbassy||'')}"></label>
         <label>ลูกเรือสำหรับ LOI · หนึ่งคนต่อฉบับ<select id="hfdLoiPerson"><option value="">เลือกลูกเรือ</option>${preview.people.map(p=>`<option value="${escape(p.id)}" ${p.id===ctx.loiPersonId?'selected':''}>${escape(p.name)} · ${escape(p.category)}</option>`).join('')}</select></label>
+      </div><details class="hfd-oktb-settings hfd-loi-settings"><summary>รายละเอียดเอกสาร LOI</summary><div class="hfd-oktb-editor hfd-loi-editor">
+        ${missionFields.map(([key,label])=>`<label>${label}<input data-mission-field="${key}" maxlength="1000" value="${escape(['general','visa'].includes(key)?ctx.embassySnapshot?.emails?.[key]?.join(' / ')||'':ctx.embassySnapshot?.[key]||'')}"></label>`).join('')}
         <label>Date · วันที่ออกเอกสาร<input id="hfdIssueDate" type="date" value="${ctx.issueDate}"></label>
         <label>Contact person<input id="hfdContact" maxlength="200" value="${escape(saved.contact||'')}" ${disabled}></label>
         <label>เบอร์โทร<input id="hfdPhone" maxlength="200" value="${escape(saved.phone||'')}" ${disabled}></label>
         <label>ชื่อผู้ลงนาม<input id="hfdSigner" maxlength="200" value="${escape(saved.signer||'')}" ${disabled}></label>
         <label>ตำแหน่งผู้ลงนาม<input id="hfdLoiTitle" maxlength="200" value="${escape(ctx.loiTitle||'Operations Coordinator, Shipping Services')}"></label>
         <label>ภาพลายเซ็นสำหรับตรวจร่าง<input id="hfdSignature" type="file" accept="image/png,image/jpeg" ${disabled}>${profile.canSave?'<button type="button" class="hfo-btn" data-clear-signature>ลบลายเซ็นที่จำไว้</button>':''}</label>
-      </div>
-      <p class="hfd-notice">รายชื่อสถานทูตชุดเริ่มต้น · เลือก “สถานทูตอื่น” หากไม่มีในรายการ · ตรวจเขตรับผิดชอบกับสถานทูตก่อนใช้</p>
-      <a id="hfdEmbassySource" target="_blank" rel="noopener noreferrer" ${embassies.find(e=>e.name===ctx.embassy)?`href="${embassies.find(e=>e.name===ctx.embassy).source}"`:'hidden'}>เว็บไซต์ทางการของสถานทูตที่เลือก</a>
-      <details class="hfd-oktb-settings"><summary>ตรวจ Personal Detail · ${escape(person?.name||'ยังไม่ได้เลือก')}</summary>
+      </div></details>
+      <p id="hfdMissionStatus" class="hfd-notice">${ctx.embassySnapshot?.status==='verified'?'ตรวจแหล่งทางการ '+escape(ctx.embassySnapshot.verifiedAt):'ข้อมูลติดต่อยังตรวจไม่ครบ · กรุณาตรวจและกรอกช่องที่ขาดก่อนใช้'} · ตรวจเขตรับผิดชอบกับสถานทูตก่อนใช้</p>
+      <a id="hfdEmbassySource" target="_blank" rel="noopener noreferrer" ${ctx.embassySnapshot?.sourceUrl?`href="${escape(ctx.embassySnapshot.sourceUrl)}"`:'hidden'}>เว็บไซต์ทางการของสถานทูตที่เลือก</a>
+      <details class="hfd-oktb-settings" data-loi-personal ${ctx.loiPersonalOpen?'open':''}><summary>ตรวจ Personal Detail · ${escape(person?.name||'ยังไม่ได้เลือก')}</summary>
         <p>กรอก Surname และ Given name ให้ตรงหนังสือเดินทาง ไม่แยกชื่ออัตโนมัติ · ช่องเพิ่มเติมใช้ในร่างนี้ ไม่แก้ Crew members</p>
         <div class="hfd-oktb-editor">${loiFields.map(([key,label])=>`<label>${label}<input data-loi-field="${key}" maxlength="200" value="${escape(person?.[key]||'')}" ${person?'':'disabled'}></label>`).join('')}</div>
       </details>
@@ -281,7 +302,7 @@
       <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page hfd-loi-page">
         <div class="hfd-loi-letterhead">${logo}<div><b>บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด</b><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p>26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400 &nbsp; Fax +66-2-650 7401 &nbsp; E-mail &nbsp; shipping.thailand@gac.com</p></div></div>
         <h2 class="hfd-loi-heading">INVITATION LETTER</h2>
-        <p>Date : <span id="hfdIssuedDate">${displayDate(ctx.issueDate)}</span><br>To : <span id="hfdEmbassyOut">${escape(ctx.embassy==='other'?ctx.customEmbassy:ctx.embassy||'[select embassy]')}</span></p>
+        <p>Date : <span id="hfdIssuedDate">${displayDate(ctx.issueDate)}</span><br>To : <span id="hfdEmbassyOut">${missionLines(ctx).map(escape).join('<br>')||'[select embassy]'}</span></p>
         <div class="hfd-loi-addressee-gap"></div>
         <p>From : Gulf Agency Company (Thailand) Ltd.</p><p>Subject : VISA Issuance</p><br>
         <p>Dear Sirs,</p><p class="hfd-loi-intro">This is to advise that the following person is arriving to Thailand for visit the vessel "${escape(preview.job.vessel||'[Vessel from Job]')}"<br>Thailand, ${escape((preview.job.port||'[Port from Job]').toUpperCase())}</p>
@@ -296,17 +317,42 @@
       <button type="button" class="secondary" data-download-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>`;
   }
   function updateLoiEmbassy(host,ctx) {
-    const custom=ctx.embassy==='other',text=custom?ctx.customEmbassy:ctx.embassy;
+    const custom=ctx.embassy==='other',text=ctx.embassySnapshot?.name||(custom?ctx.customEmbassy:ctx.embassy);
     host.querySelector('#hfdCustomEmbassyLabel').hidden=!custom;
-    host.querySelector('#hfdEmbassyOut').textContent=text||'[select embassy]';
-    const source=host.querySelector('#hfdEmbassySource'),entry=embassies.find(e=>e.name===ctx.embassy);
-    source.hidden=!entry; if(entry)source.href=entry.source;else source.removeAttribute('href');
+    host.querySelector('#hfdEmbassyOut').innerHTML=missionLines(ctx).map(escape).join('<br>')||'[select embassy]';
+    const source=host.querySelector('#hfdEmbassySource'),entry=ctx.embassySnapshot;
+    source.hidden=!entry?.sourceUrl;if(entry?.sourceUrl)source.href=entry.sourceUrl;else source.removeAttribute('href');
+    host.querySelector('#hfdMissionStatus').textContent=(entry?.status==='verified'?'ตรวจแหล่งทางการ '+entry.verifiedAt:'ข้อมูลติดต่อยังตรวจไม่ครบ · กรุณาตรวจและกรอกช่องที่ขาดก่อนใช้')+' · ตรวจเขตรับผิดชอบกับสถานทูตก่อนใช้';
+    for(const input of host.querySelectorAll('[data-mission-field]')){const key=input.dataset.missionField;input.value=['general','visa'].includes(key)?entry?.emails?.[key]?.join(' / ')||'':entry?.[key]||'';}
     host.querySelector('[data-download-loi]').disabled=!ctx.loiPersonId||!text;
   }
   function bind(host, preview, ctx, profile, options, airlineNames) {
     const get = options.localTransport?.get || window.HarborFlowDocuments.request;
+    async function downloadReady(){
+      host.inert=true;
+      await profile.queue;if(profile.blocked)throw Error('ค่าเริ่มต้นยังบันทึกไม่สำเร็จ กรุณาตรวจและลองใหม่');
+      if(options.localTransport)return 'sample';
+      const {prepareDocumentDownload}=await import('./document-downloads.mjs');
+      const fresh=await prepareDocumentDownload({flush:()=>host._hfdSaver.flush(),current:()=>host._hfdSaver.snapshot(),hasPending:()=>host._hfdSaver.hasPending()||profile.pending>0,login:options.login,load:async()=>{
+        const state=await get({action:'documentState',jobId:options.jobId,serviceId:options.serviceId||'',type:options.type});
+        if(JSON.stringify(state.preview.scope)!==JSON.stringify(preview.scope)){clear();host.replaceChildren();throw Error('สิทธิ์ Crew/Visitor เปลี่ยน กรุณาเปิดเอกสารใหม่');}return state;
+      }});
+      if(account!==profile||!host.isConnected)throw Error('เอกสารถูกปิดหรือบัญชีเปลี่ยน');
+      if(JSON.stringify(fresh.preview.scope)!==JSON.stringify(preview.scope)){clear();host.replaceChildren();throw Error('สิทธิ์ Crew/Visitor เปลี่ยน กรุณาเปิดเอกสารใหม่');}
+      return 'final';
+    }
     if(host._hfdBindings){host._hfdBindings.abort();activeBindings.delete(host._hfdBindings);}
     const controller=new AbortController();host._hfdBindings=controller;activeBindings.add(controller);
+    host.addEventListener('focusin',event=>{if(event.target.dataset.permitName&&!event.target.disabled)nameSuggestions(host,event.target,preview,ctx);},{signal:controller.signal});
+    host.addEventListener('pointerdown',event=>{if(event.target.closest('[data-permit-choice]'))event.preventDefault();},{signal:controller.signal});
+    host.addEventListener('keydown',event=>{
+      const input=event.target;if(!input.dataset.permitName)return;const list=host.querySelector('#'+input.getAttribute('aria-controls'));
+      if(event.key==='Escape'){list.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');return;}
+      const choices=[...list.querySelectorAll('button')];if(!choices.length)return;
+      let index=Number(input.dataset.choiceIndex??-1);
+      if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();index=(index+(event.key==='ArrowDown'?1:-1)+choices.length)%choices.length;input.dataset.choiceIndex=String(index);choices.forEach((b,i)=>b.setAttribute('aria-selected',String(i===index)));input.setAttribute('aria-activedescendant',choices[index].id);}
+      if(event.key==='Enter'&&index>=0){event.preventDefault();choices[index].click();}
+    },{signal:controller.signal});
     host.addEventListener('input', event => {
       const target = event.target;
       if(options.type==='permit'){
@@ -316,6 +362,7 @@
         if(key){const table=ctx.permitDraft.tables.find(t=>t.key===key);if(target.dataset.permitTitle)table.title=target.value;
           else if(target.dataset.permitHeader)table.headers[Number(target.dataset.col)]=target.value;
           else table.rows.find(r=>r.id===target.dataset.row).cells[Number(target.dataset.col)]=target.value;
+          if(target.dataset.permitName){permitModel.setManualName(table,table.rows.find(r=>r.id===target.dataset.row),target.value);nameSuggestions(host,target,preview,ctx);}
           refreshPermit(host,ctx);
         }
       }
@@ -324,6 +371,12 @@
       if (output) output.textContent = target.value || '[not set]';
       if (target.id === 'hfdAirline') ctx.airline = target.value;
       if (target.id === 'hfdCustomEmbassy') { ctx.customEmbassy=target.value.trim(); updateLoiEmbassy(host,ctx); }
+      if(target.dataset.missionField){
+        const key=target.dataset.missionField;
+        ctx.embassySnapshot ||= {id:ctx.embassy||'other',kind:'embassy',name:ctx.customEmbassy||'',address:'',phone:'',fax:'',emails:{general:[],visa:[]},sourceUrl:'',verifiedAt:'',status:'incomplete'};
+        if(['general','visa'].includes(key))ctx.embassySnapshot.emails[key]=target.value.split('/').map(v=>v.trim()).filter(Boolean);else ctx.embassySnapshot[key]=target.value;
+        ctx.embassySnapshot.status='incomplete';updateLoiEmbassy(host,ctx);
+      }
       if (target.id === 'hfdLoiTitle') { ctx.loiTitle=target.value;host.querySelector('#hfdLoiTitleOut').textContent=target.value||'[not set]'; }
       if (target.dataset.loiField) {
         ctx.loiDetails[ctx.loiPersonId] ||= {};
@@ -332,17 +385,18 @@
       }
       if (target.id === 'hfdIssueDate') { ctx.issueDate = target.value; host.querySelector('#hfdIssuedDate').textContent = displayDate(target.value); }
       if (target.id === 'hfdArrivalInput') { ctx.arrivalDate = target.value; for (const id of ['hfdArrivalDate','hfdEmbarkDate']) host.querySelector('#' + id).textContent = displayDate(target.value); }
+      queueDocument(host,ctx,options);
     },{signal:controller.signal});
     host.addEventListener('change', async event => {
       const target = event.target;
-      if(target.dataset.permitPerson){const table=ctx.permitDraft.tables.find(t=>t.key===target.dataset.permitPerson),r=table.rows.find(r=>r.id===target.dataset.row),person=permitModel.tablePeople(table,preview.people).find(p=>p.id===target.value);permitModel.choosePerson(table,r,person);host.querySelector('#hfdPermitEditors').innerHTML=permitEditors(preview,ctx);refreshPermit(host,ctx);}
-      if (target.id === 'hfdEmbassy') {ctx.embassy=target.value;updateLoiEmbassy(host,ctx);}
-      if (target.id === 'hfdLoiPerson') {ctx.loiPersonId=target.value;mount(host,options);return;}
+      if (target.id === 'hfdEmbassy') {ctx.embassy=target.value;ctx.embassySnapshot=missionModel?.selectedMission(ctx.embassy,null,embassies)||null;updateLoiEmbassy(host,ctx);}
+      if (target.id === 'hfdLoiPerson') {host.querySelectorAll('input,select,textarea,button').forEach(el=>el.disabled=true);ctx.loiPersonId=target.value;ctx.loiPersonalOpen=true;queueDocument(host,ctx,options);try{await host._hfdSaver?.flush();await mount(host,options);}catch(e){message(host,e.message,true);}return;}
       if (keys[target.id]) remember(host, profile, { [keys[target.id]]:target.value });
       if (target.dataset.oktbPerson) {
         if (target.checked) ctx.selected.add(target.dataset.oktbPerson); else ctx.selected.delete(target.dataset.oktbPerson);
         updateSelected(host, preview, ctx, airlineNames);
       }
+      queueDocument(host,ctx,options);
       if (target.id === 'hfdSignature' && profile.canSave) {
         const file = target.files?.[0];
         if (!file) return;
@@ -358,15 +412,19 @@
     host.addEventListener('click', async event => {
       const target = event.target.closest('button');
       if (!target) return;
+      if(target.dataset.permitChoice){
+        const table=ctx.permitDraft.tables.find(t=>t.key===target.dataset.table),r=table.rows.find(r=>r.id===target.dataset.row),person=permitModel.tablePeople(table,preview.people).find(p=>p.id===target.dataset.permitChoice);
+        permitModel.choosePerson(table,r,person);repaintPermitEditors(host,preview,ctx);refreshPermit(host,ctx);queueDocument(host,ctx,options);host.querySelector(`[data-permit-name="${table.key}"][data-row="${r.id}"]`)?.focus();return;
+      }
       if(target.dataset.permitAdd||target.dataset.permitRemove){
         const table=ctx.permitDraft.tables.find(t=>t.key===(target.dataset.permitAdd||target.dataset.permitRemove));
         if(target.dataset.permitAdd){if(table.rows.length>=100){message(host,'จำกัด 100 แถวต่อกลุ่มในช่วงทดลอง',true);return;}table.rows.push(permitModel.blankRow(table,table.rows.length));}
         else table.rows=table.rows.filter(r=>r.id!==target.dataset.row);
-        host.querySelector('#hfdPermitEditors').innerHTML=permitEditors(preview,ctx);refreshPermit(host,ctx);return;
+        repaintPermitEditors(host,preview,ctx);refreshPermit(host,ctx);queueDocument(host,ctx,options);return;
       }
       if(target.hasAttribute('data-download-permit')){
         try{
-          await profile.queue;
+          const outputMode=await downloadReady();
           const fresh=await get({action:'preview',jobId:options.jobId,serviceId:options.serviceId,type:'permit'});
           if(account!==profile||fresh.login!==options.login)throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
           if(JSON.stringify(fresh.preview.scope)!==JSON.stringify(preview.scope)){
@@ -374,46 +432,50 @@
           }
           if(JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job)||JSON.stringify(fresh.preview.people)!==JSON.stringify(preview.people))throw Error('ข้อมูล Job หรือรายชื่อเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจตารางก่อนดาวน์โหลด');
           if(preview.scope?.visitorView){const current=await get({action:'permitDefaults'});if(current.login!==options.login||current.version!==ctx.permitDefaults.version)throw Error('ค่าเริ่มต้นเปลี่ยน กรุณาเปิดเอกสารใหม่และตรวจร่างก่อนดาวน์โหลด');}
-          await window.HarborFlowOktbPdf.downloadPermit({preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF ร่างแล้ว');
-        }catch(error){if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}else if(host.querySelector('#hfdSaveStatus'))message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);else host.textContent=error.message;}
+          await window.HarborFlowOktbPdf.downloadPermit({outputMode,preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF แล้ว');
+        }catch(error){if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}else if(host.querySelector('#hfdSaveStatus'))message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);else host.textContent=error.message;}finally{host.inert=false;}
         return;
       }
       if (target.dataset.selectCrew) {
         ctx.selected = target.dataset.selectCrew === 'all' ? new Set(preview.people.map(person => person.id)) : new Set();
         updateSelected(host, preview, ctx, airlineNames);
+        queueDocument(host,ctx,options);
       }
       if (target.hasAttribute('data-flight-group')) {
         const group = groups(preview.people)[Number(target.dataset.flightGroup)];
         ctx.selected = new Set(group.ids);
         updateSelected(host, preview, ctx, airlineNames);
+        queueDocument(host,ctx,options);
       }
       if (target.hasAttribute('data-clear-signature') && profile.canSave) { showSignature(host, ''); remember(host, profile, {signature:''}); }
       if (target.hasAttribute('data-download-oktb')) {
         const selected=preview.people.filter(person=>ctx.selected.has(person.id));
         if(!selected.length)return;
-        try {await window.HarborFlowOktbPdf.download({preview,people:selected,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF ร่างแล้ว');}
-        catch(error){message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);}
+        try {const outputMode=await downloadReady();await window.HarborFlowOktbPdf.download({outputMode,preview,people:selected,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF แล้ว');}
+        catch(error){if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาตรวจสิทธิ์อีกครั้ง</p>';}else message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);}finally{host.inert=false;}
       }
       if (target.hasAttribute('data-download-loi')) {
-        const person=loiPerson(preview,ctx),embassy=ctx.embassy==='other'?ctx.customEmbassy:ctx.embassy;
+        const person=loiPerson(preview,ctx),embassy=ctx.embassySnapshot?.name||(ctx.embassy==='other'?ctx.customEmbassy:ctx.embassy);
         if(!person||!embassy)return;
         try {
+          const outputMode=await downloadReady();
           const fresh=await get({action:'preview',jobId:options.jobId,serviceId:options.serviceId,type:'loi'});
           if(account!==profile||fresh.login!==options.login)throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
           const original=preview.people.find(p=>p.id===ctx.loiPersonId),current=fresh.preview.people.find(p=>p.id===ctx.loiPersonId);
           if(!current||JSON.stringify(current)!==JSON.stringify(original)||JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job))throw Error('ข้อมูล Job หรือลูกเรือเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจร่างก่อนดาวน์โหลด');
-          await window.HarborFlowOktbPdf.downloadLoi({preview,person,ctx:{...ctx,embassy},profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF ร่างแล้ว');
+          await window.HarborFlowOktbPdf.downloadLoi({outputMode,preview,person,ctx:{...ctx,embassy,missionContactLines:missionLines(ctx)},profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF แล้ว');
         }
         catch(error){
           if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ Crew ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}
           else message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);
-        }
+        }finally{host.inert=false;}
       }
       if (target.hasAttribute('data-document-retry')) mount(host, options);
     },{signal:controller.signal});
   }
   async function mount(host, options) {
     if (!host) return;
+    if(host._hfdSaver){try{await host._hfdSaver.flush();}catch(e){message(host,e.message,true);return;}activeSavers.delete(host._hfdSaver);host._hfdSaver.dispose();host._hfdSaver=null;}
     const gen = generation;
     const profile = accountState(options.login);
     profile.localOnly = Boolean(options.localTransport);
@@ -431,7 +493,7 @@
       // Finish this account's pending saves before reloading its defaults.
       await profile.queue;
       const [data, prefs, airlineNames] = await Promise.all([
-        get({action:'preview', jobId:options.jobId, serviceId:options.serviceId, type:options.type}),
+        get({action:options.localTransport?'preview':'documentState', jobId:options.jobId, serviceId:options.serviceId||'', type:options.type}),
         ['oktb','loi','permit'].includes(options.type) ? get({action:'preferences'}).catch(error=>{if(options.type==='permit' && error.status===403)return {login:options.login,preferences:{},canSave:false};throw error;}) : Promise.resolve(null),
         options.type === 'oktb' && !options.localTransport ? loadAirlineNames() : Promise.resolve(new Map())
       ]);
@@ -450,9 +512,57 @@
         ctx.permitDefaults=defaults;
       }
       if(gen!==generation||!host.isConnected||account!==profile)return;
+      if(options.type==='loi'&&!options.localTransport){
+        missionModel=await import('./lib/thai-missions.mjs');
+        const response=await fetch('/data/thai-missions.json',{cache:'no-store'});
+        if(!response.ok)throw Error('โหลดรายชื่อสถานทูตไม่สำเร็จ');
+        embassies=missionModel.validateMissionDirectory(await response.json());
+      }
+      if(!options.localTransport){
+        const modules=await Promise.all([import('./document-autosave.mjs'),import('./document-form-state.mjs')]);formState=modules[1];
+        if(gen!==generation||!host.isConnected||account!==profile)return;
+        if(options.type==='permit'){
+          ctx.permitDraft=permitModel.applyPermitDefaults(permitModel.newPermitDraft(),data.preview.scope?.visitorView?ctx.permitDefaults?.defaults:null);
+          ctx.permitScope=JSON.stringify(data.preview.scope);
+        }
+        formState.applyDocumentSections(ctx,options.type,data.sections);host._hfdCanEdit=data.canEdit;
+        if(options.type==='loi'&&ctx.embassy&&ctx.embassy!=='other')ctx.embassySnapshot=missionModel.selectedMission(ctx.embassy,ctx.embassySnapshot,embassies);
+        const saver=modules[0].createDocumentAutosave({load:async()=>data,
+          save:async input=>{
+            if(gen!==generation||account!==profile||!host.isConnected)throw Error('Document closed or account changed');
+            const response=await fetch('/api/documents',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveDocumentSection',login:options.login,jobId:options.jobId,serviceId:options.serviceId||null,type:options.type,...input})});
+            const body=await response.json();if(!response.ok){const e=Error(body.error||'บันทึกไม่สำเร็จ');e.status=response.status;e.body=body;throw e;}return body;
+          },
+          onState:(state,error)=>{
+            const text={unsaved:'ยังไม่บันทึก',saving:'กำลังบันทึก…',saved:'บันทึกแล้ว',error:'บันทึกไม่สำเร็จ',conflict:'ข้อมูลเปลี่ยนจากอีกเครื่อง ต้องตรวจความต่าง'}[state];
+            const status=host.querySelector('#hfdDocSaveStatus');if(status)status.textContent=text+(error?' · '+error.message:'');message(host,text,['error','conflict'].includes(state));
+            if([401,403].includes(error?.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาตรวจสิทธิ์ก่อนเปิดเอกสารใหม่</p>';}
+          },onConflict:conflict=>{
+            if(conflict.error.body?.preview&&JSON.stringify(conflict.error.body.preview.scope)!==JSON.stringify(data.preview.scope)){
+              clear();host.innerHTML='<p role="alert">สิทธิ์ Crew/Visitor เปลี่ยน กรุณาเปิดเอกสารใหม่</p>';return;
+            }
+            showDocumentConflict(host,ctx,options,conflict);
+          }
+        });await saver.load();host._hfdSaver=saver;activeSavers.add(saver);
+      }
       host.innerHTML = '<div class="hfd-header"><h3>' + escape(labels[options.type]) + '</h3><span class="hfd-badge">Draft</span></div>' +
         (options.type === 'oktb' ? oktbPreview(data.preview, ctx, profile, airlineNames) : options.type === 'loi' ? loiPreview(data.preview,ctx,profile) : options.type==='permit'?permitPreview(data.preview,ctx,profile):genericPreview(data.preview));
       bind(host, data.preview, ctx, profile, options, airlineNames);
+      if(!options.localTransport){
+        host.querySelector('.hfd-badge').textContent='เอกสาร';
+        host.querySelectorAll('.hfd-oktb-watermark').forEach(el=>el.remove());
+        host.querySelectorAll('[data-download-oktb],[data-download-permit],[data-download-loi]').forEach(el=>el.textContent='ดาวน์โหลด PDF');
+        host.querySelectorAll('.hfd-notice').forEach(el=>{if(/ห้ามใช้|ยังไม่อนุมัติ/.test(el.textContent))el.textContent='ระบบทดลอง · ใช้ข้อมูลสมมติเท่านั้น · ตรวจรายละเอียดก่อนดาวน์โหลด';});
+        host.querySelectorAll('#hfdSignaturePlaceholder').forEach(el=>el.textContent='Signature');
+      }
+      setDocumentEditability(host);
+      if(!options.localTransport){
+        const status=document.createElement('p');status.id='hfdDocSaveStatus';status.role='status';status.textContent='โหลดข้อมูลส่วนกลางแล้ว';host.prepend(status);
+        if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-download-oktb]):not([data-download-permit]):not([data-download-loi])').forEach(el=>el.disabled=true);
+        host._hfdSourceFingerprint=data.sourceFingerprint;
+        host._hfdScope=data.preview.scope;
+        host._hfdQueuedSections=formState.encodeDocumentContext(ctx,options.type);
+      }
     } catch(error) {
       if (gen !== generation || !host.isConnected) return;
       if ([401,403].includes(error.status)) { clear(); }
@@ -465,4 +575,53 @@
     return { draft: JSON.parse(JSON.stringify(ctx, (_, value) => value instanceof Set ? [...value] : value)), preferences: { ...(account?.values || {}) } };
   }
   window.HarborFlowDocuments = { mount, clear, snapshot, request: get };
+  function queueDocument(host,ctx,options){
+    if(!host._hfdSaver||!formState)return;const sections=formState.encodeDocumentContext(ctx,options.type);
+    for(const [section,data] of Object.entries(sections))if(host._hfdCanEdit?.[section]){
+      const previous=host._hfdQueuedSections?.[section]||{},patch=Object.fromEntries(Object.entries(data).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(previous[key])));
+      if(Object.keys(patch).length)host._hfdSaver.change(section,patch);
+    }
+    host._hfdQueuedSections=structuredClone(sections);
+  }
+  async function showDocumentConflict(host,ctx,options,conflict){
+    const area=document.createElement('section');area.className='hfd-conflict';area.setAttribute('role','alert');
+    area.innerHTML='<h3>ตรวจความต่างก่อนบันทึก</h3><p>ระบบหยุด autosave แล้ว ไม่มีการเขียนทับอัตโนมัติ</p><button type="button" class="hfo-btn">โหลดข้อมูลล่าสุดเพื่อเปรียบเทียบ</button>';
+    host.querySelector('.hfd-conflict')?.remove();host.prepend(area);
+    area.querySelector('button').onclick=async()=>{
+      try{
+        const fresh=await get({action:'documentState',jobId:options.jobId,serviceId:options.serviceId||'',type:options.type});
+        if(JSON.stringify(fresh.preview.scope)!==JSON.stringify(host._hfdScope)){clear();host.innerHTML='<p role="alert">สิทธิ์ Crew/Visitor เปลี่ยน กรุณาเปิดเอกสารใหม่</p>';return;}
+        if(fresh.login!==options.login||!fresh.canEdit[conflict.section])throw Error('บัญชีหรือสิทธิ์เปลี่ยน กรุณาเปิดเอกสารใหม่');
+        const shared=fresh.sections.find(s=>s.section===conflict.section)?.data||{},choices=[];
+        area.replaceChildren();const heading=document.createElement('h3');heading.textContent='เลือกค่าทีละฟิลด์';area.append(heading);
+        if(fresh.sourceFingerprint!==host._hfdSourceFingerprint){const source=document.createElement('pre');source.textContent='ต้นทางเดิมต้องทบทวน · ข้อมูลต้นทางล่าสุด:\n'+JSON.stringify(fresh.preview,null,2);area.append(source);}
+        function diff(original,remote,local,path){
+          if(JSON.stringify(remote)===JSON.stringify(local))return;
+          if(local&&remote&&typeof local==='object'&&typeof remote==='object'&&Array.isArray(local)===Array.isArray(remote)&&(!Array.isArray(local)||local.length===remote.length)){
+            for(const k of new Set([...Object.keys(remote),...Object.keys(local)]))diff(original?.[k],remote[k],local[k],[...path,k]);return;
+          }
+          const row=document.createElement('div'),text=document.createElement('pre'),select=document.createElement('select');
+          text.textContent=path.join('.')+'\nเดิม: '+JSON.stringify(original)+'\nส่วนกลาง: '+JSON.stringify(remote)+'\nของคุณ: '+JSON.stringify(local);
+          select.innerHTML='<option value="">เลือกค่า</option><option value="shared">ส่วนกลาง</option><option value="local">ของคุณ</option>';row.append(text,select);area.append(row);choices.push({path,select,remote,local});
+        }
+        for(const key of Object.keys(conflict.local))diff(conflict.original[key],shared[key],conflict.local[key],[key]);
+        const confirm=document.createElement('button');confirm.textContent='ยืนยันค่าที่เลือก';confirm.className='hfo-btn';area.append(confirm);
+        confirm.onclick=()=>{
+          if(choices.some(c=>!c.select.value)){message(host,'เลือกค่าทุกฟิลด์ก่อน',true);return;}
+          const patch=structuredClone(conflict.local);for(const c of choices){let parent=patch;for(const k of c.path.slice(0,-1))parent=parent[k]??={};const key=c.path.at(-1),value=c.select.value==='local'?c.local:c.remote;if(value===undefined)delete parent[key];else parent[key]=structuredClone(value);}
+          formState.applyDocumentSections(ctx,options.type,[{section:conflict.section,data:patch}]);host._hfdSourceFingerprint=fresh.sourceFingerprint;
+          host._hfdSaver.resolve(conflict.section,patch,fresh);area.remove();host._hfdSaver.flush().then(()=>mount(host,options)).catch(e=>message(host,e.message,true));
+        };
+      }catch(e){message(host,e.message,true);}
+    };
+  }
+  window.addEventListener('beforeunload',event=>{if([...activeSavers].some(s=>s.hasPending())){event.preventDefault();event.returnValue='';}});
+  // Delay UI navigation until pending document writes succeed, without intercepting downloads.
+  let replaying=false;
+  document.addEventListener('click',async event=>{
+    const button=event.target.closest('[data-tab],[data-open-job],[data-open-service],[data-back-job],[data-close],.nav');
+    if(replaying||!button||![...activeSavers].some(s=>s.hasPending()))return;
+    event.preventDefault();event.stopImmediatePropagation();
+    try{await Promise.all([...activeSavers].map(s=>s.flush()));replaying=true;button.click();}catch(e){document.querySelector('#hfdDocSaveStatus')?.replaceChildren(document.createTextNode('ยังเปลี่ยนหน้าไม่ได้ · '+e.message));}finally{replaying=false;}
+  },true);
 })();

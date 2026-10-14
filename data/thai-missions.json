@@ -1,0 +1,1424 @@
+[
+  {
+    "id": "5d68eb817daf3002276bc3c9",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Buenos Aires",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://buenos-aires.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ec687daf300135618b2d",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Canberra",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://canberra.thaiembassy.org/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ecc87daf3003d04dfb73",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Vienna",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "http://thaiembassy.at",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68eeb57daf3003c37f79e3",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Manama",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://manama.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ef0a7daf300281329b36",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Dhaka",
+    "address": "18 & 20, Madani Avenue, Baridhara, Dhaka-1212 Bangladesh",
+    "phone": "+880-2 58813260 / +880-2 222264277 / +880-2 222264279 / +880-2 222264281",
+    "fax": "(880 2) 985 4280",
+    "emails": {
+      "general": [
+        "thaiembassy.dac@mfa.go.th"
+      ],
+      "visa": [
+        "visa.dac@mfa.go.th"
+      ]
+    },
+    "sourceUrl": "https://dhaka.thaiembassy.org/en/page/58850-contact-us?menu=5d83296215e39c2540006a02",
+    "verifiedAt": "2026-10-13",
+    "status": "verified"
+  },
+  {
+    "id": "5d68ef3c7daf300135618b2e",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Brussels",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://brussels.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ef857daf300279209135",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Brasilia",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://brasilia.thaiembassy.org/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68efe27daf3002df7b3935",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Bandar Seri Begawan",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://bsb.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68efff7daf3003c37f79e4",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Phnom Penh",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://phnompenh.thaiembassy.org/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f02c7daf3002e41713d9",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Ottawa",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://ottawa.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f0607daf300279209136",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Santiago",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://santiago.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f0857daf3002df7b3937",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Beijing",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://thaiembbeij.org/th",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f0a57daf3003c37f79e5",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Prague",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "http://www.thaiembassy.cz/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f0cc7daf300135618b30",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Copenhagen",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://copenhagen.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f13b7daf3003d04dfb74",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Cairo",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://cairo.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f1677daf3002df7b3938",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Helsinki",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://helsinki.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f1947daf3002e41713db",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Paris",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://www.thaiembassy.fr/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f1b87daf3000ae1b8619",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Berlin",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://berlin.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68f1ff7daf3002df7b3939",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Athens",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://athens.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fd517daf3003c37f79e7",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Budapest",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://budapest.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fd6d7daf3002276bc3ce",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, New Delhi",
+    "address": "56-N Nyaya Marg Chanakyapuri New Delhi 110021",
+    "phone": "+91 11 2419 7200 / +91 11 2419 7156 (Consular section)",
+    "fax": "+91 11 2419 7199",
+    "emails": {
+      "general": [
+        "thaiembassy.del@mfa.go.th"
+      ],
+      "visa": [
+        "thaievisa.del@gmail.com"
+      ]
+    },
+    "sourceUrl": "https://newdelhi.thaiembassy.org/en/page/contact-us",
+    "verifiedAt": "2026-10-13",
+    "status": "verified"
+  },
+  {
+    "id": "5d68fd8b7daf3000ae1b861a",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Jakarta",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "http://www.thaiembassyjakarta.com",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fdb97daf300281329b3c",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Tehran",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://tehran.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fdd67daf300281329b3d",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Tel Aviv",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://telaviv.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fdf87daf300279209138",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Rome",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://rome.thaiembassy.org/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fe1d7daf30042d15a254",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Tokyo",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "http://www.thaiembassy.jp",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fe397daf3002df7b393c",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Amman",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://amman.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fe557daf3003c37f79e9",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Astana",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://astana.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fe797daf3002276bc3d0",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Nairobi",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://nairobi.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fe927daf3002276bc3d1",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Kuwait",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://kuwait.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68feaa7daf3002276bc3d2",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Vientiane",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://vientiane.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fee17daf3002561ab09b",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Kuala Lumpur",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://kualalumpur.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68fefa7daf300281329b3e",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Mexico City",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://mexico.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ff137daf3002561ab09c",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Rabat",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://rabat.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ff2b7daf30042d15a256",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Maputo",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://maputo.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ff467daf3003c37f79ea",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Yangon",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://yangon.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ff5d7daf3003c37f79eb",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Kathmandu",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://kathmandu.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ff767daf30027920913a",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, The Hague",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://hague.thaiembassy.org/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ff8e7daf30027920913b",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Wellington",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://wellington.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ffa57daf30027920913c",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, ABUJA",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://abuja.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ffbd7daf300135618b34",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Oslo",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://oslo.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ffd67daf300281329b3f",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Muscat",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://muscat.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d68ffec7daf30044b679d32",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Islamabad",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://islamabad.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d69000a7daf30044b679d33",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Lima",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://lima.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6900207daf30027920913d",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Manila",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://www.thaiembassymnl.ph/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6900367daf30027920913e",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Warsaw",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://warsaw.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d69004e7daf30027920913f",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Lisbon",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://lisbon.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d69006b7daf3002276bc3d6",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Doha",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://doha.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6900847daf30042d15a257",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Seoul",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://seoul.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d69009a7daf300279209140",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Bucharest",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://bucharest.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6900b27daf3002561ab09e",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Moscow",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://moscow.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6900ca7daf300279209142",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Riyadh",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://riyadh.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6900e67daf3002276bc3d7",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Dakar",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://dakar.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6901017daf3002561ab09f",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Singapore",
+    "address": "370 Orchard Road, Singapore 238870",
+    "phone": "+65 6737 2644 ext.665 (Visa Information)",
+    "fax": "",
+    "emails": {
+      "general": [
+        "thaiembassy.sin@mfa.go.th"
+      ],
+      "visa": [
+        "visa.sin@mfa.go.th"
+      ]
+    },
+    "sourceUrl": "https://singapore.thaiembassy.org/en/page/contact-us",
+    "verifiedAt": "2026-10-13",
+    "status": "verified"
+  },
+  {
+    "id": "5d69011b7daf3002276bc3d8",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Pretoria",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://pretoria.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6901357daf30042d15a25a",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Madrid",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://madrid.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d69014e7daf30042d15a25b",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Colombo",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://colombo.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6901647daf30042d15a25c",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Stockholm",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "http://thaiembassy.se/en/home/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6901827daf30042d15a25d",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Bern",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://www.thaiembassy.ch/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6901997daf30042d15a25e",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Dili",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://dili.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6901b07daf30042d15a25f",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Ankara",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://ankara.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6901c87daf30042d15a260",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Abu Dhabi",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://abudhabi.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6901e67daf30042d15a261",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, London",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://london.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6902037daf30042d15a262",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Washington",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://washingtondc.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6902267daf30042d15a263",
+    "kind": "embassy",
+    "name": "Royal Thai Embassy, Hanoi",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://rtehanoi.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddc007daf30064f20e322",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Sydney",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://sydney.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "66b04d4b35dae468770e9da3",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Siem Reap",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://siemreap.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddc1d7daf30064f20e323",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Vancouver",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://vancouver.thaiembassy.org/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddc387daf30064f20e324",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Guangzhou",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://guangzhou.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddc687daf3005921229e3",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Hong Kong",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://hongkong.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddc9e7daf3005921229e4",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Kunming",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://kunming.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddcc27daf3005921229e5",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Shanghai",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://thaishanghai.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddcde7daf3005921229e6",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Xian",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://xian.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddcfb7daf30063713a693",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Nanning",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://nanning.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddd1c7daf3005965d28a4",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Chengdu",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://chengdu.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddd347daf3005965d28a5",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Xiamen",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://xiamen.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddd477daf30063713a694",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Qingdao",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://qingdao.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddd5f7daf30063713a695",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Frankfurt",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://frankfurt.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddd817daf300634560e64",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Munich",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://munich.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6dde447daf3005921229e7",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Kolkata",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://kolkata.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddf0d7daf3005bc06a546",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Mumbai",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://mumbai.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddf6f7daf30065a1ba693",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Chennai",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://chennai.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddfa07daf3005ab643124",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Osaka",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://osaka.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddfc07daf30060a063392",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Fukuoka",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://fukuoka.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6ddfdd7daf30060a063393",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Savannakhet",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://savannakhet.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6de0297daf30060a063395",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Kota Bharu",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://kotabharu.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6de04e7daf3005921229e8",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Penang",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://penang.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6de0687daf3005921229e9",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Karachi",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://karachi.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6de0847daf300634560e66",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Jeddah",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://jeddah.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6de09e7daf300634560e67",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Dubai",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://dubai.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6de0df7daf300634560e68",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Chicago",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://cgchicago.thaiembassy.org/",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6de1b87daf3005921229ed",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Los Angeles",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://thaiconsulatela.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6de1d27daf30060a063396",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, New York",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://newyork.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  },
+  {
+    "id": "5d6de1ed7daf30060a063397",
+    "kind": "consulate-general",
+    "name": "Royal Thai Consulate-General, Ho Chi Minh",
+    "address": "",
+    "phone": "",
+    "fax": "",
+    "emails": {
+      "general": [],
+      "visa": []
+    },
+    "sourceUrl": "https://hochiminh.thaiembassy.org",
+    "verifiedAt": "",
+    "status": "incomplete"
+  }
+]
