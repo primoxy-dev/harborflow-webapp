@@ -6,7 +6,12 @@ import { createTrainingRoute } from '../api/training.mjs';
 test('owner has access, viewer is read-only and cannot download', () => {
   assert.equal(trainingAccess({ login: 'primoxy-dev', action: 'crew.list' }), true);
   assert.equal(trainingAccess({ login: 'primoxy-dev', action: 'grants.set' }), true);
-  assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'crew.list' }), true);
+  assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' },
+    vesselIds: ['vessel-a'], targetVesselId: 'vessel-a', action: 'crew.list' }), true);
+  assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' },
+    vesselIds: ['vessel-a'], targetVesselId: 'vessel-b', action: 'crew.list' }), false);
+  assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'crew.list' }), false);
+  assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'vessels.list' }), true);
   assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'grants.set' }), false);
   assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'crew.create' }), false);
   assert.equal(trainingAccess({ login: 'reader', grant: { role: 'viewer' }, action: 'certificates.download' }), false);
@@ -71,5 +76,22 @@ test('route denies officer vessel B before querying records', async () => {
   const response = await route(new Request('https://example.test/api/training?action=certificates.download&vesselId=vessel-b'));
   assert.equal(response.status, 403);
   assert.equal(queries, 0);
+});
+
+test('officer vessel discovery returns only assigned vessel rows', async () => {
+  const queries = [];
+  const route = createTrainingRoute({
+    database: () => ({ query: async (statement, params) => {
+      queries.push([statement, params]);
+      return [{ id: 'vessel-a', name: 'MT Fictional' }];
+    } }),
+    loginFromRequest: () => 'officer',
+    readTrainingGrant: async () => ({ role: 'officer', vesselIds: ['vessel-a'] })
+  });
+  const response = await route(new Request('https://example.test/api/training?action=vessels.list'));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).role, 'officer');
+  assert.match(queries[0][0], /officer_login=\$1/);
+  assert.deepEqual(queries[0][1], ['officer']);
 });
 
