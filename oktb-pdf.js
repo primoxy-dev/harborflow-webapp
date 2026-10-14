@@ -1,6 +1,25 @@
 /* Browser-only OKTB draft PDF export. Crew data is never sent to another service. */
 (() => {
   const PAGE_W=595, PAGE_H=842, SCALE=2.1;
+  // Replay the complete letter at a uniform scale on one A4 page.
+  function singlePageSurface(){
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.round(PAGE_W*SCALE);canvas.height=Math.round(PAGE_H*SCALE);
+    const context=canvas.getContext('2d'),commands=[];
+    const pen=new Proxy(context,{
+      get(target,key){const value=target[key];if(typeof value!=='function')return value;
+        return (...args)=>{if(key!=='measureText')commands.push([key,args]);return value.apply(target,args);};},
+      set(target,key,value){commands.push([key,value,true]);target[key]=value;return true;}
+    });
+    return {canvas,pen,finish(bottom){
+      const fit=Math.min(1,(PAGE_H-72)/Math.max(PAGE_H-72,bottom-36));
+      const result=document.createElement('canvas');result.width=canvas.width;result.height=canvas.height;
+      const output=result.getContext('2d');output.fillStyle='#fff';output.fillRect(0,0,result.width,result.height);
+      output.translate(PAGE_W*(1-fit)/2*SCALE,36*(1-fit)*SCALE);output.scale(fit,fit);
+      for(const [key,value,property] of commands){if(property)output[key]=value;else output[key](...value);}
+      output.setTransform(SCALE,0,0,SCALE,0,0);return result;
+    }};
+  }
   const dateOnly=value=>/^\d{4}-\d{2}-\d{2}/.test(String(value||''))?String(value).slice(0,10):'';
   function displayDate(value){
     const date=dateOnly(value);
@@ -60,16 +79,15 @@
   async function renderPages({preview,people,ctx,profile,logo,outputMode='sample'}){
     const logoImage=await image(logoSource(logo));
     const signatureImage=profile.signature?await image(profile.signature):null;
-    const pages=[];let canvas,pen,y;
+    const pages=[];let canvas,pen,y,surface;
     function newPage(continued=false){
-      canvas=document.createElement('canvas');
-      canvas.width=Math.round(PAGE_W*SCALE);canvas.height=Math.round(PAGE_H*SCALE);
-      pen=canvas.getContext('2d');pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);
+      surface=singlePageSurface();canvas=surface.canvas;pen=surface.pen;
+      pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);
       pen.fillStyle='#111';pages.push(canvas);y=36;
       if(continued){pen.font='bold 12px Arial';pen.fillText('OK TO BOARD MESSAGE / GUARANTEE LETTER (continued)',36,y);y+=26;}
     }
     function ensure(height){
-      if(y+height>PAGE_H-50)newPage(true);
+      // Fit after laying out all content.
     }
     function text(value,x,top,size=10,bold=false,align='left'){
       pen.fillStyle='#111';pen.font=(bold?'bold ':'')+size+'px Arial, sans-serif';
@@ -99,6 +117,7 @@
       lines.forEach((line,i)=>{pen.fillStyle='#111';pen.font=size+'px Arial, sans-serif';pen.textAlign=align;pen.textBaseline='top';pen.fillText(line,align==='left'?x+4:x+width/2,start+i*11,width-8);pen.textAlign='left';});
     }
     function table(title,headers,rows,widths){
+      const total=widths.reduce((sum,width)=>sum+width,0);widths=widths.map(width=>width*(PAGE_W-72)/total);
       ensure(60);
       text(title,36,y,11,true);y+=20;
       const drawHeader=()=>{
@@ -109,7 +128,6 @@
         cell('No details recorded',36,y,widths.reduce((a,b)=>a+b,0),28);y+=28;
       }
       for(const row of rows){
-        if(y+28>PAGE_H-50){newPage(true);text(title+' (continued)',36,y,11,true);y+=20;drawHeader();}
         let x=36;row.forEach((value,i)=>{cell(value,x,y,widths[i],28,i===1&&title==='Personal Details'?'left':'center');x+=widths[i];});y+=28;
       }
       y+=16;
@@ -155,6 +173,7 @@
     text(profile.signer||'[signatory not set]',36,y,10,true);y+=15;
     text('Gulf Agency Company (Thailand) Ltd.',36,y,9);y+=13;
     text('As Agents Only',36,y,9);
+    pages.splice(0,pages.length,surface.finish(y+14));
     for(const [index,page] of pages.entries()){
       const ctx=page.getContext('2d');ctx.save();ctx.setTransform(SCALE,0,0,SCALE,0,0);
       ctx.fillStyle='rgba(160,0,0,.12)';ctx.font='bold 39px Arial';ctx.textAlign='center';
@@ -176,9 +195,8 @@
   }
   async function downloadLoi({preview,person,ctx,profile,logo,outputMode='sample'}) {
     if(!person?.id||!ctx.embassy)throw Error('กรุณาเลือกลูกเรือและสถานทูต');
-    let canvas=document.createElement('canvas');const pages=[canvas];
-    canvas.width=Math.round(PAGE_W*SCALE);canvas.height=Math.round(PAGE_H*SCALE);
-    let pen=canvas.getContext('2d');pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);
+    const surface=singlePageSurface(),pages=[];
+    let pen=surface.pen;pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);
     const logoImage=await image(logoSource(logo)),signature=profile.signature?await image(profile.signature):null;
     const lines=(value,width,size=10)=>{
       pen.font=size+'px Arial';const output=[];let line='';
@@ -202,7 +220,7 @@
     text('Tel +66-2-650 7400  Fax +66-2-650 7401  E-mail shipping.thailand@gac.com',156,102,7);
     text('INVITATION LETTER',PAGE_W/2,143,14,true,'center');
     let y=175;
-    const ensure=height=>{if(y+height<=PAGE_H-45)return;canvas=document.createElement('canvas');canvas.width=Math.round(PAGE_W*SCALE);canvas.height=Math.round(PAGE_H*SCALE);pages.push(canvas);pen=canvas.getContext('2d');pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);y=45;};
+    const ensure=()=>{};
     const paragraph=(value,gap=8,size=10)=>{
       for(const line of lines(value,PAGE_W-120,size)){ensure(13);text(line,60,y,size);y+=13;}y+=gap;
     };
@@ -230,6 +248,7 @@
     text('Yours Faithfully,',430,y,10,false,'center');y+=23;
     if(signature){pen.drawImage(signature,360,y,140,49);y+=55;}else{text(outputMode==='final'?'Signature':'Signature pending owner approval',430,y,8,false,'center');y+=55;}
     for(const value of signoff){for(const line of lines(value,250,9)){text(line,415,y,9,false,'center');y+=13;}y+=5;}
+    pages.push(surface.finish(y));
     for(const [index,p]of pages.entries()){pen=p.getContext('2d');pen.save();pen.fillStyle='rgba(160,0,0,.12)';pen.font='bold 37px Arial';pen.textAlign='center';pen.translate(PAGE_W/2,PAGE_H/2);pen.rotate(-.32);if(outputMode!=='final')pen.fillText('SAMPLE · NOT APPROVED',0,0);pen.restore();text((outputMode==='final'?'':'DRAFT · ')+(index+1)+' / '+pages.length,PAGE_W-60,PAGE_H-22,8,false,'right');}
     const name=fileName([person],preview.job.vessel).replace(/^OKTB/,'LOI');
     const blob=pdfFromPages(pages),url=URL.createObjectURL(blob),link=document.createElement('a');
@@ -240,7 +259,7 @@
     if(!draft?.tables?.length)throw Error('ไม่มีตารางในร่างเอกสาร');
     const logoImage=await image(logoSource(logo)),signature=profile.signature?await image(profile.signature):null;
     const model=await import('./permit-draft.mjs');
-    const pages=[];let canvas,pen,y,paginate=false;
+    const pages=[];let canvas,pen,y,paginate=false,surface;
     function ensure(height){if(paginate&&y+height>PAGE_H-40)page();}
     function text(value,x,top,size=8,bold=false,align='left'){
       pen.fillStyle='#111';pen.font=(bold?'bold ':'')+size+'px Arial, Tahoma, sans-serif';pen.textAlign=align;pen.textBaseline='top';pen.fillText(String(value??''),x,top);pen.textAlign='left';
@@ -262,8 +281,8 @@
       return out.length?out:[''];
     }
     function page(){
-      canvas=document.createElement('canvas');canvas.width=Math.round(PAGE_W*SCALE);canvas.height=Math.round(PAGE_H*SCALE);
-      pen=canvas.getContext('2d');pen.scale(SCALE,SCALE);pen.fillStyle='white';pen.fillRect(0,0,PAGE_W,PAGE_H);pages.push(canvas);y=36;
+      surface=singlePageSurface();canvas=surface.canvas;pen=surface.pen;
+      pen.scale(SCALE,SCALE);pen.fillStyle='white';pen.fillRect(0,0,PAGE_W,PAGE_H);pages.push(canvas);y=36;
     }
     function paragraph(value,size=8,gap=2,indent=0){
       const lines=wrap(value,PAGE_W-72-indent,size);
@@ -310,19 +329,9 @@
     if(signature)pen.drawImage(signature,390,y,100,38);else text(outputMode==='final'?'Signature':'Signature pending owner approval',440,y+15,6.8,false,'center');y+=45;
     for(const line of ['('+(profile.signer||'[signatory not set]')+')','Operations Coordinator, Shipping Services','Mobile: '+(profile.phone||'[phone not set]'),'As Agents Only']){for(const part of wrap(line,230,7.3)){text(part,440,y,7.3,false,'center');y+=11;}}
     }
-    // Measure the complete letter first, then render it without page breaks.
+    // Keep every selected table and signature together on one page.
     page();drawDocument();
-    const contentHeight=Math.max(PAGE_H,y+36),fit=Math.min(1,(PAGE_H-72)/(contentHeight-72));
-    if(contentHeight*SCALE>30000)throw Error('ข้อมูลยาวเกินขนาดภาพที่รองรับ กรุณาลดข้อความหรือแถวก่อนดาวน์โหลด');
-    if(fit<.8){pages.length=0;paginate=true;page();drawDocument();}
-    else{
-    canvas.height=Math.ceil(contentHeight*SCALE);pen=canvas.getContext('2d');pen.scale(SCALE,SCALE);pen.fillStyle='white';pen.fillRect(0,0,PAGE_W,contentHeight);drawDocument();
-    const fitted=document.createElement('canvas');fitted.width=Math.round(PAGE_W*SCALE);fitted.height=Math.round(PAGE_H*SCALE);
-    const fittedPen=fitted.getContext('2d');fittedPen.fillStyle='white';fittedPen.fillRect(0,0,fitted.width,fitted.height);
-    const drawWidth=(PAGE_W-72)*fit*SCALE,drawHeight=(contentHeight-72)*fit*SCALE;
-    fittedPen.drawImage(canvas,36*SCALE,36*SCALE,(PAGE_W-72)*SCALE,(contentHeight-72)*SCALE,(fitted.width-drawWidth)/2,36*SCALE,drawWidth,drawHeight);
-    pages.splice(0,pages.length,fitted);
-    }
+    pages.splice(0,pages.length,surface.finish(y));
     for(const [i,p] of (outputMode==='final'?[]:pages).entries()){
       const c=p.getContext('2d');c.save();c.setTransform(SCALE,0,0,SCALE,0,0);c.fillStyle='rgba(160,0,0,.10)';c.font='bold 36px Arial';c.textAlign='center';c.translate(PAGE_W/2,PAGE_H/2);c.rotate(-.32);c.fillText('SAMPLE - NOT APPROVED',0,0);c.restore();c.save();c.setTransform(SCALE,0,0,SCALE,0,0);c.fillStyle='#555';c.font='8px Arial';c.textAlign='right';c.fillText('DRAFT - '+(i+1)+' / '+pages.length,PAGE_W-36,PAGE_H-22);c.restore();
     }

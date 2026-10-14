@@ -102,12 +102,12 @@ try{
   const input={preview:{job:{vessel:'DEMO',port:'DEMO'}},person:{id:'demo',name:'DEMO'},ctx:{embassy:'DEMO MISSION',missionContactLines:Array(70).fill('DEMO CONTACT LINE - LONG ADDRESS'),issueDate:'2026-10-13'},profile:{signer:'DEMO SIGNER'},outputMode:'final'};
   const original=URL.createObjectURL;URL.createObjectURL=blob=>{window.qaPdf=blob;return original(blob);};await window.HarborFlowOktbPdf.downloadLoi(input);
  });
- let bytes=await page.evaluate(async()=>Array.from(new Uint8Array(await window.qaPdf.arrayBuffer())));assert.ok((Buffer.from(bytes).toString('latin1').match(/\/Type \/Page /g)||[]).length>1);await writeFile(path.join(out,'loi-long-final.pdf'),Buffer.from(bytes));
+ let bytes=await page.evaluate(async()=>Array.from(new Uint8Array(await window.qaPdf.arrayBuffer())));assert.equal((Buffer.from(bytes).toString('latin1').match(/\/Type \/Page /g)||[]).length,1);await writeFile(path.join(out,'loi-long-final.pdf'),Buffer.from(bytes));
  await page.evaluate(async()=>{
   const model=await import('/permit-draft.mjs'),draft=model.newPermitDraft(),table=draft.tables.find(t=>t.key==='on');table.rows=Array.from({length:100},(_,i)=>({...model.blankRow(table,i),cells:[String(i+1),'DEMO NAME '+i,'DEMO','DEMO','','','','']}));
   await window.HarborFlowOktbPdf.downloadPermit({preview:{job:{vessel:'DEMO',port:'DEMO'}},ctx:{permitDraft:draft},profile:{signer:'DEMO SIGNER'},outputMode:'final'});
  });
- bytes=await page.evaluate(async()=>Array.from(new Uint8Array(await window.qaPdf.arrayBuffer())));assert.ok((Buffer.from(bytes).toString('latin1').match(/\/Type \/Page /g)||[]).length>1);await writeFile(path.join(out,'permit-long-final.pdf'),Buffer.from(bytes));
+ bytes=await page.evaluate(async()=>Array.from(new Uint8Array(await window.qaPdf.arrayBuffer())));assert.equal((Buffer.from(bytes).toString('latin1').match(/\/Type \/Page /g)||[]).length,1);await writeFile(path.join(out,'permit-long-final.pdf'),Buffer.from(bytes));
  await page.evaluate(async()=>window.HarborFlowOktbPdf.download({preview:{job:{vessel:'DEMO',port:'DEMO'}},people:[{name:'DEMO'}],ctx:{},profile:{}}));
  bytes=await page.evaluate(async()=>Array.from(new Uint8Array(await window.qaPdf.arrayBuffer())));await writeFile(path.join(out,'oktb-offline-sample.pdf'),Buffer.from(bytes));
  const otherContext=await browser.newContext();await otherContext.route('https://harborflow.test/**',routeRequest);const other=await otherContext.newPage();

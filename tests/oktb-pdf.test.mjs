@@ -71,3 +71,16 @@ test('five crew and two flights fit on one PDF page', async () => {
   const pages=(bytes.match(/\/Type \/Page /g)||[]).length;
   assert.equal(pages,1);
 });
+
+test('long OKTB and LOI retain their final content on one A4 page',async()=>{
+  for(const type of ['oktb','loi']){
+    const {api,getDownload}=setup();
+    const input={preview:{job:{vessel:'DEMO',port:'DEMO'}},ctx:{embassy:'DEMO',missionContactLines:Array(70).fill('DEMO CONTACT LINE')},profile:{signer:'FINAL SIGNER'},outputMode:'final'};
+    if(type==='oktb')await api.download({...input,people:Array.from({length:30},(_,i)=>({name:'CREW '+i}))});
+    else await api.downloadLoi({...input,person:{id:'demo',name:'DEMO'}});
+    const {pdfBlob,painted}=getDownload();
+    assert.equal((Buffer.from(await pdfBlob.arrayBuffer()).toString('latin1').match(/\/Type \/Page /g)||[]).length,1);
+    assert.ok(painted.some(value=>String(value).includes('FINAL SIGNER')));
+    if(type==='oktb')assert.ok(painted.includes('CREW 29'));
+  }
+});
