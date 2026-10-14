@@ -118,16 +118,29 @@
     state.root.querySelectorAll('[data-training-tab]').forEach(button =>
       button.setAttribute('aria-selected', String(button.dataset.trainingTab === state.tab)));
     if (state.tab === 'Overview') {
-      const { overview = {} } = await api('overview.get');
+      const { overview = {}, role } = await api('overview.get');
+      const access = role === 'owner' ? await api('grants.list') : { grants: [], assignments: [] };
       body.innerHTML = `${header('Training overview', 'Status for the selected vessel scope')}
         <div class="training-metrics"><div><span>Crew</span><strong>${esc(overview.crew || 0)}</strong></div>
         <div><span>Open sessions</span><strong>${esc(overview.sessions || 0)}</strong></div>
         <div><span>Certificates awaiting review</span><strong>${esc(overview.pendingCertificates || 0)}</strong></div></div>
         <div class="training-card"><h3>Next steps</h3><p>Create a fictional crew profile, assign a vessel, approve a matrix rule,
         schedule a session, record a result, verify a certificate, then check readiness.</p></div>
-        <div class="training-card"><h3>Add vessel</h3><form data-training-form="vessel-create" class="training-form">
+        ${['owner','coordinator'].includes(role) ? `<div class="training-card"><h3>Add vessel</h3><form data-training-form="vessel-create" class="training-form">
         ${box('Vessel name', 'name', 'required placeholder="MT Fictional"')}${box('Vessel type', 'vesselType', 'required placeholder="Tanker"')}
-        ${submit('Add vessel')}</form></div>`;
+        ${submit('Add vessel')}</form></div>` : ''}
+        ${role === 'owner' ? `<div class="training-grid">
+        <div class="training-card"><h3>Training access</h3>
+        <form data-training-form="grant-set" class="training-form">
+        ${box('GitHub login', 'login', 'required pattern="[a-z0-9-]{1,39}"')}
+        ${select('Training role', 'role', ['viewer','coordinator','approver','officer'].map(x => option(x,x)).join(''))}
+        ${submit('Set training role')}</form>
+        <p class="training-small">Operations Crew permissions do not grant access here.</p></div>
+        <div class="training-card"><h3>Assign officer to vessel</h3>
+        <form data-training-form="officer-assign" class="training-form">
+        ${select('Officer', 'officerLogin', (access.grants || []).filter(g => g.role === 'officer' && !g.revoked_at)
+          .map(g => option(g.login,g.login)).join(''))}
+        ${select('Vessel', 'vesselId', vesselOptions())}${submit('Assign vessel')}</form></div></div>` : ''}`;
       return;
     }
     if (state.tab === 'Calendar') {
@@ -195,7 +208,7 @@
         <div class="training-card"><h3>Plan session</h3>
         <form data-training-form="session-create" class="training-form">
         ${select('Course', 'courseId', courseOptions())}
-        ${select('Vessel', 'vesselId', '<option value="">Shore</option>' + vesselOptions())}
+        ${select('Vessel', 'vesselId', vesselOptions())}
         ${box('Start (ISO with offset)', 'startsAt', 'required placeholder="2026-10-15T09:00+07:00"')}
         ${box('End (ISO with offset)', 'endsAt', 'required placeholder="2026-10-15T12:00+07:00"')}
         ${box('IANA time zone', 'displayZone', 'required value="Asia/Bangkok"')}
@@ -253,6 +266,8 @@
     if (kind === 'certificate-upload') { await upload(form); return; }
     const actions = {
       'vessel-create': ['vessels.create', { data }],
+      'grant-set': ['grants.set', data],
+      'officer-assign': ['officers.assign', data],
       'crew-create': ['crew.create', { data }],
       'assignment-create': ['assignments.create', { data }],
       'availability-set': ['availability.set', { crewId: data.crewId, data }],
