@@ -87,3 +87,36 @@ test('proposal carries old times and affected crew with version guard', async ()
   assert.ok(update[0].includes('version=$'));
 });
 
+test('confirm blocks when an enrolled crew lacks a course prerequisite', async () => {
+  const sessionId = '3bf79fc8-30f0-43ac-93fb-d635da1a43a6';
+  const vesselId = '13f6ce1c-4316-41c7-aa2f-4194a7bc65a6';
+  const next = { startsAt: '2026-10-15T09:00:00+07:00', endsAt: '2026-10-15T12:00:00+07:00',
+    displayZone: 'Asia/Bangkok', instructor: 'Officer', venue: 'Training Room' };
+  const route = createTrainingRoute({
+    database: () => ({ query: async statement => {
+      if (statement.startsWith('SELECT * FROM training_sessions')) return [{
+        id: sessionId, vessel_id: vesselId, course_id: 'course-1', version: 2,
+        state: 'proposed', capacity: 4, proposed_change: { next }
+      }];
+      if (statement.includes('FROM training_enrollments WHERE session_id=')) return [{ crew_id: 'crew-a' }];
+      if (statement.includes('FROM training_enrollments e')) return [];
+      if (statement.includes('FROM training_availability')) return [{
+        crew_id: 'crew-a', kind: 'available', starts_at: '2026-10-15T00:00:00+07:00',
+        ends_at: '2026-10-16T00:00:00+07:00'
+      }];
+      if (statement.includes('FROM training_crew_assignments')) return [{ crew_id: 'crew-a', joins_on: '2026-10-20' }];
+      if (statement.includes('SELECT prerequisites FROM training_courses')) return [{ prerequisites: ['INTRO'] }];
+      if (statement.includes('FROM training_outcomes')) return [];
+      throw Error('Session must not be confirmed');
+    } }),
+    loginFromRequest: () => 'primoxy-dev'
+  });
+  const response = await route(new Request('https://example.test/api/training', {
+    method: 'POST', headers: { origin: 'https://example.test' },
+    body: JSON.stringify({ action: 'sessions.confirm', id: sessionId, version: 2, vesselId })
+  }));
+  assert.equal(response.status, 409);
+  const body = await response.json();
+  assert.ok(body.conflicts.hard.some(item => item.type === 'prerequisite'));
+});
+
