@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canEditJob, canEditService, canPeople, fieldConflicts, permission, publicJob, publicService, validateJob, validateService } from '../lib/operations.mjs';
+import { JOB_STATUSES, canEditJob, canEditService, canPeople, fieldConflicts, permission, publicJob, publicService, validateJob, validateService } from '../lib/operations.mjs';
+
+test('Job statuses match the operations accounting workflow', () => {
+  assert.deepEqual(JOB_STATUSES, ['Arrived', 'Awaiting Customer PO', 'Cancelled', 'Invoiced', 'Open', 'Ops Closed/Awaiting Invoices', 'Partial Invoiced', 'Ready For DA', 'Sailed']);
+  assert.equal(validateJob({ status: 'Open', vessel: 'Demo', port: 'Map Ta Phut', eta: '2026-10-15T23:45' }), null);
+  assert.match(validateJob({ status: 'Arrived', vessel: 'Demo', port: 'Map Ta Phut', eta: '2026-10-15T23:45' }), /Job No./);
+  assert.equal(validateJob({ status: 'Sailed', vessel: 'Demo', port: 'Map Ta Phut', eta: '2026-10-15T23:45', jobNo: 'TEST-1', principal: 'Fictional', pic: 'primoxy-dev' }), null);
+});
 
 test('Draft may omit Job No.; Planned and Confirmed enforce milestones', () => {
   assert.equal(validateJob({ status: 'Draft' }), null);

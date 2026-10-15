@@ -20,7 +20,8 @@
     'CTM':'💵','Provisions':'📦','Launch Boat':'🚤','Transport':'🚐',
     'Spare Parts/Customs':'🚚','Medical':'🩺','Inspection/Technical Visit':'🔍','Other':'⋯'
   };
-  const JOB_STATUSES = ['Draft','Planned','Confirmed','In Progress','On Hold','Completed','Cancelled'];
+  const JOB_STATUSES = ['Arrived','Awaiting Customer PO','Cancelled','Invoiced','Open','Ops Closed/Awaiting Invoices','Partial Invoiced','Ready For DA','Sailed'];
+  const LEGACY_JOB_STATUS = {'Draft':'Open','Planned':'Open','Confirmed':'Open','In Progress':'Open','On Hold':'Open','Completed':'Ops Closed/Awaiting Invoices'};
   const SERVICE_STATUSES = ['Not Started','In Progress','Waiting','Completed','Cancelled'];
   const FLAT_VISITORS = {'Visitor':'Visitors','SIRE Inspector':'SIRE Inspector','Surveyor':'Surveyor'};
   const CATEGORIES = ['On-signers','Off-signers','Medical visitors','SIRE Inspectors','Surveyors','Service Engineers','Other'];
@@ -59,7 +60,7 @@
     const choices = [...new Set([current, ...state.portChoices].filter(Boolean))];
     return '<option value="">Select Port / Terminal</option>' + option(choices, current);
   };
-  const portSelect = (current, extra) => '<label class="hfo-field"><span>Port / Terminal</span><select name="port" ' + extra + '>' + portOptions(current) + '</select><small class="hfo-muted" data-port-status>' + escape(state.portStatus) + '</small></label>';
+  const portSelect = (current, extra) => '<label class="hfo-field"><span>Port / Terminal</span><select name="port" ' + extra + '>' + portOptions(current) + '</select></label>';
   let state = { login: '', grant: null, public: false, jobs: [], services: [], people: [], peopleLoadedFor: null, trips: [], view: 'month', anchor: new Date(), callsOpen: true, openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…' };
   let personSaveTimer = null, personSaveQueue = Promise.resolve(), personCreateInFlight = false;
   const isOwner = () => state.grant?.role === 'owner';
@@ -68,6 +69,14 @@
   const service = () => state.services.find(x => x.id === state.openServiceId);
   const mayEditJob = j => isOwner() || state.grant?.role === 'editor' && j?.data.pic === state.login;
   const mayEditService = s => mayEditJob(job()) || state.grant?.role === 'editor' && s?.data.pic === state.login;
+  const jobStatus = value => LEGACY_JOB_STATUS[value] || value || 'Open';
+  function portClass(value) {
+    const port=String(value||'').toLowerCase();
+    if(port.includes('map ta phut'))return 'port-map-ta-phut';
+    if(port.includes('laem chabang'))return 'port-laem-chabang';
+    if(port.includes('sriracha')||port.includes('sri racha'))return 'port-sriracha';
+    return 'port-other';
+  }
   const serviceList = j => state.services.filter(x => x.job_id === j.id && !x.removed_at).sort((a,b) => a.seq-b.seq);
   const anyPeopleView = () => state.grant?.crewView || state.grant?.visitorView;
   const canPeople = kind => kind === 'crew' ? state.grant?.crewView : state.grant?.visitorView;
@@ -171,13 +180,13 @@
       const months=[]; let d=new Date(start);
       while (d<=end) { const y=d.getFullYear(), m=d.getMonth(), first=new Date(y,m,1), last=new Date(y,m+1,0);
         const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && j.data.eta && dateOnly(j.data.eta)>=localKey(first) && dateOnly(j.data.eta)<=localKey(last));
-        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Husbandry Calls</p>${calls.map(j=>`<button class="hfo-btn" data-open-job="${j.id}">${escape(j.data.vessel || 'Draft')}${state.public?'':' · '+escape(j.data.jobNo || 'No Job No.')}</button>`).join(' ')}</div>`);
+        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Husbandry Calls</p>${calls.map(j=>`<button class="hfo-btn hfo-job-pill ${portClass(j.data.port)}" data-open-job="${j.id}">${escape(j.data.vessel || 'Port Call')}${state.public?'':' · '+escape(j.data.jobNo || 'No Job No.')}</button>`).join(' ')}</div>`);
         d.setMonth(d.getMonth()+1);
       }
       return `<div class="hfo-stats">${months.join('')}</div>`;
     }
     const first=state.view==='month' ? startOfWeek(start) : start, days=state.view==='month' ? 42 : 7;
-    return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-weekday">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); const outside=state.view==='month' && d.getMonth()!==start.getMonth(); return `<div class="hfo-cell${outside?' hfo-outside':''}"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill" data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft')}</b><span class="hfo-job-meta">${escape(j.data.port||'No port')} · ${escape(j.data.status)}</span></button>`).join('')}</div>`;}).join('')}</div>`;
+    return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-weekday">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); const outside=state.view==='month' && d.getMonth()!==start.getMonth(); return `<div class="hfo-cell${outside?' hfo-outside':''}"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill ${portClass(j.data.port)}" data-open-job="${j.id}"><b>${escape(j.data.vessel||'Port Call')}</b><span class="hfo-job-meta">${escape(j.data.port||'No port')} · ${escape(jobStatus(j.data.status))}</span></button>`).join('')}</div>`;}).join('')}</div>`;
   }
   function renderHome() {
     if (root.classList.contains('active')) document.getElementById('title').textContent='Operations · Trial';
@@ -189,7 +198,7 @@
       `<div class="hfo-stats">${metrics().map(([label,value,indicator,trend])=>`<div class="hfo-card hfo-stat"><span>${escape(label)}</span><strong>${escape(value)}</strong>${indicator?`<small class="hfo-trend ${trend}">${escape(indicator)}</small><small class="hfo-muted">By ETA · excludes Cancelled</small>`:''}</div>`).join('')}</div>
        ${state.public?'<div class="hfo-info">ดู Job และ Service แบบสรุปได้โดยไม่ต้องลงชื่อเข้าใช้ · <a href="/api/auth?mode=start">ลงชื่อเข้าใช้เพื่อดูรายละเอียดและแก้ไขตามสิทธิ์</a></div>':''}
        <div class="hfo-card hfo-calendar-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><button class="hfo-btn" data-shift="-1" aria-label="Previous period">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1" aria-label="Next period">›</button><select id="hfoView" aria-label="Calendar view">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">Jobs appear on their ETA date · port local time</p>${calendar()}</div>
-       <details class="hfo-card hfo-calls" ${state.callsOpen?'open':''}><summary data-calls-toggle><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Draft Port Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(j.data.status)}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>
+       <details class="hfo-card hfo-calls" ${state.callsOpen?'open':''}><summary data-calls-toggle><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Port Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(jobStatus(j.data.status))}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>
        ${isOwner()?'<button class="hfo-btn" data-grants>Manage Operations access</button>':''}`}
     </div>`;
     document.querySelector('.top .actions select').style.display='none';
@@ -204,7 +213,7 @@
   const j=job(); if (!j) return;
   const calls=serviceList(j);
   overlay(`<div class="hfo-banner">Public summary only · รายชื่อ Crew/Visitor และข้อมูลภายในต้องลงชื่อเข้าใช้</div>
-    <div class="hfo-section"><h2>${escape(j.data.vessel||'Draft Port Call')}</h2><p>${escape(j.data.port||'—')} · ${escape(j.data.status||'—')}</p><p>ETA: ${formatDate(j.data.eta)}</p></div>
+    <div class="hfo-section"><h2>${escape(j.data.vessel||'Port Call')}</h2><p>${escape(j.data.port||'—')} · ${escape(jobStatus(j.data.status))}</p><p>ETA: ${formatDate(j.data.eta)}</p></div>
     <div class="hfo-section"><h3>Services</h3><div class="hfo-service-grid">${calls.length?calls.map(s=>serviceTile(s,true)).join(''):'<p class="hfo-muted">No Services yet.</p>'}</div></div>
     <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`,j.data.vessel||'Port Call','Public view');
 }
@@ -233,20 +242,46 @@
       ${f('Job No.',data.jobNo,'jobNo','text',`${disable} ${attr} ${create?'required':''}`)}
       ${f('Vessel',data.vessel,'vessel','text',`${disable} ${attr} ${create?'required':''}`)}
       ${f('IMO',data.imo,'imo','text',`${disable} ${attr}`)}
-      <div class="hfo-field"><span>Find IMO from vessel name</span><button type="button" class="hfo-btn" data-lookup-imo ${disable}>Search IMO</button><small class="hfo-muted" data-imo-feedback>Suggestions from Wikidata; verify before use.</small><div class="hfo-imo-results" data-imo-results></div></div>
+      <div class="hfo-field"><span>Find IMO from vessel name</span><button type="button" class="hfo-btn" data-lookup-imo ${disable}>Search IMO</button><small class="hfo-muted" data-imo-feedback></small><div class="hfo-imo-results" data-imo-results></div></div>
       ${portSelect(data.port,`${disable} ${attr}`)}
       ${f('Principal',data.principal,'principal','text',`${disable} ${attr}`)}
-      ${f('ETA',data.eta,'eta','datetime-local',`${disable} ${attr} ${create?'required':''}`)}
-      ${f('ETD',data.etd,'etd','datetime-local',`${disable} ${attr}`)}
-      ${sel('Status',data.status,'status',JOB_STATUSES,`${disable} ${attr}`)}
+      ${jobDateTimeField('ETA',data.eta,'eta',disable,attr,create)}
+      ${jobDateTimeField('ETD',data.etd,'etd',disable,attr,false)}
+      ${sel('Status',jobStatus(data.status),'status',JOB_STATUSES,`${disable} ${attr}`)}
       ${f('Job PIC (GitHub login)',data.pic,'pic','text',`${isOwner()?'': 'disabled'} ${attr}`)}
       ${area('Notes',data.notes,'notes',`${disable} ${attr}`)}
     </div>`;
   }
+  function jobDateTimeField(label,value,name,disable,attr,required=false) {
+    const raw=String(value||'');
+    const [date='',timePart='']=raw.split('T');
+    const time=(timePart.match(/^(\d{2}:\d{2})/)||[])[1]||'';
+    return `<label class="hfo-field hfo-job-datetime"><span>${escape(label)}</span><span class="hfo-datetime-24">
+      <input type="date" data-job-date="${name}" value="${escape(date)}" ${disable} ${required?'required':''} aria-label="${label} date">
+      <input type="text" data-job-time="${name}" value="${escape(time)}" placeholder="HH:mm" inputmode="numeric" maxlength="5" pattern="(?:[01]\\d|2[0-3]):[0-5]\\d" ${disable} ${required?'required':''} aria-label="${label} time (24 hours)">
+      </span><input type="hidden" name="${name}" value="${escape(raw)}" ${attr}></label>`;
+  }
+  function syncJobDateTime(target) {
+    const wrap=target.closest('.hfo-job-datetime');
+    const name=target.dataset.jobDate||target.dataset.jobTime;
+    const date=wrap?.querySelector(`[data-job-date="${name}"]`);
+    const time=wrap?.querySelector(`[data-job-time="${name}"]`);
+    const hidden=wrap?.querySelector(`input[type="hidden"][name="${name}"]`);
+    if(!date||!time||!hidden)return null;
+    time.setCustomValidity('');
+    if(!date.value&&!time.value){hidden.value='';return hidden;}
+    if(!date.value||!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time.value)){
+      time.setCustomValidity('Enter time as HH:mm in 24-hour format.');
+      time.reportValidity();
+      return null;
+    }
+    hidden.value=`${date.value}T${time.value}`;
+    return hidden;
+  }
   function renderCreate() {
-    overlay(`<div class="hfo-banner">Create Draft requires Vessel, Job No. and ETA to create its private GitHub folder · Planned also requires Port · Confirmed also requires Principal and Job PIC.</div>
-      <form id="hfoCreateJob" class="hfo-section"><h2>New Port Call</h2>${jobFields({status:'Draft'},true,true)}
-      <div class="hfo-actions" style="margin-top:16px"><button class="hfo-btn primary">Create Draft</button></div></form>`, 'Create Port Call', 'Trial data only');
+    overlay(`<div class="hfo-banner">Create an Open Port Call with Vessel, Job No., Port and ETA. Principal and Job PIC can be completed later.</div>
+      <form id="hfoCreateJob" class="hfo-section"><h2>New Port Call</h2>${jobFields({status:'Open'},true,true)}
+      <div class="hfo-actions" style="margin-top:16px"><button class="hfo-btn primary">Create Port Call</button></div></form>`, 'Create Port Call', 'Trial data only');
   }
   function serviceTile(s, publicView=false) {
   const type=s.data.type||'Service';
@@ -268,7 +303,7 @@
   const folderUrl=j.data.documentsPath?'https://github.com/primoxy-dev/harborflow-job-documents/tree/main/'+j.data.documentsPath.split('/').map(encodeURIComponent).join('/'):'';
   const folderControl=folderUrl?`<a class="hfo-btn" href="${escape(folderUrl)}" target="_blank" rel="noopener noreferrer">Open GitHub folder</a>${isOwner()?'<button class="hfo-btn" data-sync-job-folder>Sync GitHub folders</button>':''}<small class="hfo-muted">Folder follows Vessel, Job No., ETA and Cancelled status.</small>`:isOwner()?'<button class="hfo-btn" data-sync-job-folder>Create GitHub folder</button>':'<small class="hfo-muted">GitHub folder not created</small>';
   overlay(`<div class="hfo-banner">ข้อมูลทดลองเท่านั้น · ห้ามใช้ข้อมูลลูกเรือหรือผู้เยี่ยมจริง · Autosave เมื่อเปลี่ยนช่องข้อมูล</div>
-    <div class="hfo-section"><div class="hfo-toolbar"><div><h2>${escape(j.data.vessel||'Draft Port Call')}</h2><span class="hfo-muted">${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${escape(j.data.status)}</span></div><span class="hfo-muted" id="hfoSync">${escape(state.sync)}</span></div>
+    <div class="hfo-section"><div class="hfo-toolbar"><div><h2>${escape(j.data.vessel||'Port Call')}</h2><span class="hfo-muted">${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${escape(jobStatus(j.data.status))}</span></div><span class="hfo-muted" id="hfoSync">${escape(state.sync)}</span></div>
     ${jobFields(j.data,editable)}<div class="hfo-actions">${folderControl}</div><p class="hfo-muted">Job ID: ${escape(j.id)} · assigned PIC does not automatically grant access</p></div>
     <div class="hfo-section"><div class="hfo-toolbar"><h3>Services</h3>${editable?'<button class="hfo-btn primary" data-add-service>+ Add Service</button>':''}</div>
     <div class="hfo-service-grid">${services.length?services.map(s=>serviceTile(s)).join(''):'<div class="hfo-empty">No Services yet.</div>'}</div></div>
@@ -710,7 +745,7 @@
       state.portChoices = [...new Set((body.data?.terminals || [])
         .filter(row => typeof row.port === 'string' && row.port.trim() && typeof row.terminal === 'string' && row.terminal.trim())
         .map(row => row.port.trim() + ' / ' + row.terminal.trim()))].sort((a, b) => a.localeCompare(b));
-      state.portStatus = state.portChoices.length ? 'From Terminal Restriction' : 'No Port / Terminal rows in Terminal Restriction';
+      state.portStatus = state.portChoices.length ? '' : 'No Port / Terminal rows in Terminal Restriction';
     } catch {
       state.portStatus = 'Port list unavailable. Close and reopen to retry.';
     }
@@ -719,7 +754,6 @@
       const current = select.value;
       select.innerHTML = portOptions(current);
       select.value = current;
-      select.closest('.hfo-field').querySelector('[data-port-status]').textContent = state.portStatus;
     }
   }
   async function lookupImo(button) {
@@ -791,6 +825,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
   document.body.addEventListener('change',async event=>{
     const t=event.target;
     if(t.id==='hfoView'){state.view=t.value;render();return;}
+    if(t.dataset.jobDate||t.dataset.jobTime){const hidden=syncJobDateTime(t);if(hidden?.hasAttribute('data-job-field'))await saveJobField(hidden);return;}
     if(t.hasAttribute('data-job-field')){await saveJobField(t);return;}
     if(t.hasAttribute('data-person-field')){await saveInlinePerson(t);return;}
     if(t.hasAttribute('data-new-person-field')){scheduleNewPersonSave(0);return;}
@@ -801,6 +836,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
   });
   document.body.addEventListener('input',event=>{
     const t=event.target;
+    if(t.dataset.jobTime){t.value=t.value.replace(/[^0-9:]/g,'').slice(0,5);t.setCustomValidity('');return;}
     if(t.hasAttribute('data-new-person-field')){scheduleNewPersonSave();return;}
     if(t.hasAttribute('data-flight-field')){
       t.setCustomValidity('');

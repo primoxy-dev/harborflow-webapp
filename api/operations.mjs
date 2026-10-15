@@ -225,7 +225,7 @@ return async function route(request) {
     if (grant.role !== 'owner') return error('Only owner can create and assign a new Job during this trial', 403);
     const [count] = await rows(sql, 'SELECT count(*)::int AS total FROM operation_jobs');
     if (count.total >= 80) return error('Trial limit: 80 Port Calls', 409);
-    const data = { jobNo: '', vessel: '', port: '', principal: '', eta: '', etd: '', status: 'Draft', pic: '', ...clean(input.data, jobFields) };
+    const data = { jobNo: '', vessel: '', port: '', principal: '', eta: '', etd: '', status: 'Open', pic: '', ...clean(input.data, jobFields) };
     const invalid = validateJob(data);
     if (invalid) return error(invalid);
     if (!textField(data.vessel) || !textField(data.jobNo) || !data.eta) return error('Vessel, Job No. and ETA are required to create the GitHub folder');
