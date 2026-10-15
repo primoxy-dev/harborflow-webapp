@@ -10,6 +10,26 @@ const crew={id:'33333333-3333-4333-8333-333333333333',kind:'crew',data:{name:'DE
 const visitor={id:'44444444-4444-4444-8444-444444444444',kind:'visitor',data:{name:'DEMO MEDICAL',category:'Medical visitors',passport:'DEMO-VISITOR-PASSPORT',serviceIds:[sid]}};
 const makeRoute=grant=>createDocumentsRoute({sessionLogin:()=> 'demo',permission:async()=>grant,db:()=>({query:async query=>query.includes('operation_jobs')?[job]:query.includes('operation_services')?[{job_id:jid,data:{type:'Crew Change'}}]:query.includes('operation_people')?[crew,visitor]:[]})});
 const url='https://harborflow.test/api/documents?action=preview&type=permit&jobId='+jid+'&serviceId='+sid;
+test('Permit offers people across services in this Job and preserves separate person permissions',async()=>{
+ const others=[
+  {...crew,id:'55555555-5555-4555-8555-555555555555',data:{...crew.data,name:'SECOND CREW',serviceIds:['other-crew']}},
+  {...visitor,data:{...visitor.data,name:'VISITOR',category:'Other',serviceIds:['visitor-service']}},
+  {...visitor,id:'66666666-6666-4666-8666-666666666666',data:{...visitor.data,name:'SIRE',category:'SIRE Inspectors',serviceIds:['sire-service']}},
+  {...visitor,id:'77777777-7777-4777-8777-777777777777',data:{...visitor.data,name:'SURVEYOR',category:'Surveyors',serviceIds:['survey-service']}}
+ ];
+ for(const visitorView of [true,false]){
+  const route=createDocumentsRoute({sessionLogin:()=> 'demo',permission:async()=>({role:'owner',crewView:true,visitorView}),db:()=>({query:async(q,p)=>{
+   if(q.includes('operation_jobs'))return [job];if(q.includes('operation_services'))return [{job_id:jid,data:{type:'Crew Change'}}];
+   if(q.includes('operation_people')){assert.equal(p[0],jid);assert.match(q,/removed_at IS NULL/);return [crew,...others];}return [];
+  }})});
+  const response=await route(new Request(url));assert.equal(response.status,200);const {preview}=await response.json();
+  assert.deepEqual(preview.people.map(p=>p.name),visitorView?['DEMO CREW','SECOND CREW','VISITOR','SIRE','SURVEYOR']:['DEMO CREW','SECOND CREW']);
+  const tables=newPermitDraft().tables;
+  assert.equal(tablePeople(tables.find(t=>t.key==='on'),preview.people).length,2);
+  assert.deepEqual(tablePeople(tables.find(t=>t.key==='inspection'),preview.people).map(p=>p.name),visitorView?['SIRE','SURVEYOR']:[]);
+  assert.equal(tablePeople(tables.find(t=>t.key==='agent'),preview.people).some(p=>p.name==='VISITOR'),visitorView);
+ }
+});
 test('Document omits empty groups and unnamed rows but retains entered staff and vehicles',()=>{
  const draft=newPermitDraft();assert.equal(visiblePermitTables(draft).length,0);
  const on=draft.tables.find(t=>t.key==='on');on.rows[0].cells[2]='THAI';assert.equal(visiblePermitTables(draft).length,0);

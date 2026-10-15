@@ -336,7 +336,7 @@
   function personRow(p, i, kind) {
   const edit=canEditPeople(kind), expanded=state.personDraft?.id===p.id;
   const fields=[['nationality','Nationality'],['rank','Rank'],['dob','Date of Birth','date'],['seamanBook','Seaman book'],['passport','Passport'],['passportExpiry','PP. EXP','date']].filter(([key])=>kind==='crew'||key!=='seamanBook');
-  const nameCell=`<input data-person-field="name" data-person-id="${p.id}" aria-label="Name – Surname" value="${escape(p.data.name||'')}" ${edit?'':'disabled'}><button type="button" class="hfo-name-link" data-edit-person="${p.id}" aria-expanded="${expanded}">Immigration & flight details <span aria-hidden="true">${expanded?'▴':'▾'}</span></button>`;
+  const nameCell=`<input data-person-field="name" data-person-id="${p.id}" aria-label="Name – Surname" value="${escape(p.data.name||'')}" ${edit?'':'disabled'}><button type="button" class="hfo-name-link" data-edit-person="${p.id}" aria-expanded="${expanded}">${kind==='crew'?'Immigration & flight details':'Flight details'} <span aria-hidden="true">${expanded?'▴':'▾'}</span></button>`;
   return `<tr class="hfo-person-row"><td data-label="No.">${i+1}</td><td data-label="Name – Surname">${nameCell}</td>${fields.map(([key,label,type])=>`<td data-label="${label}">${crewTableInput(p,key,label,type||'text',edit)}</td>`).join('')}
     <td data-label="Actions">${edit?`<button type="button" class="hfo-btn danger" data-remove-person="${p.id}" aria-label="Remove ${escape(p.data.name)}">×</button>`:''}</td></tr>
     ${expanded?`<tr class="hfo-person-details-row"><td colspan="${kind==='crew'?9:8}">${personForm()}</td></tr>`:''}`;
@@ -364,7 +364,7 @@
       ${canEditPeople(kind)?`<tfoot><tr><td colspan="${crew?9:8}"><button type="button" class="hfo-btn" data-add-person="${kind}" data-person-category="${escape(category)}">+ Add ${escape(FLAT_VISITORS[s.data.type]||category)}</button></td></tr></tfoot>`:''}</table></div>`;
     const flat=FLAT_VISITORS[s.data.type];
     const category=s.data.type==='SIRE Inspector'?'SIRE Inspectors':s.data.type==='Surveyor'?'Surveyors':'Other';
-    return `<div class="hfo-section"><div class="hfo-toolbar"><h3>${escape(title)}</h3><small class="hfo-muted">${list.length} people · Immigration & flight details</small></div>
+    return `<div class="hfo-section"><div class="hfo-toolbar"><h3>${escape(title)}</h3><small class="hfo-muted">${list.length} people · ${crew?'Immigration & flight details':'Flight details'}</small></div>
       ${flat?table(list,category):(crew?CATEGORIES.slice(0,2):CATEGORIES.slice(2)).map(cat=>`<details class="hfo-group" open><summary>${escape(cat)} (${list.filter(p=>p.data.category===cat).length})</summary>${table(list.filter(p=>p.data.category===cat),cat)}</details>`).join('')}</div>`;
   }
 
@@ -443,13 +443,13 @@
   const checked=code=>Boolean(current[code]||code==='VISA'&&p.immigration?.visa||code==='OKTB'&&p.immigration?.oktb);
 
   const dis=edit?'':'disabled';
-  return `<form id="hfoPersonForm" class="hfo-person-expanded"><div class="hfo-toolbar"><h4>Immigration & flight details · ${escape(p.name)}</h4><button type="button" class="hfo-btn" data-close-person>Close</button></div>
-    <div class="hfo-immigration-row">
+  return `<form id="hfoPersonForm" class="hfo-person-expanded"><div class="hfo-toolbar"><h4>${draft.kind==='crew'?'Immigration & flight details':'Flight details'} · ${escape(p.name)}</h4><button type="button" class="hfo-btn" data-close-person>Close</button></div>
+    ${draft.kind==='crew'?`<div class="hfo-immigration-row">
       ${FLAT_VISITORS[service()?.data.type]?'':sel(draft.kind==='crew'?'Change role':'Visitor role',p.category,'category',draft.kind==='crew'?CATEGORIES.slice(0,2):CATEGORIES.slice(2),dis)}
       <fieldset class="hfo-immigration-compact"><legend>Immigration</legend><div class="hfo-immigration-codes">${codes.map(code=>`<label><input type="checkbox" name="immigration-${code}" ${checked(code)?'checked':''} ${dis}><span>${code}</span></label>`).join('')}</div></fieldset>
         ${sel('Status',p.immigration?.status||'Not started','immigrationStatus',['Not started','Documents pending','Submitted','Approved','Rejected'],dis)}
         <label class="hfo-field hfo-immigration-notes"><span>Notes</span><textarea name="immigrationNotes" rows="1" ${dis}>${escape(p.immigration?.notes||'')}</textarea></label>
-    </div>
+    </div>`:''}
     <div class="hfo-toolbar"><h4>Flights · ${flights.length}</h4>${edit?'<button type="button" class="hfo-btn" data-add-flight>+ Add flight</button>':''}</div>
     <div class="hfo-table-wrap"><table class="hfo-table hfo-flight-table"><thead><tr><th>#</th><th>Airline</th><th>Flight No.</th><th>Date (DDMMM)</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>PNR</th><th></th></tr></thead><tbody>
     ${displayFlights.map((fl,i)=>`<tr><td data-label="#">${i+1}</td>
@@ -571,9 +571,11 @@
     const draft=state.personDraft,form=document.getElementById('hfoPersonForm');if(!draft?.id||!form)return;
     const d=new FormData(form);
     if(d.has('category'))draft.data.category=String(d.get('category')||'');
-    const codes=Object.fromEntries(['VISA','VISA-C','VOA','BG','OKTB','EX'].map(code=>[code,d.has('immigration-'+code)]));
-    draft.data.immigration={...(draft.data.immigration||{}),status:String(d.get('immigrationStatus')||'Not started'),codes,notes:String(d.get('immigrationNotes')||'')};
-    delete draft.data.immigration.visa;delete draft.data.immigration.oktb;
+    if(draft.kind==='crew'&&d.has('immigrationStatus')){
+      const codes=Object.fromEntries(['VISA','VISA-C','VOA','BG','OKTB','EX'].map(code=>[code,d.has('immigration-'+code)]));
+      draft.data.immigration={...(draft.data.immigration||{}),status:String(d.get('immigrationStatus')||'Not started'),codes,notes:String(d.get('immigrationNotes')||'')};
+      delete draft.data.immigration.visa;delete draft.data.immigration.oktb;
+    }
     if(!Array.isArray(draft.data.flights))draft.data.flights=[];
     form.querySelectorAll('[data-flight]').forEach(input=>{
       const i=Number(input.dataset.flight),key=input.dataset.flightField;
