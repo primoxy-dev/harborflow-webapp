@@ -131,10 +131,6 @@
     } catch (e) { window.HarborFlowDocuments?.clear(); state.grant = null; state.public = false; state.jobs = []; state.services = []; state.people = []; state.trips = []; state.openJobId = null; state.openServiceId = null; state.modal = null; state.sync = ''; state.error = e.message; render(); }
   }
   function metrics() {
-    const now = Date.now();
-    const completed = state.services.filter(s => !s.removed_at && s.data.status === 'Completed' && s.data.baselineDue);
-    const onTime = completed.filter(s => s.data.actualEnd && Date.parse(s.data.actualEnd) <= Date.parse(s.data.baselineDue));
-    const overdue = state.services.filter(s => !s.removed_at && !['Completed','Cancelled'].includes(s.data.status) && s.data.plannedEnd && Date.parse(s.data.plannedEnd) < now);
     const [start, end] = period();
     const previousStart = new Date(start);
     previousStart.setDate(previousStart.getDate() - 1);
@@ -145,11 +141,40 @@
     const previous = { week: 'previous week', month: 'previous month', quarter: 'previous quarter', year: 'previous year' }[state.view];
     const percentage = priorCalls ? ' (' + (change > 0 ? '+' : '') + Math.round(change / priorCalls * 100) + '%)' : change ? ' (from 0)' : ' (0%)';
     const trend = (change > 0 ? '↑ +' : change < 0 ? '↓ ' : '→ ') + change + percentage + ' vs ' + previous;
-    return [
-      ['Husbandry calls', currentCalls, trend, change > 0 ? 'up' : change < 0 ? 'down' : 'flat'],
-      ['On-time services', completed.length ? Math.round(onTime.length / completed.length * 100) + '%' : 'No data'],
-      ['Overdue services', overdue.length]
-    ];
+    return ['Husbandry calls', currentCalls, trend, change > 0 ? 'up' : change < 0 ? 'down' : 'flat'];
+  }
+  function monthJobs(anchor=state.anchor,offset=0) {
+    const start=new Date(anchor.getFullYear(),anchor.getMonth()+offset,1);
+    const end=new Date(anchor.getFullYear(),anchor.getMonth()+offset+1,0);
+    const first=localKey(start),last=localKey(end);
+    return state.jobs.filter(j=>j.data.eta&&dateOnly(j.data.eta)>=first&&dateOnly(j.data.eta)<=last);
+  }
+  function countBy(list,key) {
+    const counts=new Map();
+    for(const item of list){const value=key(item)||'No data';counts.set(value,(counts.get(value)||0)+1);}
+    return counts;
+  }
+  function monthlyCharts() {
+    const current=monthJobs(),previous=monthJobs(state.anchor,-1);
+    const currentLabel=state.anchor.toLocaleDateString('en',{month:'long',year:'numeric'});
+    const previousDate=new Date(state.anchor.getFullYear(),state.anchor.getMonth()-1,1);
+    const previousLabel=previousDate.toLocaleDateString('en',{month:'long',year:'numeric'});
+    const currentPorts=countBy(current,j=>j.data.port||'No Port / Terminal');
+    const previousPorts=countBy(previous,j=>j.data.port||'No Port / Terminal');
+    const ports=[...new Set([...currentPorts.keys(),...previousPorts.keys()])].sort((a,b)=>(currentPorts.get(b)||0)-(currentPorts.get(a)||0)||(previousPorts.get(b)||0)-(previousPorts.get(a)||0)||a.localeCompare(b));
+    const portMax=Math.max(1,...ports.flatMap(port=>[currentPorts.get(port)||0,previousPorts.get(port)||0]));
+    const portRows=ports.length?ports.map(port=>{
+      const now=currentPorts.get(port)||0,prior=previousPorts.get(port)||0;
+      return `<div class="hfo-chart-row" data-port-chart-row data-current="${now}" data-previous="${prior}"><span class="hfo-chart-label" title="${escape(port)}">${escape(port)}</span><div class="hfo-chart-pair">
+        <div class="hfo-chart-track"><i class="hfo-bar current" style="width:${Math.round(now/portMax*100)}%"></i><b>${now}</b></div>
+        <div class="hfo-chart-track"><i class="hfo-bar previous" style="width:${Math.round(prior/portMax*100)}%"></i><b>${prior}</b></div>
+      </div></div>`;
+    }).join(''):'<div class="hfo-empty">No Port Calls in these two months.</div>';
+    const statuses=countBy(current,j=>jobStatus(j.data.status));
+    const statusRows=[...statuses.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+    const statusMax=Math.max(1,...statusRows.map(([,count])=>count));
+    return `<section class="hfo-card hfo-analysis-card" data-chart="port-terminal"><div class="hfo-chart-head"><div><span>Port / Terminal volume</span><small>${escape(currentLabel)} vs ${escape(previousLabel)}</small></div><div class="hfo-chart-legend"><span><i class="current"></i>${escape(currentLabel)}</span><span><i class="previous"></i>${escape(previousLabel)}</span></div></div><div class="hfo-chart-list">${portRows}</div></section>
+      <section class="hfo-card hfo-analysis-card" data-chart="status"><div class="hfo-chart-head"><div><span>Vessel status</span><small>${escape(currentLabel)} · ${current.length} Port Calls</small></div></div><div class="hfo-status-chart">${statusRows.length?statusRows.map(([status,count],index)=>`<div class="hfo-status-row" data-status-chart-row data-count="${count}"><span class="hfo-chart-label" title="${escape(status)}">${escape(status)}</span><div class="hfo-chart-track"><i class="hfo-bar status status-${index%6}" style="width:${Math.round(count/statusMax*100)}%"></i><b>${count}</b></div></div>`).join(''):'<div class="hfo-empty">No Port Calls in ${escape(currentLabel)}.</div>'}</div></section>`;
   }
   function startOfWeek(date) { const d = new Date(date); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; }
   function periodFor(view, anchor) {
@@ -195,7 +220,7 @@
       <div class="hfo-banner">ระบบทดลองซิงค์ข้ามเครื่อง · ใช้ข้อมูลสมมติเท่านั้น ห้ามกรอกข้อมูลลูกเรือหรือผู้เยี่ยมจริง${state.public?' · ผู้ชมทั่วไปเห็นเฉพาะข้อมูลสรุป':''}</div>
       <div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>
       ${!state.grant && !state.public ? `<div class="hfo-card"><h2>Operations unavailable</h2><p>${escape(state.error||'Unable to load Operations data right now.')}</p></div>` :
-      `<div class="hfo-stats">${metrics().map(([label,value,indicator,trend])=>`<div class="hfo-card hfo-stat"><span>${escape(label)}</span><strong>${escape(value)}</strong>${indicator?`<small class="hfo-trend ${trend}">${escape(indicator)}</small><small class="hfo-muted">By ETA · excludes Cancelled</small>`:''}</div>`).join('')}</div>
+      `${(()=>{const [label,value,indicator,trend]=metrics();return `<div class="hfo-overview-grid"><div class="hfo-card hfo-stat"><span>${escape(label)}</span><strong>${escape(value)}</strong><small class="hfo-trend ${trend}">${escape(indicator)}</small><small class="hfo-muted">By ETA · excludes Cancelled</small></div>${monthlyCharts()}</div>`;})()}
        ${state.public?'<div class="hfo-info">ดู Job และ Service แบบสรุปได้โดยไม่ต้องลงชื่อเข้าใช้ · <a href="/api/auth?mode=start">ลงชื่อเข้าใช้เพื่อดูรายละเอียดและแก้ไขตามสิทธิ์</a></div>':''}
        <div class="hfo-card hfo-calendar-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><button class="hfo-btn" data-shift="-1" aria-label="Previous period">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1" aria-label="Next period">›</button><select id="hfoView" aria-label="Calendar view">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">Jobs appear on their ETA date · port local time</p>${calendar()}</div>
        <details class="hfo-card hfo-calls" ${state.callsOpen?'open':''}><summary data-calls-toggle><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Port Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(jobStatus(j.data.status))}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>

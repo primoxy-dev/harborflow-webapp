@@ -9,7 +9,9 @@ const root=process.cwd();
 const jobs=[
  {id:'job-mtp',data:{jobNo:'DEMO-1',vessel:'MTP DEMO',imo:'',port:'Map Ta Phut / SPM',principal:'DEMO',eta:'2026-10-15T12:56',etd:'2026-10-16T01:05',status:'Completed',pic:'demo',notes:''}},
  {id:'job-lch',data:{jobNo:'DEMO-2',vessel:'LCH DEMO',imo:'',port:'Laem Chabang / A1',principal:'DEMO',eta:'2026-10-16T08:00',etd:'',status:'Open',pic:'demo',notes:''}},
- {id:'job-src',data:{jobNo:'DEMO-3',vessel:'SRC DEMO',imo:'',port:'Sriracha / Kerry',principal:'DEMO',eta:'2026-10-17T18:30',etd:'',status:'Arrived',pic:'demo',notes:''}}
+ {id:'job-src',data:{jobNo:'DEMO-3',vessel:'SRC DEMO',imo:'',port:'Sriracha / Kerry',principal:'DEMO',eta:'2026-10-17T18:30',etd:'',status:'Arrived',pic:'demo',notes:''}},
+ {id:'job-mtp-prior',data:{jobNo:'DEMO-4',vessel:'MTP PRIOR',port:'Map Ta Phut / SPM',eta:'2026-09-12T09:00',status:'Sailed'}},
+ {id:'job-lch-prior',data:{jobNo:'DEMO-5',vessel:'LCH PRIOR',port:'Laem Chabang / A1',eta:'2026-09-13T09:00',status:'Sailed'}}
 ];
 const updates=[];
 const browser=await chromium.launch({channel:'chrome',headless:true});
@@ -35,6 +37,16 @@ try{
  });
  await page.goto('https://harborflow.test/');
  await page.waitForSelector('.hfo-job-pill');
+ assert.equal(await page.locator('[data-chart="port-terminal"] [data-port-chart-row]').count(),3);
+ assert.deepEqual(await page.locator('[data-chart="port-terminal"] [data-port-chart-row]').evaluateAll(rows=>rows.map(row=>[row.querySelector('.hfo-chart-label').textContent,row.dataset.current,row.dataset.previous])),[
+  ['Laem Chabang / A1','1','1'],['Map Ta Phut / SPM','1','1'],['Sriracha / Kerry','1','0']
+ ]);
+ assert.deepEqual(await page.locator('[data-chart="status"] [data-status-chart-row]').evaluateAll(rows=>rows.map(row=>[row.querySelector('.hfo-chart-label').textContent,row.dataset.count])),[
+  ['Arrived','1'],['Open','1'],['Ops Closed/Awaiting Invoices','1']
+ ]);
+ await mkdir(path.join(root,'output/job-ui-qa'),{recursive:true});
+ for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:path.join(root,`output/job-ui-qa/dashboard-${width}.png`),fullPage:true});}
+ await page.setViewportSize({width:1440,height:1000});
  assert.equal(await page.locator('.hfo-job-pill.port-map-ta-phut').count(),1);
  assert.equal(await page.locator('.hfo-job-pill.port-laem-chabang').count(),1);
  assert.equal(await page.locator('.hfo-job-pill.port-sriracha').count(),1);
@@ -50,7 +62,6 @@ try{
  await page.locator('[data-job-time="eta"]').dispatchEvent('change');
  await page.waitForFunction(()=>document.querySelector('#hfoSync')?.textContent.startsWith('Saved'));
  assert.equal(updates.at(-1).eta,'2026-10-15T23:45');
- await mkdir(path.join(root,'output/job-ui-qa'),{recursive:true});
  for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});await page.screenshot({path:path.join(root,`output/job-ui-qa/job-${width}.png`),fullPage:true});}
  assert.deepEqual(errors,[]);
  console.log('PASS Job UI: exact statuses, 24-hour ETA/ETD, removed helper copy, port colors, autosave');
