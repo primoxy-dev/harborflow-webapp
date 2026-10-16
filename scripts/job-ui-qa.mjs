@@ -63,6 +63,9 @@ try{
  await page.waitForFunction(()=>document.querySelector('#hfoSync')?.textContent.startsWith('Saved'));
  assert.equal(updates.at(-1).eta,'2026-10-15T23:45');
  for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});await page.screenshot({path:path.join(root,`output/job-ui-qa/job-${width}.png`),fullPage:true});}
+ jobs.splice(0,3);
+ await page.goto('https://harborflow.test/');
+ assert.equal(await page.locator('[data-chart="status"] .hfo-empty').innerText(),'No Port Calls in October 2026.');
  assert.deepEqual(errors,[]);
  console.log('PASS Job UI: exact statuses, 24-hour ETA/ETD, removed helper copy, port colors, autosave');
 }finally{await browser.close();}
