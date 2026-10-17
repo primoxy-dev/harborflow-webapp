@@ -62,3 +62,13 @@ test('anonymous read model never returns free-text, person, supplier or financia
   assert.doesNotMatch(JSON.stringify({ job, service }), /private|passport|alice|Fictional|TEST-1/);
 });
 
+test('Travel UI keeps only planned times and includes route and passenger/cargo details', async () => {
+  const source = await import('node:fs/promises').then(fs => fs.readFile(new URL('../operations.js', import.meta.url), 'utf8'));
+  assert.match(source, /Planned departure/);
+  assert.match(source, /Planned arrival/);
+  assert.match(source, /Passengers \/ cargo/);
+  assert.match(source, /data-place-search/);
+  assert.match(source, /hfoTripMap/);
+  assert.doesNotMatch(source.slice(source.indexOf('function tripForm()'), source.indexOf('async function mapApi')), /Actual departure|Actual arrival/);
+});
+

@@ -107,3 +107,28 @@
 .hfo-hotel-results button{display:flex;flex-direction:column;width:100%;padding:9px 10px;border:0;border-bottom:1px solid var(--line);background:#fff;text-align:left;cursor:pointer}
 .hfo-hotel-results button:hover,.hfo-hotel-results button:focus{background:#e7f4f2}
 .hfo-hotel-results button span{font-size:11px;color:#596b80}
+
+.hfo-travel-table{min-width:1180px}
+.hfo-place-field{position:relative;min-width:0}
+.hfo-place-actions,.hfo-trip-map-tools{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:6px}
+.hfo-place-actions .hfo-btn,.hfo-trip-map-tools .hfo-btn{padding:7px 10px}
+.hfo-trip-map-tools .hfo-btn.active{background:#0f766e;color:#fff;border-color:#0f766e}
+.hfo-trip-map-tools span{color:#64748b;font-size:11px}
+.hfo-place-results{position:absolute;z-index:1000;left:0;right:0;top:100%;max-height:220px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:7px;box-shadow:0 8px 24px #10233d26}
+.hfo-place-results[hidden]{display:none}
+.hfo-place-results button{display:block;width:100%;padding:9px;border:0;border-bottom:1px solid #e5eaf1;background:#fff;text-align:left;color:#172033}
+.hfo-place-results button:hover,.hfo-place-results button:focus{background:#e7f4f2}
+.hfo-place-results button b,.hfo-place-results button span{display:block}
+.hfo-place-results button span,.hfo-place-message{font-size:10px;color:#64748b;margin-top:2px}
+.hfo-place-message{padding:10px}
+.hfo-trip-datetime>div{display:grid;grid-template-columns:minmax(130px,1fr) 78px;gap:6px}
+.hfo-trip-datetime input{min-width:0}
+.hfo-route-summary,.hfo-selected-load{display:flex;align-items:center;gap:10px;margin:12px 0;padding:10px 12px;border:1px solid #c9e8e3;border-radius:8px;background:#f1fbf8}
+.hfo-route-summary output,.hfo-selected-load output{overflow-wrap:anywhere;color:#334155}
+.hfo-trip-map{height:330px;margin-top:9px;border:1px solid #cbd5e1;border-radius:9px;overflow:hidden;background:#eef2f6}
+.hfo-map-attribution{display:block;margin:5px 0 12px;color:#64748b}
+@media(max-width:760px){
+  .hfo-trip-map{height:270px}
+  .hfo-trip-datetime>div{grid-template-columns:1fr 72px}
+  .hfo-route-summary,.hfo-selected-load{align-items:flex-start;flex-direction:column;gap:4px}
+}

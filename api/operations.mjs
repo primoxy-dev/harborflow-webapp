@@ -7,7 +7,7 @@ import { OWNER, TRIP_KINDS, canEditJob, canEditService, canPeople, db, fieldConf
 const jobFields = ['jobNo', 'vessel', 'imo', 'port', 'principal', 'eta', 'etd', 'status', 'pic', 'notes', 'terminalStays', 'completionReason'];
 const serviceFields = ['type', 'status', 'description', 'pic', 'supplier', 'plannedStart', 'plannedEnd', 'actualStart', 'actualEnd', 'planConfirmed', 'supplierConfirmed', 'terminalCondition', 'terminalConfirmation', 'restrictionReason', 'details', 'checklist', 'sopVersion', 'baselineDue', 'deadlineReason', 'notes'];
 const personFields = ['kind', 'category', 'name', 'nationality', 'rank', 'dob', 'passport', 'passportExpiry', 'seamanBook', 'immigration', 'flights', 'serviceIds', 'notes'];
-const tripFields = ['kind', 'origin', 'destination', 'plannedDeparture', 'plannedArrival', 'actualDeparture', 'actualArrival', 'provider', 'vehicle', 'purpose', 'status', 'personIds', 'cargo', 'notes'];
+const tripFields = ['kind', 'origin', 'destination', 'originLat', 'originLon', 'destinationLat', 'destinationLon', 'plannedDeparture', 'plannedArrival', 'actualDeparture', 'actualArrival', 'routeDistanceMeters', 'routeDurationSeconds', 'provider', 'vehicle', 'purpose', 'status', 'personIds', 'cargo', 'notes'];
 const parse = async request => {
   const raw = await request.text();
   if (raw.length > 24000) throw Error('Request too large');

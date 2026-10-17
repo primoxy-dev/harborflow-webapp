@@ -517,31 +517,149 @@
       <td data-label="Remove">${edit&&flights.length?`<button type="button" class="hfo-btn danger" data-remove-flight="${i}" aria-label="Remove flight ${i+1}">×</button>`:''}</td></tr>`).join('')}
     </tbody></table></div>${edit?'<small data-person-save-status role="status" class="hfo-muted">Changes save automatically</small>':''}</form>`;
 }
+  let tripMap=null,tripMarkers={},tripRouteLayer=null,tripPinTarget='origin',leafletPromise=null;
+  const validCoordinate=value=>value!==''&&value!==null&&value!==undefined&&Number.isFinite(Number(value));
+  const tripPersonName=id=>state.people.find(person=>person.id===id)?.data.name||'';
+  function tripLoadText(data) {
+    const names=(data.personIds||[]).map(tripPersonName).filter(Boolean);
+    const parts=[];
+    if(names.length)parts.push(names.join(', '));
+    if(String(data.cargo||'').trim())parts.push('Cargo: '+String(data.cargo).trim());
+    return parts.join(' · ')||'—';
+  }
+  function routeText(data) {
+    const distance=Number(data.routeDistanceMeters),duration=Number(data.routeDurationSeconds);
+    if(!distance&&!duration)return 'Pin both places to calculate driving distance and estimated time.';
+    const km=distance?`${(distance/1000).toFixed(distance>=10000?0:1)} km`:'';
+    const minutes=duration?Math.round(duration/60):0;
+    const time=minutes>=60?`${Math.floor(minutes/60)} hr ${minutes%60} min`:`${minutes} min`;
+    return [km,time].filter(Boolean).join(' · ');
+  }
+  function plannedDateTime(label,value,name,editable) {
+    const [date='',time='']=String(value||'').split('T');
+    return `<label class="hfo-field hfo-trip-datetime"><span>${escape(label)} · 24 hr</span><div><input type="date" data-trip-date="${name}" value="${escape(date)}" ${editable?'':'disabled'}><input type="text" inputmode="numeric" maxlength="5" pattern="(?:[01]\\d|2[0-3]):[0-5]\\d" placeholder="HH:MM" aria-label="${escape(label)} time in 24 hour format" data-trip-time="${name}" value="${escape(time.slice(0,5))}" ${editable?'':'disabled'}></div><input type="hidden" name="${name}" value="${escape(value||'')}"></label>`;
+  }
+  function placeField(label,target,value,editable) {
+    return `<div class="hfo-place-field"><label class="hfo-field"><span>${label}</span><input name="${target}" data-place-field="${target}" value="${escape(value||'')}" placeholder="Search a place or pin it on the map" autocomplete="off" ${editable?'':'disabled'}></label>${editable?`<div class="hfo-place-actions"><button type="button" class="hfo-btn" data-place-search="${target}">Search</button><button type="button" class="hfo-btn" data-pin-target="${target}">Pin ${label}</button></div><div class="hfo-place-results" data-place-results="${target}" hidden></div>`:''}</div>`;
+  }
   function tripsHtml(s) {
     if (!state.grant?.crewView || !state.grant?.visitorView) return '<div class="hfo-section hfo-alert">Travel with linked passengers requires both separate Crew and Visitor view grants.</div>';
     const list=state.trips.filter(t=>t.service_id===s.id), edit=mayEditService(s)&&state.grant.crewEdit&&state.grant.visitorEdit;
     return `<div class="hfo-section"><div class="hfo-toolbar"><h3>Car and Boat Travel</h3>${edit?'<button class="hfo-btn" data-add-trip>+ Add trip</button>':''}</div>
-      ${['car','boat'].map(kind=>`<h4>${kind==='car'?'Cars':'Boats'}</h4><div class="hfo-table-wrap"><table class="hfo-table"><thead><tr><th>#</th><th>Origin → destination</th><th>Planned departure</th><th>Provider</th><th>Vehicle / boat</th><th>Passengers / cargo</th><th>Status</th><th></th></tr></thead><tbody>
-       ${list.filter(t=>t.data.kind===kind).map((t,i)=>`<tr><td>${i+1}</td><td>${escape(t.data.origin)} → ${escape(t.data.destination)}</td><td>${formatDate(t.data.plannedDeparture)}</td><td>${escape(t.data.provider)}</td><td>${escape(t.data.vehicle)}</td><td>${(t.data.personIds||[]).length} people · ${escape(t.data.cargo||'')}</td><td>${escape(t.data.status||'Planned')}</td><td><button class="hfo-btn" data-edit-trip="${t.id}">Open</button> ${edit?`<button class="hfo-btn danger" data-remove-trip="${t.id}">×</button>`:''}</td></tr>`).join('')}</tbody></table></div>`).join('')}
+      ${['car','boat'].map(kind=>`<h4>${kind==='car'?'Cars':'Boats'}</h4><div class="hfo-table-wrap"><table class="hfo-table hfo-travel-table"><thead><tr><th>#</th><th>Origin → destination</th><th>Planned departure</th><th>Planned arrival</th><th>Distance / time</th><th>Provider</th><th>Vehicle / boat</th><th>Passengers / cargo</th><th>Status</th><th></th></tr></thead><tbody>
+       ${list.filter(t=>t.data.kind===kind).map((t,i)=>`<tr><td>${i+1}</td><td>${escape(t.data.origin)} → ${escape(t.data.destination)}</td><td>${formatDate(t.data.plannedDeparture)}</td><td>${formatDate(t.data.plannedArrival)}</td><td>${escape(routeText(t.data))}</td><td>${escape(t.data.provider)}</td><td>${escape(t.data.vehicle)}</td><td>${escape(tripLoadText(t.data))}</td><td>${escape(t.data.status||'Planned')}</td><td><button class="hfo-btn" data-edit-trip="${t.id}">Open</button> ${edit?`<button class="hfo-btn danger" data-remove-trip="${t.id}">×</button>`:''}</td></tr>`).join('')}</tbody></table></div>`).join('')}
       ${state.tripDraft?tripForm():''}</div>`;
   }
   function tripForm() {
     const t=state.tripDraft, d=t.data, edit=mayEditService(service())&&state.grant.crewEdit&&state.grant.visitorEdit;
     return `<form id="hfoTripForm" class="hfo-section hfo-nested"><div class="hfo-toolbar"><h3>${t.id?'Edit':'Add'} trip</h3><button type="button" class="hfo-btn" data-close-trip>Close</button></div>
       <div class="hfo-form-grid">${sel('Type',d.kind||'car','kind',['car','boat'],edit?'':'disabled')}
-      ${f('Origin',d.origin,'origin','text',edit?'':'disabled')}${f('Destination',d.destination,'destination','text',edit?'':'disabled')}
-      ${f('Planned departure',d.plannedDeparture,'plannedDeparture','datetime-local',edit?'':'disabled')}
-      ${f('Planned arrival',d.plannedArrival,'plannedArrival','datetime-local',edit?'':'disabled')}
-      ${f('Actual departure',d.actualDeparture,'actualDeparture','datetime-local',edit?'':'disabled')}
-      ${f('Actual arrival',d.actualArrival,'actualArrival','datetime-local',edit?'':'disabled')}
+      ${placeField('Origin','origin',d.origin,edit)}${placeField('Destination','destination',d.destination,edit)}
+      ${plannedDateTime('Planned departure',d.plannedDeparture,'plannedDeparture',edit)}
+      ${plannedDateTime('Planned arrival',d.plannedArrival,'plannedArrival',edit)}
       ${f('Provider',d.provider,'provider','text',edit?'':'disabled')}${f('Vehicle / boat',d.vehicle,'vehicle','text',edit?'':'disabled')}
       ${f('Purpose',d.purpose,'purpose','text',edit?'':'disabled')}${f('Status',d.status,'status','text',edit?'':'disabled')}
       ${f('Cargo',d.cargo,'cargo','text',edit?'':'disabled')}${area('Notes',d.notes,'notes',edit?'':'disabled')}</div>
-      <label class="hfo-field"><span>Passengers (linked roster)</span><select name="personIds" multiple size="5" ${edit?'':'disabled'}>${state.people.map(p=>`<option value="${p.id}" ${(d.personIds||[]).includes(p.id)?'selected':''}>${escape(p.data.name)} · ${escape(p.kind)}</option>`).join('')}</select></label>
+      ${['originLat','originLon','destinationLat','destinationLon','routeDistanceMeters','routeDurationSeconds'].map(name=>`<input type="hidden" name="${name}" value="${escape(d[name]??'')}">`).join('')}
+      <div class="hfo-route-summary"><b>Route</b><output id="hfoRouteSummary">${escape(routeText(d))}</output></div>
+      <div class="hfo-trip-map-tools"><button type="button" class="hfo-btn active" data-pin-target="origin">Pin Origin</button><button type="button" class="hfo-btn" data-pin-target="destination">Pin Destination</button><span>Choose a pin button, then tap the map.</span></div>
+      <div id="hfoTripMap" class="hfo-trip-map" aria-label="Travel route map"></div><small class="hfo-map-attribution">Map © OpenStreetMap contributors · route estimate via OSRM; verify before dispatch.</small>
+      <label class="hfo-field"><span>Passengers (linked roster)</span><select name="personIds" multiple size="5" ${edit?'':'disabled'}>${state.people.map(p=>`<option value="${p.id}" ${(d.personIds||[]).includes(p.id)?'selected':''}>${escape(p.data.name)} · ${escape(p.data.category||p.kind)}</option>`).join('')}</select></label>
+      <div class="hfo-selected-load"><b>Passengers / cargo</b><output id="hfoPassengerCargoSummary">${escape(tripLoadText(d))}</output></div>
       ${edit?'<button class="hfo-btn primary">Save trip</button>':''}</form>`;
+  }
+  async function mapApi(action,params={}) {
+    const response=await fetch('/api/maps?'+new URLSearchParams({action,...params}),{credentials:'same-origin'});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok)throw Error(body.error||'Map request failed');
+    return body;
+  }
+  function tripFormValue(name,value) {
+    const input=document.querySelector(`#hfoTripForm [name="${name}"]`);
+    if(input)input.value=value??'';
+    if(state.tripDraft)state.tripDraft.data[name]=value??'';
+  }
+  function updatePinButtons() {
+    document.querySelectorAll('[data-pin-target]').forEach(button=>button.classList.toggle('active',button.dataset.pinTarget===tripPinTarget));
+  }
+  function updateTripLoadSummary() {
+    const form=document.getElementById('hfoTripForm'),output=document.getElementById('hfoPassengerCargoSummary');
+    if(!form||!output)return;
+    output.textContent=tripLoadText({personIds:new FormData(form).getAll('personIds').map(String),cargo:form.elements.cargo?.value||''});
+  }
+  function drawTripMarkers() {
+    if(!tripMap||!state.tripDraft)return;
+    const data=state.tripDraft.data;
+    for(const target of ['origin','destination']){
+      if(!validCoordinate(data[target+'Lat'])||!validCoordinate(data[target+'Lon']))continue;
+      const lat=Number(data[target+'Lat']),lon=Number(data[target+'Lon']);
+      if(tripMarkers[target])tripMarkers[target].setLatLng([lat,lon]);
+      else tripMarkers[target]=window.L.marker([lat,lon],{draggable:true}).addTo(tripMap).bindTooltip(target==='origin'?'Origin':'Destination');
+      tripMarkers[target].off('dragend').on('dragend',event=>void setTripPlace(target,{lat:event.target.getLatLng().lat,lon:event.target.getLatLng().lng},true));
+    }
+    const pins=Object.values(tripMarkers);
+    if(pins.length===2)tripMap.fitBounds(window.L.featureGroup(pins).getBounds().pad(.25),{maxZoom:14});
+    else if(pins.length===1)tripMap.setView(pins[0].getLatLng(),14);
+  }
+  async function calculateTripRoute() {
+    const data=state.tripDraft?.data;if(!data)return;
+    const keys=['originLat','originLon','destinationLat','destinationLon'];
+    if(keys.some(key=>!validCoordinate(data[key]))){const output=document.getElementById('hfoRouteSummary');if(output)output.textContent=routeText({});return;}
+    const values=keys.map(key=>Number(data[key]));
+    const output=document.getElementById('hfoRouteSummary');if(output)output.textContent='Calculating route…';
+    try{
+      const body=await mapApi('route',Object.fromEntries(['originLat','originLon','destinationLat','destinationLon'].map((key,index)=>[key,values[index]])));
+      tripFormValue('routeDistanceMeters',body.route.distanceMeters);tripFormValue('routeDurationSeconds',body.route.durationSeconds);
+      if(output)output.textContent=routeText(state.tripDraft.data);
+      if(tripRouteLayer){tripRouteLayer.remove();tripRouteLayer=null;}
+      if(tripMap&&body.route.geometry){tripRouteLayer=window.L.geoJSON(body.route.geometry,{style:{color:'#107a72',weight:5,opacity:.8}}).addTo(tripMap);tripMap.fitBounds(tripRouteLayer.getBounds().pad(.18),{maxZoom:14});}
+    }catch(error){if(output)output.textContent=error.message;}
+  }
+  async function setTripPlace(target,place,reverse=false) {
+    if(!state.tripDraft)return;
+    tripFormValue(target+'Lat',Number(place.lat));tripFormValue(target+'Lon',Number(place.lon));
+    let label=place.label||'';
+    if(reverse){try{label=(await mapApi('reverse',{lat:place.lat,lon:place.lon})).result.label;}catch{label=`${Number(place.lat).toFixed(5)}, ${Number(place.lon).toFixed(5)}`;}}
+    state.tripDraft.data[target]=label;
+    const input=document.querySelector(`[data-place-field="${target}"]`);if(input)input.value=label;
+    drawTripMarkers();await calculateTripRoute();
+  }
+  async function searchTripPlace(target) {
+    const input=document.querySelector(`[data-place-field="${target}"]`),results=document.querySelector(`[data-place-results="${target}"]`);
+    if(!input||!results)return;
+    results.hidden=false;results.innerHTML='<div class="hfo-place-message">Searching…</div>';
+    try{
+      const body=await mapApi('search',{q:input.value});
+      results.innerHTML=body.results.length?body.results.map((place,index)=>`<button type="button" data-place-choice="${target}" data-place-index="${index}"><b>${escape(place.label.split(',')[0])}</b><span>${escape(place.label)}</span></button>`).join(''):'<div class="hfo-place-message">No places found.</div>';
+      results._places=body.results;
+    }catch(error){results.innerHTML=`<div class="hfo-place-message">${escape(error.message)}</div>`;}
+  }
+  function loadLeaflet() {
+    if(window.L)return Promise.resolve(window.L);
+    if(leafletPromise)return leafletPromise;
+    leafletPromise=new Promise((resolve,reject)=>{
+      if(!document.querySelector('link[data-hfo-leaflet]')){const link=document.createElement('link');link.rel='stylesheet';link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';link.crossOrigin='';link.dataset.hfoLeaflet='';document.head.appendChild(link);}
+      const existing=document.querySelector('script[data-hfo-leaflet]');
+      if(existing){existing.addEventListener('load',()=>resolve(window.L),{once:true});existing.addEventListener('error',()=>reject(Error('Map library unavailable')),{once:true});return;}
+      const script=document.createElement('script');script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';script.crossOrigin='';script.dataset.hfoLeaflet='';script.onload=()=>resolve(window.L);script.onerror=()=>reject(Error('Map library unavailable'));document.head.appendChild(script);
+    });
+    return leafletPromise;
+  }
+  async function mountTripMap() {
+    const container=document.getElementById('hfoTripMap');if(!container||!state.tripDraft)return;
+    try{await loadLeaflet();}catch{container.textContent='Map could not be loaded. Place search remains available.';return;}
+    if(!container.isConnected||!state.tripDraft)return;
+    if(tripMap){tripMap.remove();tripMap=null;}tripMarkers={};tripRouteLayer=null;
+    tripMap=window.L.map(container,{zoomControl:true}).setView([13.2,100.9],7);
+    window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(tripMap);
+    tripMap.on('click',event=>void setTripPlace(tripPinTarget,{lat:event.latlng.lat,lon:event.latlng.lng},true));
+    drawTripMarkers();
+    if(validCoordinate(state.tripDraft.data.originLat)&&validCoordinate(state.tripDraft.data.destinationLat))void calculateTripRoute();
+    setTimeout(()=>tripMap?.invalidateSize(),0);
   }
   function renderService() {
   const s=service(), j=job(); if (!s || !j) return;
+  if(tripMap){tripMap.remove();tripMap=null;}tripMarkers={};tripRouteLayer=null;
   const isCrew=s.data.type==='Crew Change';
   const isVisitorService=Boolean(FLAT_VISITORS[s.data.type]);
   const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
@@ -557,6 +675,7 @@
     '#'+s.seq+' · '+s.data.type,j.data.vessel||'Port Call');
   if(state.tab==='hotel')window.HarborFlowHotels?.mount(document.getElementById('hfoHotel'),{serviceId:s.id,api});
   if (documentTab) window.HarborFlowDocuments?.mount(document.getElementById('hfoDocument'),{jobId:j.id,serviceId:s.id,type:state.tab,login:state.login});
+  if(state.tab==='travel'&&state.tripDraft)setTimeout(mountTripMap,0);
 }
   async function saveServiceField(target, checked=false) {
     const s=service(); if (!s || !mayEditService(s)) return;
@@ -732,7 +851,7 @@
 }
   async function saveTrip() {
     const form=document.getElementById('hfoTripForm'), draft=state.tripDraft, d=new FormData(form), data={};
-    for (const name of ['kind','origin','destination','plannedDeparture','plannedArrival','actualDeparture','actualArrival','provider','vehicle','purpose','status','cargo','notes']) data[name]=String(d.get(name)||'');
+    for (const name of ['kind','origin','destination','originLat','originLon','destinationLat','destinationLon','plannedDeparture','plannedArrival','routeDistanceMeters','routeDurationSeconds','provider','vehicle','purpose','status','cargo','notes']) data[name]=String(d.get(name)||'');
     data.personIds=d.getAll('personIds').map(String);
     try {
       if (draft.id) {
@@ -813,9 +932,10 @@
   document.body.addEventListener('click',async event=>{
 
     const codeChoice=event.target.closest('[data-flight-code]');if(codeChoice){chooseFlightCode(codeChoice);return;}
+    const placeChoice=event.target.closest('[data-place-choice]');if(placeChoice){const results=placeChoice.closest('[data-place-results]'),place=results?._places?.[Number(placeChoice.dataset.placeIndex)];if(place){await setTripPlace(placeChoice.dataset.placeChoice,place);results.hidden=true;}return;}
     document.querySelectorAll('[data-code-kind]').forEach(input=>{if(!input.closest('.hfo-code-field').contains(event.target))closeCodeSuggestions(input);});
     if(event.target.closest('[data-calls-toggle]')){state.callsOpen=!state.callsOpen;return;}
-    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder]');
+    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target]');
     if(!b)return;
 if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
     if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
@@ -839,6 +959,8 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     if(b.hasAttribute('data-save-new-person')){await saveNewPerson();return;}
     if(b.hasAttribute('data-add-flight')){capturePersonForm();state.personDraft.data.flights.push({airline:'',number:'',date:'',from:'',to:'',departure:'',arrival:'',booking:''});render();schedulePersonSave(0);return;}
     if(b.hasAttribute('data-remove-flight')){capturePersonForm();state.personDraft.data.flights.splice(Number(b.dataset.removeFlight),1);render();schedulePersonSave(0);return;}
+    if(b.dataset.placeSearch){await searchTripPlace(b.dataset.placeSearch);return;}
+    if(b.dataset.pinTarget){tripPinTarget=b.dataset.pinTarget;updatePinButtons();return;}
     if(b.hasAttribute('data-add-trip')){state.tripDraft={data:{kind:'car',origin:'',destination:'',personIds:[]}};render();return;}
     if(b.dataset.editTrip){const t=state.trips.find(x=>x.id===b.dataset.editTrip);state.tripDraft={id:t.id,data:structuredClone(t.data)};render();return;}
     if(b.dataset.removeTrip){const reason=prompt('Reason for removing this trip:');if(reason)await perform('removeTrip',{id:b.dataset.removeTrip,reason},()=>{state.trips=state.trips.filter(x=>x.id!==b.dataset.removeTrip);render();});return;}
@@ -857,12 +979,17 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     if(t.closest('#hfoPersonForm')){schedulePersonSave(0);return;}
     if(t.hasAttribute('data-service-field')||t.hasAttribute('data-detail-field')){await saveServiceField(t);return;}
     if(t.hasAttribute('data-service-check')){await saveServiceField(t,true);return;}
+    if(t.closest('#hfoTripForm')){if(t.matches('[name="personIds"],[name="cargo"]'))updateTripLoadSummary();return;}
     if(t.hasAttribute('data-step')){const next=structuredClone(service().data.checklist||[]),i=Number(t.dataset.step);next[i]={...next[i],done:t.checked,actor:state.login,completedAt:t.checked?new Date().toISOString():null};await saveChecklist(next);}
   });
   document.body.addEventListener('input',event=>{
     const t=event.target;
     if(t.dataset.jobTime){t.value=t.value.replace(/[^0-9:]/g,'').slice(0,5);t.setCustomValidity('');return;}
     if(t.hasAttribute('data-new-person-field')){scheduleNewPersonSave();return;}
+    if(t.dataset.tripTime){t.value=t.value.replace(/[^0-9:]/g,'').slice(0,5);const form=t.closest('form'),date=form?.querySelector(`[data-trip-date="${t.dataset.tripTime}"]`)?.value||'';tripFormValue(t.dataset.tripTime,date&&t.value?date+'T'+t.value:'');return;}
+    if(t.dataset.tripDate){const form=t.closest('form'),time=form?.querySelector(`[data-trip-time="${t.dataset.tripDate}"]`)?.value||'';tripFormValue(t.dataset.tripDate,t.value&&time?t.value+'T'+time:'');return;}
+    if(t.dataset.placeField){const target=t.dataset.placeField;if(state.tripDraft){state.tripDraft.data[target]=t.value;for(const suffix of ['Lat','Lon'])tripFormValue(target+suffix,'');tripFormValue('routeDistanceMeters','');tripFormValue('routeDurationSeconds','');}const output=document.getElementById('hfoRouteSummary');if(output)output.textContent=routeText({});return;}
+    if(t.closest('#hfoTripForm')&&t.name==='cargo'){updateTripLoadSummary();return;}
     if(t.hasAttribute('data-flight-field')){
       t.setCustomValidity('');
       const pos=t.selectionStart;t.value=t.value.toUpperCase();if(pos!==null)t.setSelectionRange(pos,pos);
