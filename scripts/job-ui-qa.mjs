@@ -41,6 +41,7 @@ try{
  assert.deepEqual(await page.locator('[data-chart="port-terminal"] [data-port-chart-row]').evaluateAll(rows=>rows.map(row=>[row.querySelector('.hfo-chart-label').textContent,row.dataset.current,row.dataset.previous])),[
   ['Laem Chabang / A1','1','1'],['Map Ta Phut / SPM','1','1'],['Sriracha / Kerry','1','0']
  ]);
+ assert.equal(await page.locator('[data-chart="port-terminal"] .hfo-bar.previous').first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(245, 158, 11)');
  assert.deepEqual(await page.locator('[data-chart="status"] [data-status-chart-row]').evaluateAll(rows=>rows.map(row=>[row.querySelector('.hfo-chart-label').textContent,row.dataset.count])),[
   ['Arrived','1'],['Open','1'],['Ops Closed/Awaiting Invoices','1']
  ]);
