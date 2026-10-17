@@ -546,9 +546,17 @@
     const time=minutes>=60?`${Math.floor(minutes/60)} hr ${minutes%60} min`:`${minutes} min`;
     return [km,time].filter(Boolean).join(' · ');
   }
+  function formatTravelDateTime(value) {
+    const match=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)/);
+    if(!match)return '—';
+    const months=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    return `${match[3]}-${months[Number(match[2])-1]}-${match[1].slice(2)} ${match[4]}:${match[5]}`;
+  }
   function plannedDateTime(label,value,name,editable) {
     const [date='',time='']=String(value||'').split('T');
-    return `<label class="hfo-field hfo-trip-datetime"><span>${escape(label)} · 24 hr</span><div><input type="date" data-trip-date="${name}" value="${escape(date)}" ${editable?'':'disabled'}><span class="hfo-time-entry"><input type="text" inputmode="numeric" maxlength="5" pattern="(?:[01]\\d|2[0-3]):[0-5]\\d" placeholder="HH:MM" aria-label="${escape(label)} time in 24 hour format" data-trip-time="${name}" value="${escape(time.slice(0,5))}" ${editable?'':'disabled'}>${editable?`<button type="button" data-open-time-picker="${name}" aria-label="Choose ${escape(label)} time">◷</button><input class="hfo-native-time" type="time" data-trip-time-picker="${name}" value="${escape(time.slice(0,5))}" tabindex="-1" aria-hidden="true">`:''}</span></div><input type="hidden" name="${name}" value="${escape(value||'')}"></label>`;
+    const [hour='',minute='']=time.slice(0,5).split(':');
+    const timeOptions=(length,current)=>Array.from({length},(_,index)=>String(index).padStart(2,'0')).map(item=>`<option value="${item}" ${item===current?'selected':''}>${item}</option>`).join('');
+    return `<label class="hfo-field hfo-trip-datetime"><span>${escape(label)} · 24 hr</span><div><input type="date" data-trip-date="${name}" value="${escape(date)}" ${editable?'':'disabled'}><span class="hfo-time-entry"><input type="text" inputmode="numeric" maxlength="5" pattern="(?:[01]\\d|2[0-3]):[0-5]\\d" placeholder="HH:MM" aria-label="${escape(label)} time in 24 hour format" data-trip-time="${name}" value="${escape(time.slice(0,5))}" ${editable?'':'disabled'}>${editable?`<button type="button" data-open-time-picker="${name}" aria-label="Choose ${escape(label)} time in 24 hour format">◷</button><span class="hfo-time-picker" data-time-picker-panel="${name}" hidden><select data-time-hour="${name}" aria-label="Hour, 00 to 23">${timeOptions(24,hour||'00')}</select><b>:</b><select data-time-minute="${name}" aria-label="Minute, 00 to 59">${timeOptions(60,minute||'00')}</select></span>`:''}</span></div><input type="hidden" name="${name}" value="${escape(value||'')}"></label>`;
   }
   function placeField(label,target,value,editable) {
     return `<div class="hfo-place-field"><label class="hfo-field"><span>${label}</span><input name="${target}" data-place-field="${target}" value="${escape(value||'')}" placeholder="Search a place or pin it on the map" autocomplete="off" ${editable?'':'disabled'}></label>${editable?`<div class="hfo-place-actions"><button type="button" class="hfo-btn" data-place-search="${target}">Search</button><button type="button" class="hfo-btn" data-pin-target="${target}">Pin ${label}</button></div><div class="hfo-place-results" data-place-results="${target}" hidden></div>`:''}</div>`;
@@ -557,8 +565,8 @@
     if (!state.grant?.crewView || !state.grant?.visitorView) return '<div class="hfo-section hfo-alert">Travel with linked passengers requires both separate Crew and Visitor view grants.</div>';
     const list=state.trips.filter(t=>t.service_id===s.id), edit=mayEditService(s)&&state.grant.crewEdit&&state.grant.visitorEdit;
     return `<div class="hfo-section"><div class="hfo-toolbar"><h3>Car and Boat Travel</h3>${edit?'<button class="hfo-btn" data-add-trip>+ Add trip</button>':''}</div>
-      ${['car','boat'].map(kind=>`<h4>${kind==='car'?'Cars':'Boats'}</h4><div class="hfo-table-wrap"><table class="hfo-table hfo-travel-table"><thead><tr><th>#</th><th>Origin → destination</th><th>Planned departure</th><th>Planned arrival</th><th>Distance / time</th><th>Provider</th><th>Vehicle / boat</th><th>Passengers / cargo</th><th>Status</th><th></th></tr></thead><tbody>
-       ${list.filter(t=>t.data.kind===kind).map((t,i)=>`<tr><td>${i+1}</td><td>${routePlaces(t.data)}</td><td>${formatDate(t.data.plannedDeparture)}</td><td>${formatDate(t.data.plannedArrival)}</td><td>${escape(routeText(t.data))}</td><td>${escape(t.data.provider)}</td><td>${escape(t.data.vehicle)}</td><td>${escape(tripLoadText(t.data))}</td><td>${escape(t.data.status||'Planned')}</td><td><button class="hfo-btn" data-edit-trip="${t.id}">Open</button> ${edit?`<button class="hfo-btn danger" data-remove-trip="${t.id}">×</button>`:''}</td></tr>`).join('')}</tbody></table></div>`).join('')}
+      ${['car','boat'].map(kind=>`<h4>${kind==='car'?'Cars':'Boats'}</h4><div class="hfo-table-wrap"><table class="hfo-table hfo-travel-table"><thead><tr><th>#</th><th>Origin → destination</th><th>Planned departure<small>DD-MMM-YY · 24 hr</small></th><th>Planned arrival<small>DD-MMM-YY · 24 hr</small></th><th>Distance / time</th><th>Provider</th><th>Vehicle / boat</th><th>Passengers / cargo</th><th>Status</th><th></th></tr></thead><tbody>
+       ${list.filter(t=>t.data.kind===kind).map((t,i)=>`<tr><td>${i+1}</td><td>${routePlaces(t.data)}</td><td class="hfo-travel-datetime">${escape(formatTravelDateTime(t.data.plannedDeparture))}</td><td class="hfo-travel-datetime">${escape(formatTravelDateTime(t.data.plannedArrival))}</td><td>${escape(routeText(t.data))}</td><td>${escape(t.data.provider)}</td><td>${escape(t.data.vehicle)}</td><td>${escape(tripLoadText(t.data))}</td><td>${escape(t.data.status||'Planned')}</td><td><button class="hfo-btn" data-edit-trip="${t.id}">Open</button> ${edit?`<button class="hfo-btn danger" data-remove-trip="${t.id}">×</button>`:''}</td></tr>`).join('')}</tbody></table></div>`).join('')}
       ${state.tripDraft?tripForm():''}</div>`;
   }
   function tripForm() {
@@ -967,6 +975,7 @@
 
     const codeChoice=event.target.closest('[data-flight-code]');if(codeChoice){chooseFlightCode(codeChoice);return;}
     const placeChoice=event.target.closest('[data-place-choice]');if(placeChoice){const results=placeChoice.closest('[data-place-results]'),place=results?._places?.[Number(placeChoice.dataset.placeIndex)];if(place){await setTripPlace(placeChoice.dataset.placeChoice,place);results.hidden=true;}return;}
+    document.querySelectorAll('[data-time-picker-panel]').forEach(panel=>{if(!panel.closest('.hfo-time-entry')?.contains(event.target))panel.hidden=true;});
     document.querySelectorAll('[data-code-kind]').forEach(input=>{if(!input.closest('.hfo-code-field').contains(event.target))closeCodeSuggestions(input);});
     if(event.target.closest('[data-calls-toggle]')){state.callsOpen=!state.callsOpen;return;}
     const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item]');
@@ -995,7 +1004,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     if(b.hasAttribute('data-remove-flight')){capturePersonForm();state.personDraft.data.flights.splice(Number(b.dataset.removeFlight),1);render();schedulePersonSave(0);return;}
     if(b.dataset.placeSearch){await searchTripPlace(b.dataset.placeSearch);return;}
     if(b.dataset.pinTarget){tripPinTarget=b.dataset.pinTarget;updatePinButtons();return;}
-    if(b.dataset.openTimePicker){const picker=document.querySelector(`[data-trip-time-picker="${b.dataset.openTimePicker}"]`);if(picker){if(typeof picker.showPicker==='function')picker.showPicker();else picker.click();}return;}
+    if(b.dataset.openTimePicker){const picker=document.querySelector(`[data-time-picker-panel="${b.dataset.openTimePicker}"]`);if(picker)picker.hidden=!picker.hidden;return;}
     if(b.hasAttribute('data-add-cargo-item')){captureTripDraft();state.tripDraft.data.cargoItems.push('');render();return;}
     if(b.hasAttribute('data-remove-cargo-item')){captureTripDraft();state.tripDraft.data.cargoItems.splice(Number(b.dataset.removeCargoItem),1);render();return;}
     if(b.hasAttribute('data-add-trip')){state.tripDraft={data:{kind:'car',origin:'',destination:'',personIds:[],cargoItems:['']}};render();return;}
@@ -1016,7 +1025,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     if(t.closest('#hfoPersonForm')){schedulePersonSave(0);return;}
     if(t.hasAttribute('data-service-field')||t.hasAttribute('data-detail-field')){await saveServiceField(t);return;}
     if(t.hasAttribute('data-service-check')){await saveServiceField(t,true);return;}
-    if(t.dataset.tripTimePicker){const manual=document.querySelector(`[data-trip-time="${t.dataset.tripTimePicker}"]`);if(manual){manual.value=t.value;manual.dispatchEvent(new Event('input',{bubbles:true}));}return;}
+    if(t.dataset.timeHour||t.dataset.timeMinute){const name=t.dataset.timeHour||t.dataset.timeMinute,panel=t.closest('[data-time-picker-panel]'),hour=panel?.querySelector(`[data-time-hour="${name}"]`)?.value||'00',minute=panel?.querySelector(`[data-time-minute="${name}"]`)?.value||'00',manual=document.querySelector(`[data-trip-time="${name}"]`);if(manual){manual.value=hour+':'+minute;manual.dispatchEvent(new Event('input',{bubbles:true}));}return;}
     if(t.closest('#hfoTripForm')){if(t.matches('[name="personIds"],[name="cargoItems"]'))updateTripLoadSummary();return;}
     if(t.hasAttribute('data-step')){const next=structuredClone(service().data.checklist||[]),i=Number(t.dataset.step);next[i]={...next[i],done:t.checked,actor:state.login,completedAt:t.checked?new Date().toISOString():null};await saveChecklist(next);}
   });

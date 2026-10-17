@@ -70,6 +70,8 @@ test('Travel UI keeps only planned times and includes route and passenger/cargo 
   assert.match(source, /data-place-search/);
   assert.match(source, /scheduleTripPlaceSearch/);
   assert.match(source, /data-open-time-picker/);
+  assert.match(source, /data-time-hour/);
+  assert.match(source, /DD-MMM-YY/);
   assert.match(source, /name="cargoItems"/);
   assert.match(source, /hfo-route-places/);
   assert.match(source, /hfoTripMap/);

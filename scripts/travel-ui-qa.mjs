@@ -8,6 +8,7 @@ const {chromium}=require('playwright'),root=process.cwd();
 const job={id:'11111111-1111-4111-8111-111111111111',data:{jobNo:'DEMO-TRAVEL',vessel:'TRAVEL DEMO',port:'Laem Chabang / A1',eta:'2026-10-20T06:00',status:'Open',pic:'demo'}};
 const service={id:'22222222-2222-4222-8222-222222222222',job_id:job.id,seq:1,data:{type:'Fresh Water',status:'Not Started',pic:'demo',checklist:[]}};
 const people=[{id:'crew-1',job_id:job.id,kind:'crew',data:{name:'DEMO CREW',category:'On-signers',serviceIds:[]}},{id:'visitor-1',job_id:job.id,kind:'visitor',data:{name:'DEMO SURVEYOR',category:'Surveyors',serviceIds:[]}}];
+const trip={id:'33333333-3333-4333-8333-333333333333',job_id:job.id,service_id:service.id,data:{kind:'car',origin:'Suvarnabhumi Airport, Samut Prakan, Thailand',originName:'Suvarnabhumi Airport',originAddress:'Samut Prakan, Thailand',destination:'Holiday Inn Rayong, Rayong, Thailand',destinationName:'Holiday Inn Rayong',destinationAddress:'Rayong, Thailand',plannedDeparture:'2026-10-20T06:30',plannedArrival:'2026-10-20T08:15',personIds:['crew-1'],cargoItems:[],status:'Planned'}};
 const browser=await chromium.launch({channel:'chrome',headless:true});
 try{
  const page=await browser.newPage({viewport:{width:390,height:900}}),errors=[];
@@ -18,7 +19,7 @@ try{
    const input=request.method()==='POST'?request.postDataJSON():Object.fromEntries(url.searchParams);
    if(input.action==='state')return json({login:'demo',grant:{role:'owner',crewView:true,crewEdit:true,visitorView:true,visitorEdit:true},jobs:[job],services:[service]});
    if(input.action==='people')return json({people});
-   if(input.action==='trips')return json({trips:[]});
+   if(input.action==='trips')return json({trips:[trip]});
    return json({});
   }
   if(url.pathname==='/api/knowledge')return json({data:{terminals:[]}});
@@ -34,6 +35,8 @@ try{
  await page.locator(`[data-open-job="${job.id}"]`).first().click();
  await page.locator(`[data-open-service="${service.id}"]`).click();
  await page.locator('[data-tab="travel"]').click();
+ assert.match(await page.locator('.hfo-travel-table').first().innerText(),/20-OCT-26 06:30/);
+ assert.match(await page.locator('.hfo-travel-table').first().innerText(),/20-OCT-26 08:15/);
  await page.locator('[data-add-trip]').click();
  assert.equal(await page.getByText('Actual departure',{exact:true}).count(),0);
  assert.equal(await page.getByText('Actual arrival',{exact:true}).count(),0);
@@ -41,7 +44,9 @@ try{
  await page.locator('[data-trip-date="plannedDeparture"]').fill('2026-10-20');
  await page.locator('[data-trip-time="plannedDeparture"]').fill('06:30');
  assert.equal(await page.locator('input[name="plannedDeparture"]').inputValue(),'2026-10-20T06:30');
- await page.locator('[data-trip-time-picker="plannedArrival"]').evaluate(input=>{input.value='08:15';input.dispatchEvent(new Event('change',{bubbles:true}));});
+ await page.locator('[data-open-time-picker="plannedArrival"]').click();
+ await page.locator('[data-time-hour="plannedArrival"]').selectOption('08');
+ await page.locator('[data-time-minute="plannedArrival"]').selectOption('15');
  assert.equal(await page.locator('[data-trip-time="plannedArrival"]').inputValue(),'08:15');
  await page.locator('[data-place-field="origin"]').fill('Suvarnabhumi Airport');
  await page.locator('[data-place-choice="origin"]').waitFor();
@@ -63,5 +68,5 @@ try{
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.screenshot({path:path.join(root,'output/travel-ui-qa/tablet.png'),fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS Travel UI: autocomplete, route estimate, multi passenger/cargo, manual/picker time, mobile/tablet');
+ console.log('PASS Travel UI: DD-MMM-YY 24-hour display, 24-hour picker/manual time, autocomplete, multi passenger/cargo, mobile/tablet');
 }finally{await browser.close();}
