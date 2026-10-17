@@ -23,7 +23,7 @@ try{
   }
   if(url.pathname==='/api/knowledge')return json({data:{terminals:[]}});
   if(url.pathname==='/api/maps'){
-   if(url.searchParams.get('action')==='search')return json({results:[{label:url.searchParams.get('q')+', Thailand',lat:13.69,lon:100.75}]});
+   if(url.searchParams.get('action')==='search'){const name=url.searchParams.get('q');return json({results:[{name,address:'Demo district, Thailand',label:name+', Demo district, Thailand',lat:13.69,lon:100.75}]});}
    if(url.searchParams.get('action')==='route')return json({route:{distanceMeters:100000,durationSeconds:7200,geometry:null}});
    return json({result:{label:'Pinned place, Thailand',lat:13.69,lon:100.75}});
   }
@@ -38,15 +38,23 @@ try{
  assert.equal(await page.getByText('Actual departure',{exact:true}).count(),0);
  assert.equal(await page.getByText('Actual arrival',{exact:true}).count(),0);
  assert.equal(await page.locator('[data-trip-time="plannedDeparture"]').getAttribute('placeholder'),'HH:MM');
+ await page.locator('[data-trip-date="plannedDeparture"]').fill('2026-10-20');
+ await page.locator('[data-trip-time="plannedDeparture"]').fill('06:30');
+ assert.equal(await page.locator('input[name="plannedDeparture"]').inputValue(),'2026-10-20T06:30');
+ await page.locator('[data-trip-time-picker="plannedArrival"]').evaluate(input=>{input.value='08:15';input.dispatchEvent(new Event('change',{bubbles:true}));});
+ assert.equal(await page.locator('[data-trip-time="plannedArrival"]').inputValue(),'08:15');
  await page.locator('[data-place-field="origin"]').fill('Suvarnabhumi Airport');
- await page.locator('[data-place-search="origin"]').click();
+ await page.locator('[data-place-choice="origin"]').waitFor();
  await page.locator('[data-place-choice="origin"]').click();
  await page.locator('[data-place-field="destination"]').fill('Laem Chabang Port');
- await page.locator('[data-place-search="destination"]').click();
+ await page.locator('[data-place-choice="destination"]').waitFor();
  await page.locator('[data-place-choice="destination"]').click();
- await page.locator('select[name="personIds"]').selectOption(['crew-1','visitor-1']);
- await page.locator('input[name="cargo"]').fill('2 BOXES');
- assert.match(await page.locator('#hfoPassengerCargoSummary').innerText(),/DEMO CREW, DEMO SURVEYOR · Cargo: 2 BOXES/);
+ await page.locator('input[name="personIds"]').nth(0).check();
+ await page.locator('input[name="personIds"]').nth(1).check();
+ await page.locator('input[name="cargoItems"]').fill('2 BOXES');
+ await page.locator('[data-add-cargo-item]').click();
+ await page.locator('input[name="cargoItems"]').nth(1).fill('1 SPARE PART');
+ assert.match(await page.locator('#hfoPassengerCargoSummary').innerText(),/DEMO CREW, DEMO SURVEYOR · Cargo: 2 BOXES, 1 SPARE PART/);
  assert.equal(await page.locator('#hfoRouteSummary').innerText(),'100 km · 2 hr 0 min');
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await mkdir(path.join(root,'output/travel-ui-qa'),{recursive:true});
@@ -55,5 +63,5 @@ try{
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  await page.screenshot({path:path.join(root,'output/travel-ui-qa/tablet.png'),fullPage:true});
  assert.deepEqual(errors,[]);
- console.log('PASS Travel UI: place search, route estimate, passenger/cargo names, planned 24-hour fields, mobile/tablet');
+ console.log('PASS Travel UI: autocomplete, route estimate, multi passenger/cargo, manual/picker time, mobile/tablet');
 }finally{await browser.close();}

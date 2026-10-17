@@ -68,6 +68,10 @@ test('Travel UI keeps only planned times and includes route and passenger/cargo 
   assert.match(source, /Planned arrival/);
   assert.match(source, /Passengers \/ cargo/);
   assert.match(source, /data-place-search/);
+  assert.match(source, /scheduleTripPlaceSearch/);
+  assert.match(source, /data-open-time-picker/);
+  assert.match(source, /name="cargoItems"/);
+  assert.match(source, /hfo-route-places/);
   assert.match(source, /hfoTripMap/);
   assert.doesNotMatch(source.slice(source.indexOf('function tripForm()'), source.indexOf('async function mapApi')), /Actual departure|Actual arrival/);
 });

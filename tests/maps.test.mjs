@@ -11,12 +11,12 @@ test('map search is private, user-triggered and returns compact place results', 
   let called = '';
   const route = createMapsRoute({ loginFromRequest: () => 'owner', requestJson: async url => {
     called = url;
-    return [{ display_name: 'Suvarnabhumi Airport, Thailand', lat: '13.6900', lon: '100.7501' }];
+    return { features: [{ properties: { name: 'Suvarnabhumi Airport', city: 'Bang Phli', state: 'Samut Prakan', country: 'Thailand' }, geometry: { coordinates: [100.7501, 13.69] } }] };
   } });
   const response = await route(request('action=search&q=Suvarnabhumi%20Airport'));
   assert.equal(response.status, 200);
-  assert.match(called, /nominatim\.openstreetmap\.org\/search/);
-  assert.deepEqual((await response.json()).results, [{ label: 'Suvarnabhumi Airport, Thailand', lat: 13.69, lon: 100.7501 }]);
+  assert.match(called, /photon\.komoot\.io\/api/);
+  assert.deepEqual((await response.json()).results, [{ name: 'Suvarnabhumi Airport', address: 'Bang Phli, Samut Prakan, Thailand', label: 'Suvarnabhumi Airport, Bang Phli, Samut Prakan, Thailand', lat: 13.69, lon: 100.7501 }]);
 });
 
 test('route endpoint returns distance, duration and geometry for two map pins', async () => {

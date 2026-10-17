@@ -24,9 +24,16 @@ export function createMapsRoute({ loginFromRequest = sessionLogin, requestJson =
         const query = String(url.searchParams.get('q') || '').trim().slice(0, 160);
         if (query.length < 3) return json({ error: 'Enter at least 3 characters' }, 400);
         const key = 'search:' + query.toLowerCase();
-        const source = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&addressdetails=1&accept-language=en,th&q=${encodeURIComponent(query)}`;
-        const rows = await cached(key, 7 * 24 * 60 * 60 * 1000, () => requestJson(source));
-        return json({ results: rows.slice(0, 6).map(row => ({ label: row.display_name, lat: Number(row.lat), lon: Number(row.lon) })) });
+        const source = `https://photon.komoot.io/api/?limit=6&lang=en&q=${encodeURIComponent(query)}`;
+        const body = await cached(key, 48 * 60 * 60 * 1000, () => requestJson(source));
+        const results = (body.features || []).slice(0, 6).map(feature => {
+          const properties = feature.properties || {}, coordinates = feature.geometry?.coordinates || [];
+          const name = properties.name || properties.street || properties.city || properties.country || query;
+          const address = [properties.housenumber, properties.street, properties.district, properties.city, properties.county, properties.state, properties.postcode, properties.country]
+            .filter((value, index, list) => value && value !== name && list.indexOf(value) === index).join(', ');
+          return { name, address, label: [name, address].filter(Boolean).join(', '), lat: Number(coordinates[1]), lon: Number(coordinates[0]) };
+        }).filter(place => Number.isFinite(place.lat) && Number.isFinite(place.lon));
+        return json({ results });
       }
       if (action === 'reverse') {
         const lat = number(url.searchParams.get('lat')), lon = number(url.searchParams.get('lon'));
