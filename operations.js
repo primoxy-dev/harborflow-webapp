@@ -1,4 +1,3 @@
-Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 /* Shared Operations trial. No Job or person record is cached in browser storage. */
 (() => {
   const root = document.getElementById('operations');
@@ -1090,5 +1089,4 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
   refresh();
   setInterval(refresh,15000);
 })();
-
 
