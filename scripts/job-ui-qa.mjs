@@ -37,6 +37,15 @@ try{
  });
  await page.goto('https://harborflow.test/');
  await page.waitForSelector('.hfo-job-pill');
+ await page.locator('#createJob').click();
+ await page.locator('[data-job-date="eta"]').fill('2026-10-22');
+ await page.locator('[data-open-time-picker="eta"]').click();
+ assert.deepEqual(await page.locator('[data-time-hour="eta"] option').allTextContents(),Array.from({length:24},(_,index)=>String(index).padStart(2,'0')));
+ await page.locator('[data-time-hour="eta"]').selectOption('21');
+ await page.locator('[data-time-minute="eta"]').selectOption('05');
+ assert.equal(await page.locator('[data-job-time="eta"]').inputValue(),'21:05');
+ assert.equal(await page.locator('input[type="hidden"][name="eta"]').inputValue(),'2026-10-22T21:05');
+ await page.locator('[data-close]').click();
  assert.equal(await page.locator('[data-chart="port-terminal"] [data-port-chart-row]').count(),3);
  assert.deepEqual(await page.locator('[data-chart="port-terminal"] [data-port-chart-row]').evaluateAll(rows=>rows.map(row=>[row.querySelector('.hfo-chart-label').textContent,row.dataset.current,row.dataset.previous])),[
   ['Laem Chabang / A1','1','1'],['Map Ta Phut / SPM','1','1'],['Sriracha / Kerry','1','0']
@@ -68,5 +77,5 @@ try{
  await page.goto('https://harborflow.test/');
  assert.equal(await page.locator('[data-chart="status"] .hfo-empty').innerText(),'No Port Calls in October 2026.');
  assert.deepEqual(errors,[]);
- console.log('PASS Job UI: exact statuses, 24-hour ETA/ETD, removed helper copy, port colors, autosave');
+ console.log('PASS Job UI: New Port Call 24-hour picker/manual ETA/ETD, exact statuses, port colors, autosave');
 }finally{await browser.close();}

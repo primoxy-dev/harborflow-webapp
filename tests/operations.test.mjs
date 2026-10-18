@@ -78,3 +78,11 @@ test('Travel UI keeps only planned times and includes route and passenger/cargo 
   assert.doesNotMatch(source.slice(source.indexOf('function tripForm()'), source.indexOf('async function mapApi')), /Actual departure|Actual arrival/);
 });
 
+test('New Port Call ETA and ETD expose a manual field and a 00-23 picker', async () => {
+  const source = await import('node:fs/promises').then(fs => fs.readFile(new URL('../operations.js', import.meta.url), 'utf8'));
+  assert.match(source, /data-job-time=/);
+  assert.match(source, /clockOptions\(24/);
+  assert.match(source, /data-open-time-picker/);
+  assert.match(source, /Hour, 00 to 23/);
+});
+

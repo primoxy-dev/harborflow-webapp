@@ -277,15 +277,18 @@
       ${area('Notes',data.notes,'notes',`${disable} ${attr}`)}
     </div>`;
   }
+  const clockOptions=(length,current)=>Array.from({length},(_,index)=>String(index).padStart(2,'0')).map(item=>`<option value="${item}" ${item===current?'selected':''}>${item}</option>`).join('');
   function jobDateTimeField(label,value,name,disable,attr,required=false) {
     const raw=String(value||'');
     const [date='',timePart='']=raw.split('T');
     const time=(timePart.match(/^(\d{2}:\d{2})/)||[])[1]||'';
+    const [hour='',minute='']=time.split(':');
     return `<label class="hfo-field hfo-job-datetime"><span>${escape(label)}</span><span class="hfo-datetime-24">
       <input type="date" data-job-date="${name}" value="${escape(date)}" ${disable} ${required?'required':''} aria-label="${label} date">
-      <input type="text" data-job-time="${name}" value="${escape(time)}" placeholder="HH:mm" inputmode="numeric" maxlength="5" pattern="(?:[01]\\d|2[0-3]):[0-5]\\d" ${disable} ${required?'required':''} aria-label="${label} time (24 hours)">
+      <span class="hfo-time-entry"><input type="text" data-job-time="${name}" value="${escape(time)}" placeholder="HH:MM" inputmode="numeric" maxlength="5" pattern="(?:[01]\\d|2[0-3]):[0-5]\\d" ${disable} ${required?'required':''} aria-label="${label} time (24 hours)">${editableClock(disable)?`<button type="button" data-open-time-picker="${name}" aria-label="Choose ${label} time in 24 hour format">◷</button><span class="hfo-time-picker" data-time-picker-panel="${name}" hidden><select data-time-hour="${name}" aria-label="Hour, 00 to 23">${clockOptions(24,hour||'00')}</select><b>:</b><select data-time-minute="${name}" aria-label="Minute, 00 to 59">${clockOptions(60,minute||'00')}</select></span>`:''}</span>
       </span><input type="hidden" name="${name}" value="${escape(raw)}" ${attr}></label>`;
   }
+  function editableClock(disable) { return !String(disable||'').includes('disabled'); }
   function syncJobDateTime(target) {
     const wrap=target.closest('.hfo-job-datetime');
     const name=target.dataset.jobDate||target.dataset.jobTime;
@@ -555,8 +558,7 @@
   function plannedDateTime(label,value,name,editable) {
     const [date='',time='']=String(value||'').split('T');
     const [hour='',minute='']=time.slice(0,5).split(':');
-    const timeOptions=(length,current)=>Array.from({length},(_,index)=>String(index).padStart(2,'0')).map(item=>`<option value="${item}" ${item===current?'selected':''}>${item}</option>`).join('');
-    return `<label class="hfo-field hfo-trip-datetime"><span>${escape(label)} · 24 hr</span><div><input type="date" data-trip-date="${name}" value="${escape(date)}" ${editable?'':'disabled'}><span class="hfo-time-entry"><input type="text" inputmode="numeric" maxlength="5" pattern="(?:[01]\\d|2[0-3]):[0-5]\\d" placeholder="HH:MM" aria-label="${escape(label)} time in 24 hour format" data-trip-time="${name}" value="${escape(time.slice(0,5))}" ${editable?'':'disabled'}>${editable?`<button type="button" data-open-time-picker="${name}" aria-label="Choose ${escape(label)} time in 24 hour format">◷</button><span class="hfo-time-picker" data-time-picker-panel="${name}" hidden><select data-time-hour="${name}" aria-label="Hour, 00 to 23">${timeOptions(24,hour||'00')}</select><b>:</b><select data-time-minute="${name}" aria-label="Minute, 00 to 59">${timeOptions(60,minute||'00')}</select></span>`:''}</span></div><input type="hidden" name="${name}" value="${escape(value||'')}"></label>`;
+    return `<label class="hfo-field hfo-trip-datetime"><span>${escape(label)} · 24 hr</span><div><input type="date" data-trip-date="${name}" value="${escape(date)}" ${editable?'':'disabled'}><span class="hfo-time-entry"><input type="text" inputmode="numeric" maxlength="5" pattern="(?:[01]\\d|2[0-3]):[0-5]\\d" placeholder="HH:MM" aria-label="${escape(label)} time in 24 hour format" data-trip-time="${name}" value="${escape(time.slice(0,5))}" ${editable?'':'disabled'}>${editable?`<button type="button" data-open-time-picker="${name}" aria-label="Choose ${escape(label)} time in 24 hour format">◷</button><span class="hfo-time-picker" data-time-picker-panel="${name}" hidden><select data-time-hour="${name}" aria-label="Hour, 00 to 23">${clockOptions(24,hour||'00')}</select><b>:</b><select data-time-minute="${name}" aria-label="Minute, 00 to 59">${clockOptions(60,minute||'00')}</select></span>`:''}</span></div><input type="hidden" name="${name}" value="${escape(value||'')}"></label>`;
   }
   function placeField(label,target,value,editable) {
     return `<div class="hfo-place-field"><label class="hfo-field"><span>${label}</span><input name="${target}" data-place-field="${target}" value="${escape(value||'')}" placeholder="Search a place or pin it on the map" autocomplete="off" ${editable?'':'disabled'}></label>${editable?`<div class="hfo-place-actions"><button type="button" class="hfo-btn" data-place-search="${target}">Search</button><button type="button" class="hfo-btn" data-pin-target="${target}">Pin ${label}</button></div><div class="hfo-place-results" data-place-results="${target}" hidden></div>`:''}</div>`;
@@ -1025,7 +1027,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     if(t.closest('#hfoPersonForm')){schedulePersonSave(0);return;}
     if(t.hasAttribute('data-service-field')||t.hasAttribute('data-detail-field')){await saveServiceField(t);return;}
     if(t.hasAttribute('data-service-check')){await saveServiceField(t,true);return;}
-    if(t.dataset.timeHour||t.dataset.timeMinute){const name=t.dataset.timeHour||t.dataset.timeMinute,panel=t.closest('[data-time-picker-panel]'),hour=panel?.querySelector(`[data-time-hour="${name}"]`)?.value||'00',minute=panel?.querySelector(`[data-time-minute="${name}"]`)?.value||'00',manual=document.querySelector(`[data-trip-time="${name}"]`);if(manual){manual.value=hour+':'+minute;manual.dispatchEvent(new Event('input',{bubbles:true}));}return;}
+    if(t.dataset.timeHour||t.dataset.timeMinute){const name=t.dataset.timeHour||t.dataset.timeMinute,panel=t.closest('[data-time-picker-panel]'),hour=panel?.querySelector(`[data-time-hour="${name}"]`)?.value||'00',minute=panel?.querySelector(`[data-time-minute="${name}"]`)?.value||'00',manual=document.querySelector(`[data-trip-time="${name}"],[data-job-time="${name}"]`);if(manual){manual.value=hour+':'+minute;manual.dispatchEvent(new Event('input',{bubbles:true}));if(manual.dataset.jobTime){const hidden=syncJobDateTime(manual);if(hidden?.hasAttribute('data-job-field'))await saveJobField(hidden);}}return;}
     if(t.closest('#hfoTripForm')){if(t.matches('[name="personIds"],[name="cargoItems"]'))updateTripLoadSummary();return;}
     if(t.hasAttribute('data-step')){const next=structuredClone(service().data.checklist||[]),i=Number(t.dataset.step);next[i]={...next[i],done:t.checked,actor:state.login,completedAt:t.checked?new Date().toISOString():null};await saveChecklist(next);}
   });
