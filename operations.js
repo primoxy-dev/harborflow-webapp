@@ -1,3 +1,4 @@
+Attempting to perform the InitializeDefaultDrives operation on the 'FileSystem' provider failed.
 /* Shared Operations trial. No Job or person record is cached in browser storage. */
 (() => {
   const root = document.getElementById('operations');
@@ -61,7 +62,7 @@
     return '<option value="">Select Port / Terminal</option>' + option(choices, current);
   };
   const portSelect = (current, extra) => '<label class="hfo-field"><span>Port / Terminal</span><select name="port" ' + extra + '>' + portOptions(current) + '</select></label>';
-  let state = { login: '', grant: null, public: false, jobs: [], services: [], people: [], peopleLoadedFor: null, trips: [], view: 'month', anchor: new Date(), callsOpen: true, openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…' };
+  let state = { login: '', grant: null, public: false, jobs: [], services: [], people: [], peopleLoadedFor: null, trips: [], view: 'month', anchor: new Date(), openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…' };
   let personSaveTimer = null, personSaveQueue = Promise.resolve(), personCreateInFlight = false;
   const isOwner = () => state.grant?.role === 'owner';
   const isEditor = () => isOwner() || state.grant?.role === 'editor';
@@ -223,7 +224,7 @@
       `${(()=>{const [label,value,indicator,trend]=metrics();return `<div class="hfo-overview-grid"><div class="hfo-card hfo-stat"><span>${escape(label)}</span><strong>${escape(value)}</strong><small class="hfo-trend ${trend}">${escape(indicator)}</small><small class="hfo-muted">By ETA · excludes Cancelled</small></div>${monthlyCharts()}</div>`;})()}
        ${state.public?'<div class="hfo-info">ดู Job และ Service แบบสรุปได้โดยไม่ต้องลงชื่อเข้าใช้ · <a href="/api/auth?mode=start">ลงชื่อเข้าใช้เพื่อดูรายละเอียดและแก้ไขตามสิทธิ์</a></div>':''}
        <div class="hfo-card hfo-calendar-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><button class="hfo-btn" data-shift="-1" aria-label="Previous period">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1" aria-label="Next period">›</button><select id="hfoView" aria-label="Calendar view">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">Jobs appear on their ETA date · port local time</p>${calendar()}</div>
-       <details class="hfo-card hfo-calls" ${state.callsOpen?'open':''}><summary data-calls-toggle><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Port Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(jobStatus(j.data.status))}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>
+       <details class="hfo-card hfo-calls"><summary><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Port Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(jobStatus(j.data.status))}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>
        ${isOwner()?'<button class="hfo-btn" data-grants>Manage Operations access</button>':''}`}
     </div>`;
     document.querySelector('.top .actions select').style.display='none';
@@ -979,7 +980,6 @@
     const placeChoice=event.target.closest('[data-place-choice]');if(placeChoice){const results=placeChoice.closest('[data-place-results]'),place=results?._places?.[Number(placeChoice.dataset.placeIndex)];if(place){await setTripPlace(placeChoice.dataset.placeChoice,place);results.hidden=true;}return;}
     document.querySelectorAll('[data-time-picker-panel]').forEach(panel=>{if(!panel.closest('.hfo-time-entry')?.contains(event.target))panel.hidden=true;});
     document.querySelectorAll('[data-code-kind]').forEach(input=>{if(!input.closest('.hfo-code-field').contains(event.target))closeCodeSuggestions(input);});
-    if(event.target.closest('[data-calls-toggle]')){state.callsOpen=!state.callsOpen;return;}
     const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item]');
     if(!b)return;
 if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
@@ -1090,4 +1090,5 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
   refresh();
   setInterval(refresh,15000);
 })();
+
 
