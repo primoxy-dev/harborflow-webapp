@@ -263,7 +263,7 @@
   function jobFields(data, editable, create=false) {
     const disable=editable?'':'disabled';
     const attr=create ? '' : 'data-job-field';
-    return `<div class="hfo-form-grid">
+    return `<div class="hfo-form-grid hfo-job-form-grid">
       ${f('Job No.',data.jobNo,'jobNo','text',`${disable} ${attr} ${create?'required':''}`)}
       ${f('Vessel',data.vessel,'vessel','text',`${disable} ${attr} ${create?'required':''}`)}
       ${f('IMO',data.imo,'imo','text',`${disable} ${attr}`)}

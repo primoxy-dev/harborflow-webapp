@@ -45,6 +45,9 @@ try{
  await page.locator('[data-time-minute="eta"]').selectOption('05');
  assert.equal(await page.locator('[data-job-time="eta"]').inputValue(),'21:05');
  assert.equal(await page.locator('input[type="hidden"][name="eta"]').inputValue(),'2026-10-22T21:05');
+ await mkdir(path.join(root,'output/job-ui-qa'),{recursive:true});
+ for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:path.join(root,`output/job-ui-qa/create-${width}.png`),fullPage:true});}
+ await page.setViewportSize({width:1440,height:1000});
  await page.locator('[data-close]').click();
  assert.equal(await page.locator('[data-chart="port-terminal"] [data-port-chart-row]').count(),3);
  assert.deepEqual(await page.locator('[data-chart="port-terminal"] [data-port-chart-row]').evaluateAll(rows=>rows.map(row=>[row.querySelector('.hfo-chart-label').textContent,row.dataset.current,row.dataset.previous])),[
@@ -54,7 +57,6 @@ try{
  assert.deepEqual(await page.locator('[data-chart="status"] [data-status-chart-row]').evaluateAll(rows=>rows.map(row=>[row.querySelector('.hfo-chart-label').textContent,row.dataset.count])),[
   ['Arrived','1'],['Open','1'],['Ops Closed/Awaiting Invoices','1']
  ]);
- await mkdir(path.join(root,'output/job-ui-qa'),{recursive:true});
  for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:path.join(root,`output/job-ui-qa/dashboard-${width}.png`),fullPage:true});}
  await page.setViewportSize({width:1440,height:1000});
  assert.equal(await page.locator('.hfo-job-pill.port-map-ta-phut').count(),1);
