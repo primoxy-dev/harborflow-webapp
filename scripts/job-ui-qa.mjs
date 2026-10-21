@@ -1,5 +1,5 @@
 import {createRequire} from 'node:module';
-import {readFile,mkdir} from 'node:fs/promises';
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 
@@ -16,7 +16,7 @@ const jobs=[
 const updates=[];
 const browser=await chromium.launch({channel:'chrome',headless:true});
 try{
- const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
+ const page=await browser.newPage({viewport:{width:1440,height:1000},acceptDownloads:true}),errors=[];
  page.on('pageerror',error=>errors.push(error.message));
  await page.route('https://harborflow.test/**',async route=>{
   const request=route.request(),url=new URL(request.url());
@@ -58,6 +58,28 @@ try{
  assert.deepEqual(await page.locator('[data-chart="status"] [data-status-chart-row]').evaluateAll(rows=>rows.map(row=>[row.querySelector('.hfo-chart-label').textContent,row.dataset.count])),[
   ['Arrived','1'],['Open','1'],['Ops Closed/Awaiting Invoices','1']
  ]);
+ assert.deepEqual(await page.locator('[data-chart="vessel-type"] [data-vessel-chart-row]').evaluateAll(rows=>rows.map(row=>[row.querySelector('.hfo-chart-label').textContent,row.dataset.count])),[
+  ['Container Ship','1'],['LNG/LPG Carrier','1'],['Oil/Chemical Tanker','1']
+ ]);
+ const crowdedJobs=Array.from({length:5},(_,index)=>({id:`job-crowded-${index}`,data:{jobNo:`DEMO-X${index}`,vessel:`CROWDED ${index+1}`,vesselType:['Bulk Carrier','General Cargo','Ro-Ro','Passenger/Cruise','Tug/Offshore'][index],port:index%2?'Laem Chabang / A1':'Map Ta Phut / SPM',principal:'DEMO',eta:'2026-10-15T14:00',etd:'',status:index%2?'Arrived':'Open',pic:'demo',notes:''}}));
+ jobs.push(...crowdedJobs);await page.reload();await page.waitForSelector('[data-download-toggle]');
+ await page.evaluate(()=>{window.__downloadBlobs=[];window.__canvasText=[];const create=URL.createObjectURL.bind(URL),fill=CanvasRenderingContext2D.prototype.fillText;URL.createObjectURL=blob=>{window.__downloadBlobs.push(blob);return create(blob);};CanvasRenderingContext2D.prototype.fillText=function(text,...args){window.__canvasText.push(String(text));return fill.call(this,text,...args);};});
+ await page.locator('[data-download-toggle]').click();
+ const pngDownload=await Promise.all([page.waitForEvent('download'),page.locator('[data-download="png"]').click()]).then(([download])=>download);
+ assert.match(pngDownload.suggestedFilename(),/^harborflow-calendar-october-2026\.png$/);
+ assert.deepEqual(await page.evaluate(async()=>[...new Uint8Array(await window.__downloadBlobs[0].arrayBuffer()).slice(0,8)]),[137,80,78,71,13,10,26,10]);
+ const pngUrl=await page.evaluate(()=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(window.__downloadBlobs[0]);}));
+ await writeFile(path.join(root,'output/job-ui-qa/calendar-export.png'),Buffer.from(pngUrl.split(',')[1],'base64'));
+ await page.locator('[data-download-toggle]').click();
+ const pdfDownload=await Promise.all([page.waitForEvent('download'),page.locator('[data-download="pdf"]').click()]).then(([download])=>download);
+ assert.match(pdfDownload.suggestedFilename(),/^harborflow-calendar-october-2026\.pdf$/);
+ assert.equal(await page.evaluate(async()=>new TextDecoder().decode((await window.__downloadBlobs[1].arrayBuffer()).slice(0,8))),'%PDF-1.4');
+ const pdfUrl=await page.evaluate(()=>new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(window.__downloadBlobs[1]);}));
+ await writeFile(path.join(root,'output/job-ui-qa/calendar-export.pdf'),Buffer.from(pdfUrl.split(',')[1],'base64'));
+ const exportText=await page.evaluate(()=>window.__canvasText);
+ for(const job of crowdedJobs){assert.equal(exportText.includes(job.data.vessel),true,`export omits ${job.data.vessel}`);assert.equal(exportText.some(text=>text.includes(job.data.port)&&text.includes(job.data.status)),true,`export omits details for ${job.data.vessel}`);}
+ assert.equal(exportText.some(text=>text.includes('⚓')),false,'export uses one generic icon instead of the vessel type');
+ jobs.splice(jobs.length-crowdedJobs.length,crowdedJobs.length);await page.reload();await page.waitForSelector('.hfo-job-pill');
  for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:path.join(root,`output/job-ui-qa/dashboard-${width}.png`),fullPage:true});}
  await page.setViewportSize({width:1440,height:1000});
  assert.equal(await page.locator('.hfo-job-pill.port-map-ta-phut').count(),1);
@@ -83,5 +105,5 @@ try{
  await page.goto('https://harborflow.test/');
  assert.equal(await page.locator('[data-chart="status"] .hfo-empty').innerText(),'No Port Calls in October 2026.');
  assert.deepEqual(errors,[]);
- console.log('PASS Job UI: vessel type icons, calm port colors, 24-hour ETA/ETD, exact statuses, autosave');
+ console.log('PASS Job UI: vessel type chart, PNG/PDF calendar downloads, icons, port colors, 24-hour ETA/ETD, exact statuses, autosave');
 }finally{await browser.close();}
