@@ -20,7 +20,13 @@ body.nav-collapsed .brand{flex-wrap:wrap}
 .hfs-eyebrow{font-size:10px;font-weight:800;letter-spacing:.14em;color:#0c8077}
 .hfs-report-actions{display:flex;gap:9px;flex-wrap:wrap}
 .hfs-report-actions button{white-space:nowrap}
+.hfs-export-format{display:flex;align-items:center;gap:7px;padding:0 10px;border:1px solid #cbd7e3;border-radius:8px;background:#fff;color:#52677b;font-size:11px;font-weight:700}
+.hfs-export-format select{border:0;background:transparent;color:#17314b;font:inherit;min-height:36px;outline:0}
+.hfs-report-filters{display:grid;grid-template-columns:150px 190px minmax(280px,1fr);gap:12px;margin-bottom:17px}
+.hfs-report-filters>label{display:grid;gap:7px;font-weight:650;color:#334155;min-width:0}
+.hfs-report-filters select{width:100%;padding:11px 13px;border:1px solid #cbd7e3;border-radius:10px;background:#fff;color:#14263f;min-height:46px}
 .hfs-job-selector{display:grid;gap:7px;margin-bottom:17px;font-weight:650;color:#334155}
+.hfs-report-filters .hfs-job-selector{margin-bottom:0}
 .hfs-job-selector select{width:100%;padding:12px 14px;border:1px solid #cbd7e3;border-radius:10px;background:#fff;color:#14263f;min-height:46px}
 .hfs-report-paper{background:#fff;border:1px solid #dce5ed;border-radius:16px;padding:27px;box-shadow:0 8px 28px #17314b0a}
 .hfs-report-title{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;border-bottom:1px solid #e3eaf0;padding-bottom:20px}
@@ -38,6 +44,7 @@ body.nav-collapsed .brand{flex-wrap:wrap}
 .hfs-report-note{font-size:11px;color:#697b90;margin:15px 0 22px}
 .hfs-service-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;align-items:start}
 .hfs-service-card{border:1px solid #dce5ed;border-radius:12px;padding:18px;background:#fff;min-width:0;break-inside:avoid}
+.hfs-service-card.hfs-service-crew{grid-column:1/-1}
 .hfs-service-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-bottom:13px;border-bottom:1px solid #e9eef2}
 .hfs-service-head>div>span{display:block;color:#0c8077;font-size:11px;font-weight:750;margin-bottom:3px}
 .hfs-service-head h3{font-size:17px;margin:0;color:#11263e}
@@ -50,6 +57,20 @@ body.nav-collapsed .brand{flex-wrap:wrap}
 .hfs-report-sub{border-top:1px solid #e9eef2;padding-top:13px;margin-top:12px}
 .hfs-report-sub h4{display:flex;justify-content:space-between;font-size:12px;color:#244658;margin:0 0 10px}
 .hfs-report-sub h4 span{color:#788da0;font-weight:600}
+.hfs-crew-change{display:grid;gap:12px}
+.hfs-crew-change>h4{margin-bottom:0}
+.hfs-crew-group{border:1px solid #dce8eb;border-radius:10px;background:#f8fbfc;padding:13px;min-width:0}
+.hfs-crew-group h5{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px;color:#0d706a;font-size:12px;letter-spacing:.035em;text-transform:uppercase}
+.hfs-crew-group h5 span{display:inline-grid;place-items:center;min-width:23px;height:23px;border-radius:999px;background:#dff2ef;color:#096d66;font-size:11px}
+.hfs-crew-person{border-top:1px solid #dfe8eb;padding:12px 0 3px;min-width:0}
+.hfs-crew-person:first-of-type{border-top:0;padding-top:0}
+.hfs-crew-person-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;margin-bottom:8px;color:#21384d}
+.hfs-crew-person-head b{font-size:13px}.hfs-crew-person-head span{font-size:11px;color:#6d8092;text-align:right}
+.hfs-crew-person-meta{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:10px}
+.hfs-flight-scroll{overflow-x:auto;border:1px solid #dfe7ed;border-radius:8px;background:#fff}
+.hfs-flight-table{width:100%;min-width:750px;border-collapse:collapse;font-size:10px;color:#2e455c}
+.hfs-flight-table th{padding:8px;background:#edf4f6;color:#3d5a6d;text-align:left;white-space:nowrap}
+.hfs-flight-table td{padding:8px;border-top:1px solid #e3eaef;white-space:nowrap}
 .hfs-report-checks{display:grid;gap:8px}
 .hfs-check-row{display:flex;gap:8px;align-items:flex-start;color:#344a60;font-size:12px;line-height:1.4}
 .hfs-check-row small{display:block;color:#8494a5;margin-top:2px}
@@ -64,6 +85,6 @@ body.nav-collapsed .brand{flex-wrap:wrap}
 .hfs-empty-report{padding:26px;text-align:center;border:1px dashed #cbd7e3;border-radius:10px;grid-column:1/-1}
 .hfs-report-loading{padding:70px 20px;text-align:center;color:#687c8f}
 .hfs-report-error{padding:15px;background:#fff1f1;color:#912b40;border:1px solid #f0c9d0;border-radius:8px;margin-bottom:14px}
-@media(max-width:900px){.hfs-report-meta{grid-template-columns:repeat(3,minmax(0,1fr))}.hfs-service-grid{grid-template-columns:1fr}}
-@media(max-width:600px){.hfs-report-toolbar{align-items:stretch;flex-direction:column}.hfs-report-actions button{flex:1}.hfs-report-paper{padding:17px}.hfs-report-title{flex-direction:column}.hfs-report-title h2{font-size:24px}.hfs-report-meta,.hfs-report-metrics,.hfs-report-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.hfs-service-card{padding:14px}}
+@media(max-width:900px){.hfs-report-filters{grid-template-columns:1fr 1fr}.hfs-report-filters .hfs-job-selector{grid-column:1/-1}.hfs-report-meta{grid-template-columns:repeat(3,minmax(0,1fr))}.hfs-service-grid{grid-template-columns:1fr}}
+@media(max-width:600px){.hfs-report-toolbar{align-items:stretch;flex-direction:column}.hfs-report-actions{display:grid;grid-template-columns:1fr auto}.hfs-report-actions>[data-report-refresh]{grid-column:1/-1}.hfs-report-actions button{min-height:42px}.hfs-export-format{justify-content:space-between}.hfs-report-filters{grid-template-columns:1fr 1fr}.hfs-report-paper{padding:17px}.hfs-report-title{flex-direction:column}.hfs-report-title h2{font-size:24px}.hfs-report-meta,.hfs-report-metrics,.hfs-report-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.hfs-service-card{padding:14px}.hfs-crew-person-head{align-items:flex-start;flex-direction:column;gap:3px}.hfs-crew-person-head span{text-align:left}.hfs-crew-person-meta{grid-template-columns:1fr 1fr}.hfs-flight-scroll{overflow:visible;border:0;background:transparent}.hfs-flight-table{min-width:0}.hfs-flight-table thead{display:none}.hfs-flight-table,.hfs-flight-table tbody,.hfs-flight-table tr{display:block}.hfs-flight-table tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;border:1px solid #dfe7ed;border-radius:8px;overflow:hidden;background:#dfe7ed}.hfs-flight-table td{display:grid;gap:3px;padding:8px;background:#fff;border:0;white-space:normal}.hfs-flight-table td::before{content:attr(data-label);color:#6d8192;font-size:9px;font-weight:700}}
 
