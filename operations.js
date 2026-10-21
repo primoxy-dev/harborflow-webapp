@@ -171,7 +171,7 @@
     for(const item of list){const value=key(item)||'No data';counts.set(value,(counts.get(value)||0)+1);}
     return counts;
   }
-  function monthlyCharts() {
+  function monthlyChartData() {
     const current=monthJobs(),previous=monthJobs(state.anchor,-1);
     const currentLabel=state.anchor.toLocaleDateString('en',{month:'long',year:'numeric'});
     const previousDate=new Date(state.anchor.getFullYear(),state.anchor.getMonth()-1,1);
@@ -179,6 +179,12 @@
     const currentPorts=countBy(current,j=>j.data.port||'No Port / Terminal');
     const previousPorts=countBy(previous,j=>j.data.port||'No Port / Terminal');
     const ports=[...new Set([...currentPorts.keys(),...previousPorts.keys()])].sort((a,b)=>(currentPorts.get(b)||0)-(currentPorts.get(a)||0)||(previousPorts.get(b)||0)-(previousPorts.get(a)||0)||a.localeCompare(b));
+    const types=[...countBy(current,j=>j.data.vesselType||'Other').entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+    const statuses=[...countBy(current,j=>jobStatus(j.data.status)).entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+    return {current,previous,currentLabel,previousLabel,currentPorts,previousPorts,ports,types,statuses};
+  }
+  function monthlyCharts() {
+    const {current,currentLabel,previousLabel,currentPorts,previousPorts,ports,types,statuses}=monthlyChartData();
     const portMax=Math.max(1,...ports.flatMap(port=>[currentPorts.get(port)||0,previousPorts.get(port)||0]));
     const portRows=ports.length?ports.map(port=>{
       const now=currentPorts.get(port)||0,prior=previousPorts.get(port)||0;
@@ -187,11 +193,12 @@
         <div class="hfo-chart-track"><i class="hfo-bar previous" style="width:${Math.round(prior/portMax*100)}%"></i><b>${prior}</b></div>
       </div></div>`;
     }).join(''):'<div class="hfo-empty">No Port Calls in these two months.</div>';
-    const statuses=countBy(current,j=>jobStatus(j.data.status));
-    const statusRows=[...statuses.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
-    const statusMax=Math.max(1,...statusRows.map(([,count])=>count));
+    const typeMax=Math.max(1,...types.map(([,count])=>count));
+    const typeRows=types.length?types.map(([type,count],index)=>`<div class="hfo-status-row" data-vessel-chart-row data-count="${count}"><span class="hfo-chart-label" title="${escape(type)}">${escape(type)}</span><div class="hfo-chart-track"><i class="hfo-bar vessel-type type-${index%6}" style="width:${Math.round(count/typeMax*100)}%"></i><b>${count}</b></div></div>`).join(''):`<div class="hfo-empty">No Port Calls in ${escape(currentLabel)}.</div>`;
+    const statusMax=Math.max(1,...statuses.map(([,count])=>count));
     return `<section class="hfo-card hfo-analysis-card" data-chart="port-terminal"><div class="hfo-chart-head"><div><span>Port / Terminal volume</span><small>${escape(currentLabel)} vs ${escape(previousLabel)}</small></div><div class="hfo-chart-legend"><span><i class="current"></i>${escape(currentLabel)}</span><span><i class="previous"></i>${escape(previousLabel)}</span></div></div><div class="hfo-chart-list">${portRows}</div></section>
-      <section class="hfo-card hfo-analysis-card" data-chart="status"><div class="hfo-chart-head"><div><span>Vessel status</span><small>${escape(currentLabel)} · ${current.length} Port Calls</small></div></div><div class="hfo-status-chart">${statusRows.length?statusRows.map(([status,count],index)=>`<div class="hfo-status-row" data-status-chart-row data-count="${count}"><span class="hfo-chart-label" title="${escape(status)}">${escape(status)}</span><div class="hfo-chart-track"><i class="hfo-bar status status-${index%6}" style="width:${Math.round(count/statusMax*100)}%"></i><b>${count}</b></div></div>`).join(''):`<div class="hfo-empty">No Port Calls in ${escape(currentLabel)}.</div>`}</div></section>`;
+      <section class="hfo-card hfo-analysis-card" data-chart="vessel-type"><div class="hfo-chart-head"><div><span>Vessel type</span><small>${escape(currentLabel)} · ${current.length} Port Calls</small></div></div><div class="hfo-vessel-chart">${typeRows}</div></section>
+      <section class="hfo-card hfo-analysis-card" data-chart="status"><div class="hfo-chart-head"><div><span>Vessel status</span><small>${escape(currentLabel)} · ${current.length} Port Calls</small></div></div><div class="hfo-status-chart">${statuses.length?statuses.map(([status,count],index)=>`<div class="hfo-status-row" data-status-chart-row data-count="${count}"><span class="hfo-chart-label" title="${escape(status)}">${escape(status)}</span><div class="hfo-chart-track"><i class="hfo-bar status status-${index%6}" style="width:${Math.round(count/statusMax*100)}%"></i><b>${count}</b></div></div>`).join(''):`<div class="hfo-empty">No Port Calls in ${escape(currentLabel)}.</div>`}</div></section>`;
   }
   function startOfWeek(date) { const d = new Date(date); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; }
   function periodFor(view, anchor) {
@@ -230,6 +237,61 @@
     const first=state.view==='month' ? startOfWeek(start) : start, days=state.view==='month' ? 42 : 7;
     return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-weekday">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); const outside=state.view==='month' && d.getMonth()!==start.getMonth(); return `<div class="hfo-cell${outside?' hfo-outside':''}"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill ${portClass(j.data.port)}" data-open-job="${j.id}"><b>${vesselName(j)}</b><span class="hfo-job-meta">${escape(j.data.port||'No port')} · ${escape(jobStatus(j.data.status))}</span></button>`).join('')}</div>`;}).join('')}</div>`;
   }
+  function reportCanvas() {
+    const width=1800,pad=54,gap=22,cardWidth=(width-pad*2-gap*3)/4;
+    const chart=monthlyChartData(),maxRows=Math.max(5,chart.ports.length,chart.types.length,chart.statuses.length);
+    const chartHeight=112+Math.min(maxRows,16)*34+(maxRows>16?26:0);
+    const [start,end,label]=period();
+    const calendarHeight=state.view==='month'?840:state.view==='week'?270:state.view==='quarter'?470:670;
+    const height=150+chartHeight+90+calendarHeight+70;
+    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+    const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);ctx.textBaseline='top';
+    const font=(size,weight=400)=>{ctx.font=`${weight} ${size}px Arial, sans-serif`;};
+    const roundRect=(x,y,w,h,r=14,fill='#fff',stroke='#dbe3ed')=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();};
+    const fitText=(text,maxWidth)=>{let value=String(text||'');if(ctx.measureText(value).width<=maxWidth)return value;while(value.length&&ctx.measureText(value+'…').width>maxWidth)value=value.slice(0,-1);return value+'…';};
+    const barList=(rows,x,y,w,color,compare=false)=>{const shown=rows.slice(0,16),max=Math.max(1,...rows.flatMap(row=>compare?[row[1],row[2]]:[row[1]]));shown.forEach((row,index)=>{const yy=y+index*34,labelWidth=Math.min(170,w*.42);font(15,400);ctx.fillStyle='#334155';ctx.fillText(fitText(row[0],labelWidth-8),x,yy+2);const bx=x+labelWidth,bw=w-labelWidth-30;ctx.fillStyle='#eef2f6';ctx.fillRect(bx,yy+3,bw,compare?10:18);ctx.fillStyle=color;ctx.fillRect(bx,yy+3,bw*row[1]/max,compare?10:18);font(13,700);ctx.fillStyle='#475569';ctx.fillText(String(row[1]),bx+bw+7,yy+3);if(compare){ctx.fillStyle='#eef2f6';ctx.fillRect(bx,yy+18,bw,10);ctx.fillStyle='#f59e0b';ctx.fillRect(bx,yy+18,bw*row[2]/max,10);ctx.fillStyle='#475569';ctx.fillText(String(row[2]),bx+bw+7,yy+16);}});if(rows.length>16){font(13,400);ctx.fillStyle='#64748b';ctx.fillText(`+ ${rows.length-16} more`,x,y+16*34);}};
+    font(32,700);ctx.fillStyle='#10233d';ctx.fillText('HarborFlow · Port Call Calendar',pad,40);
+    font(18,400);ctx.fillStyle='#64748b';ctx.fillText(`${label} · Jobs by ETA · port local time`,pad,86);
+    const generated=new Date().toLocaleString('en-GB',{hour12:false});font(14,400);ctx.textAlign='right';ctx.fillText(`Downloaded ${generated}`,width-pad,48);ctx.textAlign='left';
+    const [metricLabel,metricValue,metricTrend]=metrics();
+    const cards=[
+      {title:metricLabel,subtitle:metricTrend,kind:'metric'},
+      {title:'Port / Terminal volume',subtitle:`${chart.currentLabel} vs ${chart.previousLabel}`,kind:'ports'},
+      {title:'Vessel type',subtitle:`${chart.currentLabel} · ${chart.current.length} Port Calls`,kind:'types'},
+      {title:'Vessel status',subtitle:`${chart.currentLabel} · ${chart.current.length} Port Calls`,kind:'statuses'}
+    ];
+    cards.forEach((card,index)=>{const x=pad+index*(cardWidth+gap),y=130;roundRect(x,y,cardWidth,chartHeight);font(20,700);ctx.fillStyle='#172033';ctx.fillText(card.title,x+20,y+20);font(14,400);ctx.fillStyle='#64748b';ctx.fillText(fitText(card.subtitle,cardWidth-40),x+20,y+50);if(card.kind==='metric'){font(50,700);ctx.fillStyle='#10233d';ctx.fillText(String(metricValue),x+20,y+94);font(14,400);ctx.fillStyle='#64748b';ctx.fillText('Excludes Cancelled',x+20,y+158);}else if(card.kind==='ports'){barList(chart.ports.map(port=>[port,chart.currentPorts.get(port)||0,chart.previousPorts.get(port)||0]),x+20,y+86,cardWidth-40,'#0f8a78',true);}else if(card.kind==='types'){barList(chart.types,x+20,y+86,cardWidth-40,'#4978c8');}else{barList(chart.statuses,x+20,y+86,cardWidth-40,'#7857d8');}});
+    let cy=150+chartHeight;font(26,700);ctx.fillStyle='#10233d';ctx.fillText('Calendar',pad,cy);font(16,400);ctx.fillStyle='#64748b';ctx.fillText(label,pad+125,cy+5);cy+=48;
+    const portColors={'port-map-ta-phut':['#d8f3e6','#15583e'],'port-laem-chabang':['#dcecff','#214f82'],'port-sriracha':['#eee4ff','#654194'],'port-other':['#e8f0f5','#3e5361']};
+    const drawJob=(j,x,y,w)=>{const colors=portColors[portClass(j.data.port)]||portColors['port-other'];ctx.fillStyle=colors[0];ctx.fillRect(x,y,w,27);font(14,700);ctx.fillStyle=colors[1];ctx.fillText(fitText(`⚓ ${j.data.vessel||'Port Call'}`,w-10),x+6,y+6);};
+    if(state.view==='month'||state.view==='week'){
+      const first=state.view==='month'?startOfWeek(start):start,days=state.view==='month'?42:7,cols=7,cellW=(width-pad*2)/cols,rows=Math.ceil(days/cols),cellH=(calendarHeight-38)/rows;
+      ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((day,index)=>{font(15,700);ctx.textAlign='center';ctx.fillStyle='#64748b';ctx.fillText(day,pad+index*cellW+cellW/2,cy);});ctx.textAlign='left';cy+=30;
+      Array.from({length:days},(_,index)=>{const d=new Date(first);d.setDate(first.getDate()+index);const x=pad+(index%cols)*cellW,y=cy+Math.floor(index/cols)*cellH,outside=state.view==='month'&&d.getMonth()!==start.getMonth();ctx.fillStyle=outside?'#f1f4f8':'#ffffff';ctx.strokeStyle='#dbe3ed';ctx.lineWidth=1;ctx.fillRect(x,y,cellW-4,cellH-4);ctx.strokeRect(x,y,cellW-4,cellH-4);font(13,400);ctx.fillStyle=outside?'#94a3b8':'#475569';ctx.fillText(`${d.getDate()}${state.view==='week'?' '+d.toLocaleDateString('en',{month:'short'}):''}`,x+9,y+8);const calls=state.jobs.filter(j=>j.data.status!=='Cancelled'&&matchesDate(j,d)),limit=Math.max(1,Math.floor((cellH-42)/31));calls.slice(0,limit).forEach((j,i)=>drawJob(j,x+7,y+31+i*31,cellW-18));if(calls.length>limit){font(12,700);ctx.fillStyle='#64748b';ctx.fillText(`+${calls.length-limit} more`,x+9,y+31+limit*31);}});
+    }else{
+      const columns=state.view==='quarter'?3:4,months=[];let d=new Date(start);while(d<=end){months.push(new Date(d));d.setMonth(d.getMonth()+1);}const rows=Math.ceil(months.length/columns),cellW=(width-pad*2-gap*(columns-1))/columns,cellH=(calendarHeight-gap*(rows-1))/rows;
+      months.forEach((month,index)=>{const x=pad+(index%columns)*(cellW+gap),y=cy+Math.floor(index/columns)*(cellH+gap);roundRect(x,y,cellW,cellH,12);font(18,700);ctx.fillStyle='#172033';ctx.fillText(month.toLocaleDateString('en',{month:'long',year:'numeric'}),x+16,y+15);const jobs=monthJobs(month);font(14,400);ctx.fillStyle='#64748b';ctx.fillText(`${jobs.length} Port Calls`,x+16,y+44);jobs.slice(0,5).forEach((j,i)=>drawJob(j,x+14,y+72+i*32,cellW-28));if(jobs.length>5){font(13,700);ctx.fillStyle='#64748b';ctx.fillText(`+${jobs.length-5} more`,x+16,y+72+5*32);}});
+    }
+    font(13,400);ctx.fillStyle='#64748b';ctx.fillText('Generated from the HarborFlow calendar view. Verify operational details before use.',pad,height-34);
+    return canvas;
+  }
+  const canvasBlob=(canvas,type,quality)=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('Unable to create download file')),type,quality));
+  function saveBlob(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+  async function canvasPdfBlob(canvas){
+    const jpeg=new Uint8Array(await (await canvasBlob(canvas,'image/jpeg',.93)).arrayBuffer()),encoder=new TextEncoder(),pageW=Math.round(canvas.width/2),pageH=Math.round(canvas.height/2);
+    const ascii=value=>encoder.encode(value),content=ascii(`q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q`);
+    const objects=[null,ascii('<< /Type /Catalog /Pages 2 0 R >>'),ascii('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),ascii(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`),[ascii(`<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`),jpeg,ascii('\nendstream')],[ascii(`<< /Length ${content.length} >>\nstream\n`),content,ascii('\nendstream')]];
+    const chunks=[ascii('%PDF-1.4\n%HFLOW\n')],offsets=[0];let length=chunks[0].length;
+    for(let i=1;i<objects.length;i++){offsets[i]=length;const parts=Array.isArray(objects[i])?objects[i]:[objects[i]],head=ascii(`${i} 0 obj\n`),tail=ascii('\nendobj\n');chunks.push(head,...parts,tail);length+=head.length+parts.reduce((sum,part)=>sum+part.length,0)+tail.length;}
+    const xref=length,xrefText=`xref\n0 ${objects.length}\n0000000000 65535 f \n${offsets.slice(1).map(offset=>String(offset).padStart(10,'0')+' 00000 n ').join('\n')}\ntrailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    return new Blob([...chunks,ascii(xrefText)],{type:'application/pdf'});
+  }
+  async function downloadCalendarReport(format){
+    const button=document.querySelector(`[data-download="${format}"]`);if(button)button.disabled=true;
+    try{const canvas=reportCanvas(),slug=period()[2].replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase(),name=`harborflow-calendar-${slug}`;if(format==='png')saveBlob(await canvasBlob(canvas,'image/png'),name+'.png');else saveBlob(await canvasPdfBlob(canvas),name+'.pdf');}
+    catch(error){announce(error.message||'Unable to download Calendar report.');}
+    finally{if(button)button.disabled=false;}
+  }
   function renderHome() {
     if (root.classList.contains('active')) document.getElementById('title').textContent='Operations · Trial';
     createButton.textContent='+ Create Port Call'; createButton.hidden=!isOwner() || !root.classList.contains('active');
@@ -239,7 +301,7 @@
       ${!state.grant && !state.public ? `<div class="hfo-card"><h2>Operations unavailable</h2><p>${escape(state.error||'Unable to load Operations data right now.')}</p></div>` :
       `${(()=>{const [label,value,indicator,trend]=metrics();return `<div class="hfo-overview-grid"><div class="hfo-card hfo-stat"><span>${escape(label)}</span><strong>${escape(value)}</strong><small class="hfo-trend ${trend}">${escape(indicator)}</small><small class="hfo-muted">By ETA · excludes Cancelled</small></div>${monthlyCharts()}</div>`;})()}
        ${state.public?'<div class="hfo-info">ดู Job และ Service แบบสรุปได้โดยไม่ต้องลงชื่อเข้าใช้ · <a href="/api/auth?mode=start">ลงชื่อเข้าใช้เพื่อดูรายละเอียดและแก้ไขตามสิทธิ์</a></div>':''}
-       <div class="hfo-card hfo-calendar-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><button class="hfo-btn" data-shift="-1" aria-label="Previous period">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1" aria-label="Next period">›</button><select id="hfoView" aria-label="Calendar view">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">Jobs appear on their ETA date · port local time</p>${calendar()}</div>
+       <div class="hfo-card hfo-calendar-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><div class="hfo-download"><button class="hfo-btn" data-download-toggle aria-haspopup="true" aria-expanded="false">Download ▾</button><div class="hfo-download-menu" data-download-menu hidden><button type="button" data-download="png">Image (PNG)</button><button type="button" data-download="pdf">PDF</button></div></div><button class="hfo-btn" data-shift="-1" aria-label="Previous period">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1" aria-label="Next period">›</button><select id="hfoView" aria-label="Calendar view">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">Jobs appear on their ETA date · port local time</p>${calendar()}</div>
        <details class="hfo-card hfo-calls"><summary><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Port Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(jobStatus(j.data.status))}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>
        ${isOwner()?'<button class="hfo-btn" data-grants>Manage Operations access</button>':''}`}
     </div>`;
@@ -997,8 +1059,11 @@
     const placeChoice=event.target.closest('[data-place-choice]');if(placeChoice){const results=placeChoice.closest('[data-place-results]'),place=results?._places?.[Number(placeChoice.dataset.placeIndex)];if(place){await setTripPlace(placeChoice.dataset.placeChoice,place);results.hidden=true;}return;}
     document.querySelectorAll('[data-time-picker-panel]').forEach(panel=>{if(!panel.closest('.hfo-time-entry')?.contains(event.target))panel.hidden=true;});
     document.querySelectorAll('[data-code-kind]').forEach(input=>{if(!input.closest('.hfo-code-field').contains(event.target))closeCodeSuggestions(input);});
-    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item]');
+    const downloadMenu=document.querySelector('[data-download-menu]');if(downloadMenu&&!event.target.closest('.hfo-download')){downloadMenu.hidden=true;document.querySelector('[data-download-toggle]')?.setAttribute('aria-expanded','false');}
+    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-download-toggle],[data-download],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item]');
     if(!b)return;
+    if(b.hasAttribute('data-download-toggle')){const menu=b.parentElement.querySelector('[data-download-menu]'),open=menu.hidden;menu.hidden=!open;b.setAttribute('aria-expanded',String(open));return;}
+    if(b.dataset.download){b.closest('[data-download-menu]').hidden=true;await downloadCalendarReport(b.dataset.download);return;}
 if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
     if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
     if(b.hasAttribute('data-sync-job-folder')){await perform('syncJobFolder',{id:job().id},out=>{Object.assign(job(),out.record);render();});return;}
