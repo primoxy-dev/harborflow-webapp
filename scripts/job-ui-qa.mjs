@@ -7,9 +7,9 @@ const require=createRequire('C:/Users/thanaphon/.cache/codex-runtimes/codex-prim
 const {chromium}=require('playwright');
 const root=process.cwd();
 const jobs=[
- {id:'job-mtp',data:{jobNo:'DEMO-1',vessel:'MTP DEMO',imo:'',port:'Map Ta Phut / SPM',principal:'DEMO',eta:'2026-10-15T12:56',etd:'2026-10-16T01:05',status:'Completed',pic:'demo',notes:''}},
- {id:'job-lch',data:{jobNo:'DEMO-2',vessel:'LCH DEMO',imo:'',port:'Laem Chabang / A1',principal:'DEMO',eta:'2026-10-16T08:00',etd:'',status:'Open',pic:'demo',notes:''}},
- {id:'job-src',data:{jobNo:'DEMO-3',vessel:'SRC DEMO',imo:'',port:'Sriracha / Kerry',principal:'DEMO',eta:'2026-10-17T18:30',etd:'',status:'Arrived',pic:'demo',notes:''}},
+ {id:'job-mtp',data:{jobNo:'DEMO-1',vessel:'MTP DEMO',vesselType:'LNG/LPG Carrier',imo:'',port:'Map Ta Phut / SPM',principal:'DEMO',eta:'2026-10-15T12:56',etd:'2026-10-16T01:05',status:'Completed',pic:'demo',notes:''}},
+ {id:'job-lch',data:{jobNo:'DEMO-2',vessel:'LCH DEMO',vesselType:'Container Ship',imo:'',port:'Laem Chabang / A1',principal:'DEMO',eta:'2026-10-16T08:00',etd:'',status:'Open',pic:'demo',notes:''}},
+ {id:'job-src',data:{jobNo:'DEMO-3',vessel:'SRC DEMO',vesselType:'Oil/Chemical Tanker',imo:'',port:'Sriracha / Kerry',principal:'DEMO',eta:'2026-10-17T18:30',etd:'',status:'Arrived',pic:'demo',notes:''}},
  {id:'job-mtp-prior',data:{jobNo:'DEMO-4',vessel:'MTP PRIOR',port:'Map Ta Phut / SPM',eta:'2026-09-12T09:00',status:'Sailed'}},
  {id:'job-lch-prior',data:{jobNo:'DEMO-5',vessel:'LCH PRIOR',port:'Laem Chabang / A1',eta:'2026-09-13T09:00',status:'Sailed'}}
 ];
@@ -45,6 +45,7 @@ try{
  await page.locator('[data-time-minute="eta"]').selectOption('05');
  assert.equal(await page.locator('[data-job-time="eta"]').inputValue(),'21:05');
  assert.equal(await page.locator('input[type="hidden"][name="eta"]').inputValue(),'2026-10-22T21:05');
+ assert.deepEqual(await page.locator('select[name="vesselType"] option').allTextContents(),['','Container Ship','LNG/LPG Carrier','Oil/Chemical Tanker','Bulk Carrier','General Cargo','Ro-Ro','Passenger/Cruise','Tug/Offshore','Other']);
  await mkdir(path.join(root,'output/job-ui-qa'),{recursive:true});
  for(const width of [390,768,1440]){await page.setViewportSize({width,height:1000});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:path.join(root,`output/job-ui-qa/create-${width}.png`),fullPage:true});}
  await page.setViewportSize({width:1440,height:1000});
@@ -62,6 +63,9 @@ try{
  assert.equal(await page.locator('.hfo-job-pill.port-map-ta-phut').count(),1);
  assert.equal(await page.locator('.hfo-job-pill.port-laem-chabang').count(),1);
  assert.equal(await page.locator('.hfo-job-pill.port-sriracha').count(),1);
+ assert.equal(await page.locator('.hfo-vessel-icon[data-vessel-type="LNG/LPG Carrier"]').count(),1);
+ assert.equal(await page.locator('.hfo-vessel-icon[data-vessel-type="Container Ship"]').count(),1);
+ assert.equal(await page.locator('.hfo-vessel-icon[data-vessel-type="Oil/Chemical Tanker"]').count(),1);
  await page.locator('[data-open-job="job-mtp"]').first().click();
  const statusOptions=await page.locator('select[name="status"] option').allTextContents();
  assert.deepEqual(statusOptions,['Arrived','Awaiting Customer PO','Cancelled','Invoiced','Open','Ops Closed/Awaiting Invoices','Partial Invoiced','Ready For DA','Sailed']);
@@ -79,5 +83,5 @@ try{
  await page.goto('https://harborflow.test/');
  assert.equal(await page.locator('[data-chart="status"] .hfo-empty').innerText(),'No Port Calls in October 2026.');
  assert.deepEqual(errors,[]);
- console.log('PASS Job UI: New Port Call 24-hour picker/manual ETA/ETD, exact statuses, port colors, autosave');
+ console.log('PASS Job UI: vessel type icons, calm port colors, 24-hour ETA/ETD, exact statuses, autosave');
 }finally{await browser.close();}

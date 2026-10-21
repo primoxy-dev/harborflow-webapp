@@ -23,6 +23,7 @@
   const JOB_STATUSES = ['Arrived','Awaiting Customer PO','Cancelled','Invoiced','Open','Ops Closed/Awaiting Invoices','Partial Invoiced','Ready For DA','Sailed'];
   const LEGACY_JOB_STATUS = {'Draft':'Open','Planned':'Open','Confirmed':'Open','In Progress':'Open','On Hold':'Open','Completed':'Ops Closed/Awaiting Invoices'};
   const SERVICE_STATUSES = ['Not Started','In Progress','Waiting','Completed','Cancelled'];
+  const VESSEL_TYPES = ['Container Ship','LNG/LPG Carrier','Oil/Chemical Tanker','Bulk Carrier','General Cargo','Ro-Ro','Passenger/Cruise','Tug/Offshore','Other'];
   const FLAT_VISITORS = {'Visitor':'Visitors','SIRE Inspector':'SIRE Inspector','Surveyor':'Surveyor'};
   const CATEGORIES = ['On-signers','Off-signers','Medical visitors','SIRE Inspectors','Surveyors','Service Engineers','Other'];
   const TYPE_FIELDS = {
@@ -77,6 +78,22 @@
     if(port.includes('sriracha')||port.includes('sri racha'))return 'port-sriracha';
     return 'port-other';
   }
+  function vesselIcon(type) {
+    const details={
+      'Container Ship':'<rect x="7" y="7" width="4" height="3"/><rect x="12" y="7" width="4" height="3"/><rect x="17" y="7" width="4" height="3"/><rect x="9" y="3" width="4" height="3"/><rect x="14" y="3" width="4" height="3"/>',
+      'LNG/LPG Carrier':'<circle cx="10" cy="8" r="3"/><circle cx="17" cy="8" r="3"/>',
+      'Oil/Chemical Tanker':'<rect x="7" y="6" width="13" height="4" rx="2"/><path d="M10 6V4m7 2V4"/>',
+      'Bulk Carrier':'<path d="M7 9l2-4h4l2 4m0 0 2-4h4l2 4"/>',
+      'General Cargo':'<path d="M9 10V4h7m-4 0 5 5M7 10h13"/>',
+      'Ro-Ro':'<path d="M7 5h13v5H7zM9 7h2m2 0h2m2 0h2"/>',
+      'Passenger/Cruise':'<path d="M7 4h11l3 6H7zM9 6h1m2 0h1m2 0h1m2 0h1"/>',
+      'Tug/Offshore':'<path d="M10 10V5h7l3 5M13 5V2h3v3"/>',
+      'Other':'<path d="M9 10V5h8l3 5M12 5V3h3v2"/>'
+    };
+    const key=details[type]?type:'Other';
+    return `<svg class="hfo-vessel-icon" viewBox="0 0 28 22" aria-hidden="true" data-vessel-type="${escape(key)}"><g class="hfo-vessel-detail">${details[key]}</g><path class="hfo-vessel-hull" d="M3 11h22l-3.5 6H7z"/><path class="hfo-vessel-wave" d="M3 20c2-1.4 4-1.4 6 0 2-1.4 4-1.4 6 0 2-1.4 4-1.4 6 0 1.4-1 2.7-1.2 4-.6"/></svg>`;
+  }
+  const vesselName=(j,fallback='Port Call')=>`<span class="hfo-vessel-name">${vesselIcon(j.data.vesselType)}<span>${escape(j.data.vessel||fallback)}</span></span>`;
   const serviceList = j => state.services.filter(x => x.job_id === j.id && !x.removed_at).sort((a,b) => a.seq-b.seq);
   const anyPeopleView = () => state.grant?.crewView || state.grant?.visitorView;
   const canPeople = kind => kind === 'crew' ? state.grant?.crewView : state.grant?.visitorView;
@@ -205,13 +222,13 @@
       const months=[]; let d=new Date(start);
       while (d<=end) { const y=d.getFullYear(), m=d.getMonth(), first=new Date(y,m,1), last=new Date(y,m+1,0);
         const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && j.data.eta && dateOnly(j.data.eta)>=localKey(first) && dateOnly(j.data.eta)<=localKey(last));
-        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Husbandry Calls</p>${calls.map(j=>`<button class="hfo-btn hfo-job-pill ${portClass(j.data.port)}" data-open-job="${j.id}">${escape(j.data.vessel || 'Port Call')}${state.public?'':' · '+escape(j.data.jobNo || 'No Job No.')}</button>`).join(' ')}</div>`);
+        months.push(`<div class="hfo-card"><b>${escape(d.toLocaleDateString('en',{month:'long',year:'numeric'}))}</b><p>${calls.length} Husbandry Calls</p>${calls.map(j=>`<button class="hfo-btn hfo-job-pill ${portClass(j.data.port)}" data-open-job="${j.id}">${vesselName(j)}${state.public?'':`<span class="hfo-job-meta">${escape(j.data.jobNo || 'No Job No.')}</span>`}</button>`).join(' ')}</div>`);
         d.setMonth(d.getMonth()+1);
       }
       return `<div class="hfo-stats">${months.join('')}</div>`;
     }
     const first=state.view==='month' ? startOfWeek(start) : start, days=state.view==='month' ? 42 : 7;
-    return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-weekday">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); const outside=state.view==='month' && d.getMonth()!==start.getMonth(); return `<div class="hfo-cell${outside?' hfo-outside':''}"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill ${portClass(j.data.port)}" data-open-job="${j.id}"><b>${escape(j.data.vessel||'Port Call')}</b><span class="hfo-job-meta">${escape(j.data.port||'No port')} · ${escape(jobStatus(j.data.status))}</span></button>`).join('')}</div>`;}).join('')}</div>`;
+    return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-weekday">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); const outside=state.view==='month' && d.getMonth()!==start.getMonth(); return `<div class="hfo-cell${outside?' hfo-outside':''}"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill ${portClass(j.data.port)}" data-open-job="${j.id}"><b>${vesselName(j)}</b><span class="hfo-job-meta">${escape(j.data.port||'No port')} · ${escape(jobStatus(j.data.status))}</span></button>`).join('')}</div>`;}).join('')}</div>`;
   }
   function renderHome() {
     if (root.classList.contains('active')) document.getElementById('title').textContent='Operations · Trial';
@@ -274,6 +291,7 @@
       ${jobDateTimeField('ETD',data.etd,'etd',disable,attr,false)}
       ${sel('Status',jobStatus(data.status),'status',JOB_STATUSES,`${disable} ${attr}`)}
       ${f('Job PIC (GitHub login)',data.pic,'pic','text',`${isOwner()?'': 'disabled'} ${attr}`)}
+      ${sel('Vessel type',data.vesselType||'','vesselType',['',...VESSEL_TYPES],`${disable} ${attr}`)}
       ${area('Notes',data.notes,'notes',`${disable} ${attr}`)}
     </div>`;
   }
