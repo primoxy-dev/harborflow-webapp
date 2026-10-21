@@ -148,10 +148,10 @@
 .hfo-job-form-grid>:nth-child(12){grid-column:span 4}
 .hfo-job-pill{border:1px solid transparent;box-shadow:none;transition:background-color .15s,border-color .15s}
 .hfo-job-pill:hover,.hfo-job-pill:focus-visible{border-color:#91a3b3;filter:brightness(.985)}
-.hfo-job-pill.port-map-ta-phut{background:#e2eee8;color:#285b48;border-left:3px solid #6e9b87}
-.hfo-job-pill.port-laem-chabang{background:#e4ebf2;color:#294e6c;border-left:3px solid #7894ae}
-.hfo-job-pill.port-sriracha{background:#ebe8ef;color:#5a4e70;border-left:3px solid #9a8aaa}
-.hfo-job-pill.port-other{background:#eceff1;color:#45545f;border-left:3px solid #9aa6ae}
+.hfo-job-pill.port-map-ta-phut{background:#d8f3e6;color:#15583e;border-left:3px solid #58a982}
+.hfo-job-pill.port-laem-chabang{background:#dcecff;color:#214f82;border-left:3px solid #75a6dc}
+.hfo-job-pill.port-sriracha{background:#eee4ff;color:#654194;border-left:3px solid #a98bdd}
+.hfo-job-pill.port-other{background:#e8f0f5;color:#3e5361;border-left:3px solid #91a8b5}
 .hfo-vessel-name{display:flex;align-items:center;gap:5px;min-width:0}
 .hfo-vessel-name>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hfo-vessel-icon{width:17px;height:14px;flex:0 0 17px;overflow:visible}
