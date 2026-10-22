@@ -34,7 +34,7 @@ try{
     const base=window.HarborFlowDocumentImport;
     base.read=async(file,type,onProgress)=>{onProgress(35);onProgress(100);
       if(file.name.includes('no-name'))return {type,fileName:file.name,confidence:90,checkedAt:new Date().toISOString(),machineChecks:[],fields:{passport:'UNKNOWN'}};
-      if(type==='passport')return {type,fileName:file.name,confidence:74,checkedAt:new Date().toISOString(),machineChecks:[true,false,true],fields:{name:'CREW DEMO',passport:'P1234567',passportExpiry:'2027-01-10',nationality:'THAI',dob:'1990-02-03'}};
+      if(type==='passport')return {type,fileName:file.name,confidence:74,checkedAt:new Date().toISOString(),machineChecks:[true,false,true],nameNeedsTitle:true,nameWithoutTitle:'CREW DEMO',fields:{name:'CREW DEMO',passport:'P1234567',passportExpiry:'2027-01-10',nationality:'THAI',dob:'1990-02-03'}};
       if(type==='seamanBook')return {type,fileName:file.name,confidence:92,checkedAt:new Date().toISOString(),machineChecks:[],fields:{name:'NEW CREW',seamanBook:'SB999999',seamanBookExpiry:'2030-01-01'}};
       return {type,fileName:file.name,confidence:92,checkedAt:new Date().toISOString(),machineChecks:[],fields:{name:'CREW NEW'},flight:{airline:'TG',number:'123',date:'24OCT',from:'BKK',to:'HKT',departure:'08:30',arrival:'09:50',booking:'DEMO1'}};};
   });
@@ -50,6 +50,8 @@ try{
   ]);
   await page.getByText('Batch complete').waitFor();
   assert.equal(person.data.passport,'KEEP-ME');
+  assert.equal(person.data.passportExpiry,undefined,'uncertain sex must wait for title choice before saving');
+  await page.locator('[data-doc-title="MR."]').click();
   assert.equal(person.data.passportExpiry,'2027-01-10');
   assert.equal(people.length,1,'missing name must not create a crew row');
   assert.match(await page.locator('.hfo-doc-batch-results').innerText(),/No readable crew name/);

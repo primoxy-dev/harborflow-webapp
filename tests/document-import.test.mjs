@@ -14,12 +14,34 @@ test('reads a machine-readable passport and validates its check digits',()=>{
     'P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<',
     'L898902C36UTO7408122F1204159ZE184226B<<<<<10'
   ].join('\n'));
-  assert.equal(result.fields.name,'ANNA MARIA ERIKSSON');
+  assert.equal(result.fields.name,'MS. ANNA MARIA ERIKSSON');
+  assert.equal(result.sex,'F');
   assert.equal(result.fields.passport,'L898902C3');
   assert.equal(result.fields.nationality,'UTO');
   assert.equal(result.fields.dob,'1974-08-12');
   assert.equal(result.fields.passportExpiry,'2012-04-15');
   assert.deepEqual([...result.machineChecks],[true,true,true]);
+});
+
+test('formats passport name by sex and maps passport nationality to the dropdown value',()=>{
+  const result=reader.extractFromText('passport',[
+    'P<THASOMCHAI<<ANAN<KIT<<<<<<<<<<<<<<<<<<<<',
+    'AB12345670THA9001011M3012315<<<<<<<<<<<<<<'
+  ].join('\n'));
+  assert.equal(result.fields.name,'MR. ANAN KIT SOMCHAI');
+  assert.equal(result.fields.nationality,'THAI');
+  assert.equal(result.nameNeedsTitle,false);
+  assert.equal(reader.nationalityChoice('PHL'),'FILIPINO');
+  assert.equal(reader.nationalityChoice('THAILAND'),'THAI');
+});
+
+test('an uncertain passport sex requires title choice and does not fill the name',()=>{
+  const result=reader.extractFromText('passport','GIVEN NAMES: ALEX KIM\nSURNAME: MORGAN\nNATIONALITY: THAILAND\nPASSPORT NO: AA1234567\nDATE OF EXPIRY: 01 JAN 2030',94);
+  assert.equal(result.nameNeedsTitle,true);
+  assert.equal(result.nameWithoutTitle,'ALEX KIM MORGAN');
+  const applied=reader.applyToPerson({},result);
+  assert.equal(applied.person.name,undefined);
+  assert.match(applied.warnings.join('\n'),/MR\. หรือ MS\./);
 });
 
 test('fills blank passport fields, warns on expiry, and never overwrites a conflict',()=>{

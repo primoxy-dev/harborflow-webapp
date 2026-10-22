@@ -7,6 +7,11 @@
   let pdfPromise,tesseractPromise;
   const clean=value=>String(value||'').replace(/\s+/g,' ').trim();
   const upper=value=>clean(value).toUpperCase();
+  const NATIONALITIES={AFG:'AFGHAN',ALB:'ALBANIAN',DZA:'ALGERIAN',USA:'AMERICAN',AGO:'ANGOLAN',ARG:'ARGENTINIAN',ARM:'ARMENIAN',AUS:'AUSTRALIAN',AUT:'AUSTRIAN',AZE:'AZERBAIJANI',BHR:'BAHRAINI',BGD:'BANGLADESHI',BLR:'BELARUSIAN',BEL:'BELGIAN',BOL:'BOLIVIAN',BIH:'BOSNIAN',BRA:'BRAZILIAN',GBR:'BRITISH',BGR:'BULGARIAN',KHM:'CAMBODIAN',CMR:'CAMEROONIAN',CAN:'CANADIAN',CHL:'CHILEAN',CHN:'CHINESE',COL:'COLOMBIAN',HRV:'CROATIAN',CUB:'CUBAN',CYP:'CYPRIOT',CZE:'CZECH',DNK:'DANISH',NLD:'DUTCH',ECU:'ECUADORIAN',EGY:'EGYPTIAN',ARE:'EMIRATI',EST:'ESTONIAN',ETH:'ETHIOPIAN',FJI:'FIJIAN',PHL:'FILIPINO',FIN:'FINNISH',FRA:'FRENCH',GEO:'GEORGIAN',DEU:'GERMAN',GHA:'GHANAIAN',GRC:'GREEK',HUN:'HUNGARIAN',ISL:'ICELANDIC',IND:'INDIAN',IDN:'INDONESIAN',IRN:'IRANIAN',IRQ:'IRAQI',IRL:'IRISH',ISR:'ISRAELI',ITA:'ITALIAN',JAM:'JAMAICAN',JPN:'JAPANESE',JOR:'JORDANIAN',KAZ:'KAZAKH',KEN:'KENYAN',KOR:'KOREAN',PRK:'KOREAN',KWT:'KUWAITI',LAO:'LAO',LVA:'LATVIAN',LBN:'LEBANESE',LBR:'LIBERIAN',LTU:'LITHUANIAN',MDG:'MALAGASY',MYS:'MALAYSIAN',MDV:'MALDIVIAN',MLT:'MALTESE',MEX:'MEXICAN',MNG:'MONGOLIAN',MAR:'MOROCCAN',MOZ:'MOZAMBICAN',MMR:'MYANMAR',NPL:'NEPALESE',NZL:'NEW ZEALANDER',NGA:'NIGERIAN',NOR:'NORWEGIAN',OMN:'OMANI',PAK:'PAKISTANI',PAN:'PANAMANIAN',PER:'PERUVIAN',POL:'POLISH',PRT:'PORTUGUESE',QAT:'QATARI',ROU:'ROMANIAN',RUS:'RUSSIAN',SAU:'SAUDI',SEN:'SENEGALESE',SRB:'SERBIAN',SGP:'SINGAPOREAN',SVK:'SLOVAK',SVN:'SLOVENIAN',ZAF:'SOUTH AFRICAN',ESP:'SPANISH',LKA:'SRI LANKAN',SDN:'SUDANESE',SWE:'SWEDISH',CHE:'SWISS',SYR:'SYRIAN',TWN:'TAIWANESE',TZA:'TANZANIAN',THA:'THAI',TUN:'TUNISIAN',TUR:'TURKISH',UGA:'UGANDAN',UKR:'UKRAINIAN',URY:'URUGUAYAN',UZB:'UZBEK',VEN:'VENEZUELAN',VNM:'VIETNAMESE',YEM:'YEMENI',ZMB:'ZAMBIAN',ZWE:'ZIMBABWEAN'};
+  const NATIONALITY_ALIASES={THAILAND:'THAI',PHILIPPINES:'FILIPINO','UNITED STATES':'AMERICAN','UNITED STATES OF AMERICA':'AMERICAN','UNITED KINGDOM':'BRITISH',ENGLAND:'BRITISH',VIETNAM:'VIETNAMESE',INDONESIA:'INDONESIAN',INDIA:'INDIAN',CHINA:'CHINESE',MYANMAR:'MYANMAR',BURMA:'MYANMAR','SOUTH KOREA':'KOREAN','REPUBLIC OF KOREA':'KOREAN',RUSSIA:'RUSSIAN',UKRAINE:'UKRAINIAN'};
+  const nationalityChoice=value=>{const raw=upper(value).replace(/[^A-Z ]/g,'').trim();if(NATIONALITIES[raw])return NATIONALITIES[raw];if(NATIONALITY_ALIASES[raw])return NATIONALITY_ALIASES[raw];if(Object.values(NATIONALITIES).includes(raw))return raw;const alias=Object.keys(NATIONALITY_ALIASES).find(value=>raw.includes(value));return alias?NATIONALITY_ALIASES[alias]:raw;};
+  const passportTitle=sex=>sex==='M'?'MR.':sex==='F'?'MS.':'';
+  const passportName=(given,surname,sex)=>clean([passportTitle(sex),clean(given),clean(surname)].filter(Boolean).join(' '));
   const isoDate=(year,month,day)=>{
     const date=new Date(Date.UTC(Number(year),Number(month)-1,Number(day)));
     return Number.isNaN(date.valueOf())?'':`${String(date.getUTCFullYear()).padStart(4,'0')}-${String(date.getUTCMonth()+1).padStart(2,'0')}-${String(date.getUTCDate()).padStart(2,'0')}`;
@@ -32,16 +37,20 @@
     const lines=String(text).split(/\r?\n/).map(line=>upper(line).replace(/\s/g,'').replace(/[^A-Z0-9<]/g,'')).filter(line=>line.length>=40);
     const first=lines.find(line=>line.startsWith('P<'));if(!first)return null;const index=lines.indexOf(first),second=lines[index+1];if(!second||second.length<28)return null;
     const names=first.slice(5).split('<<'),surname=clean(names[0].replace(/</g,' ')),given=clean((names[1]||'').replace(/</g,' '));
-    const passport=second.slice(0,9).replace(/</g,''),nationality=second.slice(10,13).replace(/</g,''),birthRaw=second.slice(13,19),expiryRaw=second.slice(21,27);
+    const passport=second.slice(0,9).replace(/</g,''),nationality=nationalityChoice(second.slice(10,13).replace(/</g,'')),birthRaw=second.slice(13,19),sex=['M','F'].includes(second[20])?second[20]:'',expiryRaw=second.slice(21,27);
     const checks=[validMrz(second.slice(0,9),second[9]),validMrz(birthRaw,second[19]),validMrz(expiryRaw,second[27])];
-    return {fields:{name:clean([given,surname].filter(Boolean).join(' ')),passport,nationality,dob:parseDate(birthRaw,{birth:true}),passportExpiry:parseDate(expiryRaw)},checks,confidence:checks.filter(Boolean).length===3?99:78};
+    const nameWithoutTitle=clean([given,surname].filter(Boolean).join(' '));
+    return {fields:{name:passportName(given,surname,sex)||nameWithoutTitle,passport,nationality,dob:parseDate(birthRaw,{birth:true}),passportExpiry:parseDate(expiryRaw)},sex,nameWithoutTitle,nameNeedsTitle:!sex,checks,confidence:checks.filter(Boolean).length===3?99:78};
   }
   function extractPassport(text,ocrConfidence=100){
-    const normalized=upper(text),mrz=mrzPassport(text);if(mrz)return {fields:mrz.fields,confidence:Math.min(ocrConfidence,mrz.confidence),machineChecks:mrz.checks};
-    return {confidence:Math.min(ocrConfidence,70),machineChecks:[],fields:{
-      name:labeled(normalized,'NAME|GIVEN NAMES?|SURNAME','[A-Z][A-Z ]{3,50}'),
+    const normalized=upper(text),mrz=mrzPassport(text);if(mrz)return {fields:mrz.fields,sex:mrz.sex,nameWithoutTitle:mrz.nameWithoutTitle,nameNeedsTitle:mrz.nameNeedsTitle,confidence:Math.min(ocrConfidence,mrz.confidence),machineChecks:mrz.checks};
+    const lines=String(text).split(/\r?\n/).map(line=>upper(line)),lineValue=labels=>{for(const line of lines){const found=line.match(new RegExp(`(?:${labels})\\s*[:#-]?\\s*([A-Z][A-Z .,'/-]{1,60})$`));if(found)return clean(found[1]);}return '';};
+    const given=lineValue('GIVEN NAMES?|FIRST NAMES?'),surname=lineValue('SURNAME|FAMILY NAME'),fallbackName=labeled(normalized,'NAME','[A-Z][A-Z ]{3,50}');
+    const sexText=labeled(normalized,'SEX|GENDER','MALE|FEMALE|M|F'),sex=/^M(?:ALE)?$/.test(sexText)?'M':/^F(?:EMALE)?$/.test(sexText)?'F':'',nameWithoutTitle=clean([given,surname].filter(Boolean).join(' '))||fallbackName;
+    return {confidence:Math.min(ocrConfidence,70),machineChecks:[],sex,nameWithoutTitle,nameNeedsTitle:!sex,fields:{
+      name:passportName(given||(!surname?fallbackName:''),surname,sex)||nameWithoutTitle,
       passport:upper(labeled(normalized,'PASSPORT(?: NO)?|DOCUMENT NO','[A-Z0-9]{6,14}')).replace(/\s/g,''),
-      nationality:upper(labeled(normalized,'NATIONALITY','[A-Z ]{3,30}')),
+      nationality:nationalityChoice(labeled(normalized,'NATIONALITY','[A-Z ]{3,30}')),
       dob:parseDate(labeled(normalized,'DATE OF BIRTH|BIRTH DATE|DOB','[0-9A-Z .\\-/]{6,20}'),{birth:true}),
       passportExpiry:parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
     }};
@@ -86,7 +95,7 @@
       const flight=result.flight||{},hasFlight=Object.values(flight).some(Boolean);if(hasFlight){if(!Array.isArray(next.flights))next.flights=[];const matching=next.flights.find(item=>(flight.number&&upper(item.number)===upper(flight.number))&&(flight.date?upper(item.date)===upper(flight.date):true));if(matching){for(const [key,value] of Object.entries(flight)){if(value&&!matching[key])matching[key]=value;else if(value&&matching[key]&&upper(matching[key])!==upper(value))conflicts.push(`Flight ${key}: ข้อมูลเดิม “${matching[key]}” ต่างจากไฟล์ “${value}”`);}}else next.flights.push(flight);changes.push('Flight details');}else warnings.push('ไม่พบข้อมูลเที่ยวบินที่อ่านได้');
     }else{
       const labels={name:'Name - Surname',passport:'Passport',passportExpiry:'Passport expiry',nationality:'Nationality',dob:'Date of birth',seamanBook:'Seaman book',seamanBookExpiry:'Seaman book expiry'};
-      for(const [key,value] of Object.entries(result.fields||{}))assign(key,value,labels[key]||key);
+      for(const [key,value] of Object.entries(result.fields||{})){if(key==='name'&&result.nameNeedsTitle)continue;assign(key,value,labels[key]||key);}
       const expiry=result.type==='passport'?result.fields?.passportExpiry:result.fields?.seamanBookExpiry,remaining=daysUntil(expiry);
       if(remaining!==null&&remaining<0)warnings.push(`${result.type==='passport'?'Passport':'Seaman book'} หมดอายุแล้ว`);
       else if(remaining!==null&&remaining<=SIX_MONTHS_DAYS)warnings.push(`${result.type==='passport'?'Passport':'Seaman book'} เหลืออายุไม่เกิน 6 เดือน (${remaining} วัน)`);
@@ -94,11 +103,12 @@
       if(result.type==='passport'&&!result.fields?.passport)warnings.push('ไม่พบเลข Passport');
       if(result.type==='seamanBook'&&!result.fields?.seamanBook)warnings.push('ไม่พบเลข Seaman book');
     }
+    if(result.nameNeedsTitle)warnings.push('อ่านเพศจาก Passport ไม่ชัดเจน กรุณาเลือก MR. หรือ MS. ก่อนกรอกชื่อ');
     if(result.confidence<80)warnings.push(`ความมั่นใจในการอ่าน ${Math.round(result.confidence)}% กรุณาตรวจทุกช่อง`);
     if(result.machineChecks?.length&&result.machineChecks.some(value=>!value))warnings.push('MRZ check digit บางช่องไม่ตรง กรุณาตรวจต้นฉบับ');
     warnings.push(...conflicts);
     const status=warnings.length?'warning':'ok';next.documentChecks[result.type]={fileName:result.fileName||'',confidence:Math.round(result.confidence||0),checkedAt:result.checkedAt||new Date().toISOString(),status,messages:warnings,changes,expiry:result.type==='passport'?result.fields?.passportExpiry:result.type==='seamanBook'?result.fields?.seamanBookExpiry:''};
     return {person:next,changes,conflicts,warnings,status};
   }
-  window.HarborFlowDocumentImport={read,extractFromText,applyToPerson,parseDate,daysUntil,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
+  window.HarborFlowDocumentImport={read,extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
 })();

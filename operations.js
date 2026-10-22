@@ -627,7 +627,7 @@
         </div><div data-doc-progress="${type}" role="status"></div>
       </article>`).join('')}</div>
       ${batch.total?`<div class="hfo-doc-batch-progress" role="status"><b>${batch.busy?'Reading documents':'Batch complete'}</b><span>${batch.completed} / ${batch.total}</span></div>`:''}
-      ${results.length?`<div class="hfo-doc-batch-results">${results.map(item=>`<div class="hfo-doc-batch-result ${item.error?'error':item.warnings?.length?'warning':'ok'}"><b>${escape(item.fileName)}</b><span>${escape(item.name||'Name not found')} · ${escape(item.outcome||'Needs review')}</span>${item.changes?.length?`<small>Filled: ${escape(item.changes.join(', '))}</small>`:''}${item.error?`<small>${escape(item.error)}</small>`:''}${item.warnings?.length?`<ul>${item.warnings.map(w=>`<li>${escape(w)}</li>`).join('')}</ul>`:''}</div>`).join('')}</div>`:''}
+      ${results.length?`<div class="hfo-doc-batch-results">${results.map((item,index)=>`<div class="hfo-doc-batch-result ${item.error?'error':item.warnings?.length||item.needsTitle?'warning':'ok'}"><b>${escape(item.fileName)}</b><span>${escape(item.name||'Name not found')} · ${escape(item.outcome||'Needs review')}</span>${item.changes?.length?`<small>Filled: ${escape(item.changes.join(', '))}</small>`:''}${item.error?`<small>${escape(item.error)}</small>`:''}${item.needsTitle?`<div class="hfo-doc-title-choice"><span>เลือกคำนำหน้าตาม Passport:</span><button type="button" class="hfo-btn" data-doc-title="MR." data-doc-result="${index}">MR.</button><button type="button" class="hfo-btn" data-doc-title="MS." data-doc-result="${index}">MS.</button></div>`:''}${item.warnings?.length?`<ul>${item.warnings.map(w=>`<li>${escape(w)}</li>`).join('')}</ul>`:''}</div>`).join('')}</div>`:''}
       <p class="hfo-doc-rule">Passport must remain valid for more than 6 months. Review every extracted value against the original before operational use.</p>
     </section>`;
   }
@@ -953,6 +953,26 @@
     if(state.personDraft?.id===person.id)state.personDraft.data=structuredClone(person.data);
     return person;
   }
+  async function applyImportedResult(result,item) {
+    const reader=window.HarborFlowDocumentImport,detectedName=String(result.nameWithoutTitle||result.fields?.name||'').trim();
+    item.fileName=result.fileName||item.fileName;item.name=detectedName;
+    if(result.nameNeedsTitle&&detectedName){item.needsTitle=true;item.pendingResult=result;item.outcome='Choose MR. or MS.';item.warnings=['อ่านเพศจาก Passport ไม่ชัดเจน ระบบยังไม่กรอกชื่อหรือข้อมูลจนกว่าจะเลือกคำนำหน้า'];return;}
+    const key=normalizedCrewName(result.fields?.name||detectedName);
+    if(!key){item.outcome='Needs review';item.error='No readable crew name was found. Nothing was added.';return;}
+    let person=state.people.find(candidate=>candidate.kind==='crew'&&normalizedCrewName(candidate.data.name)===key);
+    if(person){
+      const safeResult=structuredClone(result);safeResult.fields={...(safeResult.fields||{}),name:person.data.name};
+      const applied=reader.applyToPerson(person.data,safeResult);
+      await saveImportedCrew(person,applied.person);
+      Object.assign(item,{name:person.data.name,outcome:'Matched existing crew',changes:applied.changes,warnings:applied.warnings,needsTitle:false,pendingResult:null,error:''});
+    }else{
+      const seed={name:String(result.fields?.name||detectedName).toUpperCase(),category:state.documentBatch.category||'On-signers',serviceIds:[service().id],flights:[]};
+      const applied=reader.applyToPerson(seed,result),out=await api('createPerson',{jobId:job().id,kind:'crew',data:applied.person});
+      person=out.person;state.people.push(person);
+      Object.assign(item,{name:person.data.name,outcome:'Added new crew',changes:applied.changes,warnings:applied.warnings,needsTitle:false,pendingResult:null,error:''});
+    }
+    state.peopleLoadedFor=job().id;
+  }
   async function importCrewDocuments(files,type) {
     const reader=window.HarborFlowDocumentImport,batch=state.documentBatch;
     if(!reader||!canEditPeople('crew')||batch.busy)return;
@@ -964,25 +984,7 @@
       documentProgress(type,`Reading ${file.name}…`);
       try{
         const result=await reader.read(file,type,progress=>documentProgress(type,`Reading ${file.name}… ${progress||0}%`));
-        const detectedName=String(result.fields?.name||'').trim(),key=normalizedCrewName(detectedName);
-        if(!key){
-          batch.results.push({fileName:file.name,name:'',outcome:'Needs review',error:'No readable crew name was found. Nothing was added.'});
-        }else{
-          let person=state.people.find(item=>item.kind==='crew'&&normalizedCrewName(item.data.name)===key);
-          if(person){
-            const safeResult=structuredClone(result);safeResult.fields={...(safeResult.fields||{}),name:person.data.name};
-            const applied=reader.applyToPerson(person.data,safeResult);
-            await saveImportedCrew(person,applied.person);
-            batch.results.push({fileName:file.name,name:person.data.name,outcome:'Matched existing crew',changes:applied.changes,warnings:applied.warnings});
-          }else{
-            const seed={name:detectedName.toUpperCase(),category:batch.category||'On-signers',serviceIds:[service().id],flights:[]};
-            const applied=reader.applyToPerson(seed,result);
-            const out=await api('createPerson',{jobId:job().id,kind:'crew',data:applied.person});
-            person=out.person;state.people.push(person);
-            batch.results.push({fileName:file.name,name:person.data.name,outcome:'Added new crew',changes:applied.changes,warnings:applied.warnings});
-          }
-          state.peopleLoadedFor=job().id;
-        }
+        const item={fileName:file.name,name:'',outcome:'Needs review'};batch.results.push(item);await applyImportedResult(result,item);
       }catch(error){batch.results.push({fileName:file.name,name:'',outcome:'Not processed',error:error.message||'Document could not be read.'});}
       batch.completed+=1;render();
     }
@@ -1165,9 +1167,15 @@
     document.querySelectorAll('[data-time-picker-panel]').forEach(panel=>{if(!panel.closest('.hfo-time-entry')?.contains(event.target))panel.hidden=true;});
     document.querySelectorAll('[data-code-kind]').forEach(input=>{if(!input.closest('.hfo-code-field').contains(event.target))closeCodeSuggestions(input);});
     const downloadMenu=document.querySelector('[data-download-menu]');if(downloadMenu&&!event.target.closest('.hfo-download')){downloadMenu.hidden=true;document.querySelector('[data-download-toggle]')?.setAttribute('aria-expanded','false');}
-    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-download-toggle],[data-download],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item],[data-doc-choose]');
+    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-download-toggle],[data-download],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item],[data-doc-choose],[data-doc-title]');
     if(!b)return;
     if(b.dataset.docChoose){document.querySelector(`[data-doc-file="${b.dataset.docChoose}"]`)?.click();return;}
+    if(b.dataset.docTitle){
+      const item=state.documentBatch.results[Number(b.dataset.docResult)],result=item?.pendingResult;if(!item||!result)return;
+      result.fields={...(result.fields||{}),name:`${b.dataset.docTitle} ${result.nameWithoutTitle||result.fields?.name||''}`.trim().toUpperCase()};result.nameNeedsTitle=false;result.sex=b.dataset.docTitle==='MR.'?'M':'F';
+      item.needsTitle=false;item.warnings=[];item.error='';item.outcome='Saving…';render();
+      try{await applyImportedResult(result,item);state.sync='Saved '+new Date().toLocaleTimeString();}catch(error){item.error=error.message||'Document could not be saved.';item.outcome='Not processed';}render();return;
+    }
     if(b.hasAttribute('data-download-toggle')){const menu=b.parentElement.querySelector('[data-download-menu]'),open=menu.hidden;menu.hidden=!open;b.setAttribute('aria-expanded',String(open));return;}
     if(b.dataset.download){b.closest('[data-download-menu]').hidden=true;await downloadCalendarReport(b.dataset.download);return;}
 if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
