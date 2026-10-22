@@ -96,6 +96,16 @@ test('reads a seaman book number and adds the missing expiry field',()=>{
   assert.ok(applied.changes.includes('Seaman book expiry'));
 });
 
+test('reads the Filipino SRB number from the labelled top-right field',()=>{
+  const result=reader.extractFromText('seamanBook','REPUBLIC OF THE PHILIPPINES\nMARITIME INDUSTRY AUTHORITY\nSRB NO. A0578403',94);
+  assert.equal(result.fields.seamanBook,'A0578403');
+});
+
+test('reads the Filipino seaman book number from the lower legacy field',()=>{
+  const result=reader.extractFromText('seamanBook','REPUBLIC OF THE PHILIPPINES\nNAME\nSAMPLE CREW\n1358735\nC1271467',94);
+  assert.equal(result.fields.seamanBook,'C1271467');
+});
+
 test('creates a flight row from a ticket without replacing existing flights',()=>{
   const result=reader.extractFromText('flightTicket','PASSENGER NAME: DEMO CREW\nFLIGHT: TG 123\nBKK - HKT\n21 OCT 2026\n08:30 09:50\nPNR: DEMO1',96);
   assert.equal(result.fields.name,'DEMO CREW');
