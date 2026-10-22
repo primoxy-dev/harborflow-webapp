@@ -44,6 +44,39 @@ test('an uncertain passport sex requires title choice and does not fill the name
   assert.match(applied.warnings.join('\n'),/MR\. หรือ MS\./);
 });
 
+test('printed surname, given names and middle name override a noisy MRZ name',()=>{
+  const result=reader.extractFromText('passport',[
+    'Apelyido/Surname',
+    'ALPHA',
+    'Pangalan/Given names',
+    'BRAVO',
+    'Panggitnang apelyido/Middle name',
+    'CHARLIE',
+    'Nasyonalidad/Nationality',
+    'FILIPINO',
+    'Kasarian/Sex',
+    'M',
+    'P<PHLALPHA<<BRAVOLLLLLLLLLLLLLLLLLLLLLLLL<<<',
+    'X00000000PHL9001011M3012315<<<<<<<<<<<<<<'
+  ].join('\n'),95);
+  assert.equal(result.fields.name,'MR. BRAVO CHARLIE ALPHA');
+  assert.equal(result.fields.nationality,'FILIPINO');
+  assert.doesNotMatch(result.fields.name,/[LK]{8,}/);
+});
+
+test('an unclear short printed name field is corrected from its matching MRZ field',()=>{
+  const result=reader.extractFromText('passport',[
+    'Surname: AZ',
+    'Given names: BRAVO',
+    'Middle name: CHARLIE',
+    'Sex: M',
+    'P<PHLECHO<<BRAVOLLLLLLLLLLLLLLLLLLLLLLL<<<',
+    'X00000000PHL9001011M3012315<<<<<<<<<<<<<<'
+  ].join('\n'),95);
+  assert.equal(result.fields.name,'MR. BRAVO CHARLIE ECHO');
+  assert.match(result.extractionWarnings.join(' '),/MRZ field was used to correct it/);
+});
+
 test('fills blank passport fields, warns on expiry, and never overwrites a conflict',()=>{
   const result=reader.extractFromText('passport','Passport No: X1234567\nDate of Expiry: 01 JAN 2027',93);
   result.fileName='passport.jpg';
