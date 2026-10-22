@@ -6,7 +6,7 @@ import { OWNER, TRIP_KINDS, canEditJob, canEditService, canPeople, db, fieldConf
 
 const jobFields = ['jobNo', 'vessel', 'vesselType', 'imo', 'port', 'principal', 'eta', 'etd', 'status', 'pic', 'notes', 'terminalStays', 'completionReason'];
 const serviceFields = ['type', 'status', 'description', 'pic', 'supplier', 'plannedStart', 'plannedEnd', 'actualStart', 'actualEnd', 'planConfirmed', 'supplierConfirmed', 'terminalCondition', 'terminalConfirmation', 'restrictionReason', 'details', 'checklist', 'sopVersion', 'baselineDue', 'deadlineReason', 'notes'];
-const personFields = ['kind', 'category', 'name', 'nationality', 'rank', 'dob', 'passport', 'passportExpiry', 'seamanBook', 'immigration', 'flights', 'serviceIds', 'notes'];
+const personFields = ['kind', 'category', 'name', 'nationality', 'rank', 'dob', 'passport', 'passportExpiry', 'seamanBook', 'seamanBookExpiry', 'documentChecks', 'immigration', 'flights', 'serviceIds', 'notes'];
 const tripFields = ['kind', 'origin', 'originName', 'originAddress', 'destination', 'destinationName', 'destinationAddress', 'originLat', 'originLon', 'destinationLat', 'destinationLon', 'plannedDeparture', 'plannedArrival', 'actualDeparture', 'actualArrival', 'routeDistanceMeters', 'routeDurationSeconds', 'provider', 'vehicle', 'purpose', 'status', 'personIds', 'cargo', 'cargoItems', 'notes'];
 const parse = async request => {
   const raw = await request.text();

@@ -163,3 +163,18 @@
 .hfo-vessel-wave{fill:none;stroke:currentColor;stroke-width:1.2;stroke-linecap:round}
 @media(max-width:1100px){.hfo-job-form-grid>:nth-child(11){grid-column:span 6}.hfo-job-form-grid>:nth-child(12){grid-column:1/-1}}
 @media(max-width:600px){.hfo-vessel-icon{width:14px;height:12px;flex-basis:14px}.hfo-vessel-name{gap:3px}}
+
+/* Crew document reader: original files stay on the operator's device. */
+.hfo-doc-import{margin:12px 0 16px;padding:14px;border:1px solid #cfe1df;border-radius:10px;background:#f8fcfb}
+.hfo-doc-import h4,.hfo-doc-import p{margin:0}.hfo-doc-import .hfo-toolbar{align-items:flex-start}
+.hfo-doc-privacy{margin:10px 0;padding:9px 11px;border-radius:7px;background:#e8f6f2;color:#155e56;font-size:12px}
+.hfo-doc-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.hfo-doc-card{min-width:0;padding:11px;border:1px solid #d8e2eb;border-radius:9px;background:#fff}
+.hfo-doc-card>div:first-child b,.hfo-doc-card>div:first-child small{display:block}.hfo-doc-card>div:first-child small{min-height:30px;margin-top:3px;color:#64748b;font-size:10px;line-height:1.35}
+.hfo-doc-drop{display:flex;align-items:center;justify-content:center;gap:7px;min-height:58px;margin:9px 0;padding:8px;border:1px dashed #8ba9aa;border-radius:8px;background:#f6fbfa;color:#516575;font-size:11px;text-align:center;transition:.15s}
+.hfo-doc-drop.is-dragging{border-color:#0f766e;background:#dff5ef;box-shadow:0 0 0 3px #0f766e22}
+.hfo-doc-result{display:grid;gap:3px;margin-top:8px;padding:8px;border-radius:7px;font-size:11px}.hfo-doc-result.ok{background:#eaf8f0;color:#17623e}.hfo-doc-result.warning{background:#fff5df;color:#855600}.hfo-doc-result small{color:inherit}.hfo-doc-result ul{margin:3px 0 0;padding-left:17px}.hfo-doc-result li+li{margin-top:3px}
+.hfo-doc-empty{display:block;color:#718096;font-size:10px}.hfo-doc-error{display:block;margin:5px 0;color:#b42338;font-size:11px}
+.hfo-doc-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:12px}.hfo-doc-rule{margin-top:10px!important;color:#8a4b0f;font-size:11px;font-weight:600}
+@media(max-width:900px){.hfo-doc-grid{grid-template-columns:1fr}.hfo-doc-card>div:first-child small{min-height:0}.hfo-doc-fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.hfo-doc-import{padding:10px}.hfo-doc-fields{grid-template-columns:1fr}.hfo-doc-drop{flex-wrap:wrap}}

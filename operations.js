@@ -589,6 +589,42 @@
     const row=kind?(flightCodes[kind]||[]).find(item=>item[0]===value):null;
     return `<td data-label="${label}">${kind?`<div class="hfo-code-field">${input}<div id="${id}" class="hfo-code-results" role="listbox" aria-label="${label} suggestions" hidden></div><small class="hfo-code-caption">${escape(row?codeLabel(row,kind):'')}</small></div>`:input}</td>`;
   }
+  const DOCUMENT_TYPES=[
+    ['passport','Passport','Passport no., name, nationality, date of birth and expiry'],
+    ['seamanBook','Seaman book','Book no., name and expiry'],
+    ['flightTicket','Flight ticket','Airline, flight, date, route, time and PNR']
+  ];
+  function documentCheckHtml(check) {
+    if(!check)return '<small class="hfo-doc-empty">No document checked yet</small>';
+    const label=check.status==='ok'?'Checked — no warning':'Needs review';
+    const messages=Array.isArray(check.messages)?check.messages:[];
+    const changes=Array.isArray(check.changes)?check.changes:[];
+    return `<div class="hfo-doc-result ${check.status==='ok'?'ok':'warning'}">
+      <b>${escape(label)}</b><small>${escape(check.fileName||'Document')} · confidence ${escape(check.confidence??'—')}%</small>
+      ${changes.length?`<small>Filled: ${escape(changes.join(', '))}</small>`:''}
+      ${messages.length?`<ul>${messages.map(message=>`<li>${escape(message)}</li>`).join('')}</ul>`:''}
+    </div>`;
+  }
+  function documentImportHtml(p,editable) {
+    const checks=p.documentChecks||{};
+    const documentField=(label,key,type='text')=>`<label class="hfo-field"><span>${escape(label)}</span><input type="${type}" data-person-document-field="${key}" value="${escape(p[key]||'')}" ${editable?'':'disabled'}></label>`;
+    return `<section class="hfo-doc-import" aria-labelledby="hfoDocImportTitle">
+      <div class="hfo-toolbar"><div><h4 id="hfoDocImportTitle">Read crew documents</h4><p class="hfo-muted">Drag a file here or choose one. PDF, JPG, PNG, WebP or BMP · maximum 15 MB.</p></div></div>
+      <div class="hfo-doc-privacy" role="note">🔒 Files are read on this device. HarborFlow does not upload or store the original file or its full text.</div>
+      <div class="hfo-doc-grid">${DOCUMENT_TYPES.map(([type,label,description])=>`<article class="hfo-doc-card">
+        <div><b>${escape(label)}</b><small>${escape(description)}</small></div>
+        <div class="hfo-doc-drop" data-doc-drop="${type}">
+          ${editable?`<input type="file" data-doc-file="${type}" accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,application/pdf,image/*" hidden><button type="button" class="hfo-btn" data-doc-choose="${type}">Choose file</button><span>or drop file</span>`:'<span>View only</span>'}
+        </div>
+        <div data-doc-progress="${type}" role="status"></div>${documentCheckHtml(checks[type])}
+      </article>`).join('')}</div>
+      <div class="hfo-doc-fields">
+        ${documentField('Passport no.','passport')}${documentField('Passport expiry','passportExpiry','date')}
+        ${documentField('Seaman book no.','seamanBook')}${documentField('Seaman book expiry','seamanBookExpiry','date')}
+      </div>
+      <p class="hfo-doc-rule">Passport must remain valid for more than 6 months. Every extracted value must be checked against the original before operational use.</p>
+    </section>`;
+  }
   function personForm() {
   const draft=state.personDraft,p=draft.data,edit=canEditPeople(draft.kind),flights=Array.isArray(p.flights)?p.flights:[],displayFlights=flights.length?flights:edit?[{}]:[];
   const codes=['VISA','VISA-C','VOA','BG','OKTB','EX'];
@@ -597,6 +633,7 @@
 
   const dis=edit?'':'disabled';
   return `<form id="hfoPersonForm" class="hfo-person-expanded"><div class="hfo-toolbar"><h4>${draft.kind==='crew'?'Immigration & flight details':'Flight details'} · ${escape(p.name)}</h4><button type="button" class="hfo-btn" data-close-person>Close</button></div>
+    ${draft.kind==='crew'?documentImportHtml(p,edit):''}
     ${draft.kind==='crew'?`<div class="hfo-immigration-row">
       ${FLAT_VISITORS[service()?.data.type]?'':sel(draft.kind==='crew'?'Change role':'Visitor role',p.category,'category',draft.kind==='crew'?CATEGORIES.slice(0,2):CATEGORIES.slice(2),dis)}
       <fieldset class="hfo-immigration-compact"><legend>Immigration</legend><div class="hfo-immigration-codes">${codes.map(code=>`<label><input type="checkbox" name="immigration-${code}" ${checked(code)?'checked':''} ${dis}><span>${code}</span></label>`).join('')}</div></fieldset>
@@ -886,12 +923,32 @@
       draft.data.immigration={...(draft.data.immigration||{}),status:String(d.get('immigrationStatus')||'Not started'),codes,notes:String(d.get('immigrationNotes')||'')};
       delete draft.data.immigration.visa;delete draft.data.immigration.oktb;
     }
+    form.querySelectorAll('[data-person-document-field]').forEach(input=>{draft.data[input.dataset.personDocumentField]=input.value;});
     if(!Array.isArray(draft.data.flights))draft.data.flights=[];
     form.querySelectorAll('[data-flight]').forEach(input=>{
       const i=Number(input.dataset.flight),key=input.dataset.flightField;
       if(!draft.data.flights[i])draft.data.flights[i]={airline:'',number:'',date:'',from:'',to:'',departure:'',arrival:'',booking:''};
       draft.data.flights[i][key]=input.value.toUpperCase();
     });
+    draft.data.flights=draft.data.flights.filter(flight=>Object.values(flight).some(value=>String(value||'').trim()));
+  }
+  function documentProgress(type,message,failed=false) {
+    const output=document.querySelector(`[data-doc-progress="${type}"]`);
+    if(output){output.textContent=message;output.classList.toggle('hfo-doc-error',failed);}
+  }
+  async function importPersonDocument(file,type) {
+    const draft=state.personDraft,reader=window.HarborFlowDocumentImport;
+    if(!draft?.id||draft.kind!=='crew'||!reader)return;
+    documentProgress(type,'Preparing document reader…');
+    try{
+      const result=await reader.read(file,type,progress=>documentProgress(type,progress?`Reading document… ${progress}%`:'Reading document…'));
+      if(state.personDraft!==draft)return;
+      const applied=reader.applyToPerson(draft.data,result);
+      draft.data=applied.person;
+      render();
+      personSaveStatus(applied.warnings.length?'Saved extracted fields — review warnings':'Saved extracted fields — check against the original');
+      await savePerson();
+    }catch(error){documentProgress(type,error.message||'Document could not be read.',true);}
   }
   function captureNewPersonRow() {
     const draft=state.personDraft,row=document.querySelector('.hfo-new-person');
@@ -1070,8 +1127,9 @@
     document.querySelectorAll('[data-time-picker-panel]').forEach(panel=>{if(!panel.closest('.hfo-time-entry')?.contains(event.target))panel.hidden=true;});
     document.querySelectorAll('[data-code-kind]').forEach(input=>{if(!input.closest('.hfo-code-field').contains(event.target))closeCodeSuggestions(input);});
     const downloadMenu=document.querySelector('[data-download-menu]');if(downloadMenu&&!event.target.closest('.hfo-download')){downloadMenu.hidden=true;document.querySelector('[data-download-toggle]')?.setAttribute('aria-expanded','false');}
-    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-download-toggle],[data-download],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item]');
+    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-download-toggle],[data-download],[data-grants],[data-close],[data-back-job],[data-add-service],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item],[data-doc-choose]');
     if(!b)return;
+    if(b.dataset.docChoose){document.querySelector(`[data-doc-file="${b.dataset.docChoose}"]`)?.click();return;}
     if(b.hasAttribute('data-download-toggle')){const menu=b.parentElement.querySelector('[data-download-menu]'),open=menu.hidden;menu.hidden=!open;b.setAttribute('aria-expanded',String(open));return;}
     if(b.dataset.download){b.closest('[data-download-menu]').hidden=true;await downloadCalendarReport(b.dataset.download);return;}
 if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
@@ -1111,6 +1169,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
   });
   document.body.addEventListener('change',async event=>{
     const t=event.target;
+    if(t.dataset.docFile){const file=t.files?.[0];if(file)await importPersonDocument(file,t.dataset.docFile);t.value='';return;}
     if(t.id==='hfoView'){state.view=t.value;render();return;}
     if(t.dataset.jobDate||t.dataset.jobTime){const hidden=syncJobDateTime(t);if(hidden?.hasAttribute('data-job-field'))await saveJobField(hidden);return;}
     if(t.hasAttribute('data-job-field')){await saveJobField(t);return;}
@@ -1150,6 +1209,9 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
     if(t.dataset.codeKind&&!t.closest('.hfo-code-field').contains(event.relatedTarget))closeCodeSuggestions(t);
   });
   document.body.addEventListener('pointerdown',event=>{if(event.target.closest('[data-flight-code]'))event.preventDefault();});
+  document.body.addEventListener('dragover',event=>{const drop=event.target.closest('[data-doc-drop]');if(!drop)return;event.preventDefault();drop.classList.add('is-dragging');});
+  document.body.addEventListener('dragleave',event=>{const drop=event.target.closest('[data-doc-drop]');if(drop&&!drop.contains(event.relatedTarget))drop.classList.remove('is-dragging');});
+  document.body.addEventListener('drop',event=>{const drop=event.target.closest('[data-doc-drop]');if(!drop)return;event.preventDefault();drop.classList.remove('is-dragging');const file=event.dataTransfer?.files?.[0];if(file)void importPersonDocument(file,drop.dataset.docDrop);});
   document.body.addEventListener('keydown',event=>{
     const t=event.target;
     if(!t.dataset.codeKind)return;
