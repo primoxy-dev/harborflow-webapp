@@ -81,10 +81,29 @@
       passportExpiry:mrz?.fields.passportExpiry||parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
     }};
   }
+  function filipinoSeamanName(value){
+    const source=upper(value).replace(/[^A-Z ,.'-]/g,' ').replace(/\s+/g,' ').trim();if(!source)return '';
+    if(source.includes(',')){
+      const [surname,...remainder]=source.split(','),tokens=clean(remainder.join(' ')).split(' ').filter(Boolean);if(!surname||!tokens.length)return '';
+      const middle=tokens.length>1?tokens.pop():'',initial=middle?`${middle.replace(/[^A-Z]/g,'').slice(0,1)}.`:'';return clean([...tokens,initial,clean(surname)].filter(Boolean).join(' '));
+    }
+    const tokens=source.split(' ').filter(Boolean);if(tokens.length<2)return '';
+    if(tokens.length===2)return tokens.join(' ');
+    const surname=tokens.pop(),middle=tokens.pop()||'',initial=middle?`${middle.replace(/[^A-Z]/g,'').slice(0,1)}.`:'';return clean([...tokens,initial,surname].filter(Boolean).join(' '));
+  }
+  function printedSeamanName(text){
+    const lines=String(text).split(/\r?\n/).map(line=>upper(line)).filter(Boolean),blocked=/(?:DATE OF|PLACE OF|HEIGHT|WEIGHT|EYES|HAIR|DISTINGUISHING|VALID UNTIL|SEX|MARITIME|REPUBLIC|SRB NO)/;
+    for(let index=0;index<lines.length;index++){
+      const match=lines[index].match(/(?:SEAMAN NAME|NAME(?: \([^)]*\))?)\s*[:#-]?\s*(.*)$/);if(!match)continue;
+      const candidates=[match[1],lines[index+1]||''];
+      for(const candidate of candidates){const cleanCandidate=clean(candidate);if(cleanCandidate&&!blocked.test(cleanCandidate)&&/[A-Z]{2}/.test(cleanCandidate)){const formatted=filipinoSeamanName(cleanCandidate);if(formatted)return formatted;}}
+    }
+    return '';
+  }
   function extractSeaman(text,ocrConfidence=100){
     const normalized=upper(text),isPhilippine=/(?:REPUBLIC OF THE PHILIPPINES|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/.test(normalized),labelledBook=upper(labeled(normalized,'SRB|SEAMAN(?: BOOK)?|SEAFARER(?: BOOK)?|CDC|BOOK NO','[A-Z0-9-]{5,18}')).replace(/[^A-Z0-9]/g,''),philippineBooks=isPhilippine?[...normalized.matchAll(/\b[A-Z]\s*\d(?:[\s-]*\d){6}\b/g)].map(match=>upper(match[0]).replace(/[^A-Z0-9]/g,'')):[];
     return {confidence:Math.min(ocrConfidence,75),machineChecks:[],fields:{
-      name:labeled(normalized,'NAME|GIVEN NAMES?|SURNAME','[A-Z][A-Z ]{3,50}'),
+      name:isPhilippine?printedSeamanName(text):labeled(normalized,'NAME|GIVEN NAMES?|SURNAME',"[A-Z][A-Z .,'/-]{3,50}"),
       seamanBook:labelledBook||philippineBooks.at(-1)||'',
       seamanBookExpiry:parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|VALID UNTIL|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
     }};
@@ -156,6 +175,31 @@
     }finally{await worker.terminate();}
     return {text:values.join('\n'),confidence:confidences.reduce((sum,value)=>sum+value,0)/Math.max(1,confidences.length)};
   }
+  async function prepareFilipinoSeamanNameAreas(file){
+    if(typeof createImageBitmap!=='function')return [];
+    const bitmap=await createImageBitmap(file),specs=[['legacy-compact',.305,.13,.32,.075],['legacy-full',.305,.19,.32,.075],['srb',.315,.275,.48,.10]],fields=[];
+    for(const [key,x,y,width,height] of specs){
+      const sourceX=Math.round(bitmap.width*x),sourceY=Math.round(bitmap.height*y),sourceWidth=Math.round(bitmap.width*width),sourceHeight=Math.round(bitmap.height*height),scale=Math.min(6,Math.max(3,1500/sourceWidth)),canvas=document.createElement('canvas');
+      canvas.width=Math.round(sourceWidth*scale);canvas.height=Math.round(sourceHeight*scale);
+      const context=canvas.getContext('2d',{willReadFrequently:true});context.drawImage(bitmap,sourceX,sourceY,sourceWidth,sourceHeight,0,0,canvas.width,canvas.height);
+      const image=context.getImageData(0,0,canvas.width,canvas.height),pixels=image.data;
+      for(let offset=0;offset<pixels.length;offset+=4){const red=pixels[offset],green=pixels[offset+1],blue=pixels[offset+2],annotation=red>150&&red-green>45&&red-blue>45,gray=annotation?255:Math.max(0,Math.min(255,(.299*red+.587*green+.114*blue-128)*1.5+128));pixels[offset]=gray;pixels[offset+1]=gray;pixels[offset+2]=gray;}
+      context.putImageData(image,0,0);fields.push([key,canvas]);
+    }
+    bitmap.close?.();return fields;
+  }
+  async function recognizeFilipinoSeamanName(file,onProgress){
+    const areas=await prepareFilipinoSeamanNameAreas(file);if(!areas.length)return {text:'',confidence:0};
+    const api=await tesseract(),blocked=/(?:DATE|BIRTH|PLACE|HEIGHT|WEIGHT|EYES|HAIR|VALID|SEX|MARITIME|REPUBLIC|AUTHORITY|SRB)/,worker=await api.createWorker('eng'),candidates=[];
+    try{
+      await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ ,.-'"});
+      for(let index=0;index<areas.length;index++){
+        const [key,canvas]=areas[index],output=await worker.recognize(canvas),value=clean(upper(output.data.text).replace(/[^A-Z ,.'-]/g,' ')).replace(/^NAME(?: \([^)]*\))?\s*/,'');
+        if(value&&!blocked.test(value)&&value.split(/\s+/).filter(Boolean).length>=2)candidates.push({key,value,confidence:Number(output.data.confidence||0)});onProgress?.(Math.round(((index+1)/areas.length)*100));
+      }
+    }finally{await worker.terminate();}
+    const candidate=candidates[0];return {text:candidate?`SEAMAN NAME: ${candidate.value}`:'',confidence:candidate?.confidence||0};
+  }
   async function readPdf(file,onProgress){
     const pdfjs=await pdfLibrary(),pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='',confidence=100;const images=[];
     for(let pageNumber=1;pageNumber<=Math.min(pdf.numPages,3);pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent();text+='\n'+content.items.map(item=>item.str).join(' ');if(clean(text).length<80){const viewport=page.getViewport({scale:2}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;images.push(canvas);}}
@@ -175,7 +219,7 @@
         const nameArea=await recognize(await preparePassportNameArea(file),progress=>onProgress?.(35+Math.round(progress*.65)),{tessedit_pageseg_mode:'6'});source={text:`${nameArea.text}\n${full.text}`,confidence:Math.max(full.confidence,nameArea.confidence)};
       }
     }else if(type==='seamanBook'){
-      const full=await recognize(file,progress=>onProgress?.(Math.round(progress*.45))),isPhilippine=/(?:PHILIPPINES|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/i.test(full.text),numbers=isPhilippine?await recognizeFilipinoSeamanNumbers(file,progress=>onProgress?.(45+Math.round(progress*.55))):{text:'',confidence:0};source={text:`${numbers.text}\n${full.text}`,confidence:Math.max(full.confidence,numbers.confidence)};
+      const full=await recognize(file,progress=>onProgress?.(Math.round(progress*.35))),isPhilippine=/(?:PHILIPPINES|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/i.test(full.text),numbers=isPhilippine?await recognizeFilipinoSeamanNumbers(file,progress=>onProgress?.(35+Math.round(progress*.3))):{text:'',confidence:0},name=isPhilippine?await recognizeFilipinoSeamanName(file,progress=>onProgress?.(65+Math.round(progress*.35))):{text:'',confidence:0};source={text:`${numbers.text}\n${name.text}\n${full.text}`,confidence:Math.max(full.confidence,numbers.confidence,name.confidence)};
     }else source=await recognize(file,onProgress);
     const result=extractFromText(type,source.text,source.confidence);result.fileName=file.name;result.checkedAt=new Date().toISOString();return result;
   }

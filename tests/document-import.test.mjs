@@ -106,6 +106,16 @@ test('reads the Filipino seaman book number from the lower legacy field',()=>{
   assert.equal(result.fields.seamanBook,'C1271467');
 });
 
+test('keeps the Filipino middle initial when reading a legacy seaman book name',()=>{
+  const result=reader.extractFromText('seamanBook','REPUBLIC OF THE PHILIPPINES\nNAME\nALPHA B. CHARLIE\nC1271467',94);
+  assert.equal(result.fields.name,'ALPHA B. CHARLIE');
+});
+
+test('converts a full Filipino middle name to its initial in the new SRB name order',()=>{
+  const result=reader.extractFromText('seamanBook','REPUBLIC OF THE PHILIPPINES\nSRB NO. A0578403\nNAME (Last Name, First Name, Middle Name)\nCHARLIE, ALPHA BRAVO',94);
+  assert.equal(result.fields.name,'ALPHA B. CHARLIE');
+});
+
 test('creates a flight row from a ticket without replacing existing flights',()=>{
   const result=reader.extractFromText('flightTicket','PASSENGER NAME: DEMO CREW\nFLIGHT: TG 123\nBKK - HKT\n21 OCT 2026\n08:30 09:50\nPNR: DEMO1',96);
   assert.equal(result.fields.name,'DEMO CREW');
