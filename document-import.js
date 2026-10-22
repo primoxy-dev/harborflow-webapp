@@ -3,7 +3,7 @@
   const PDF_JS='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
   const PDF_WORKER='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
   const TESSERACT_JS='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-  const SIX_MONTHS_DAYS=183,MAX_FILE_BYTES=15*1024*1024;
+  const SIX_MONTHS_DAYS=183,MAX_FILE_BYTES=30*1024*1024;
   let pdfPromise,tesseractPromise;
   const clean=value=>String(value||'').replace(/\s+/g,' ').trim();
   const upper=value=>clean(value).toUpperCase();
@@ -56,7 +56,8 @@
   function extractFlight(text,ocrConfidence=100){
     const normalized=upper(text),route=normalized.match(/\b([A-Z]{3})\s*(?:-|TO|→|>)\s*([A-Z]{3})\b/),labeledNumber=normalized.match(/(?:FLIGHT(?: NO)?|FLT)\s*[:#-]?\s*([A-Z0-9]{2,3})\s*([0-9]{2,4}[A-Z]?)/),fallbackNumber=normalized.match(/\b([A-Z0-9]{2,3})\s*([0-9]{2,4}[A-Z]?)\b/),numberParts=labeledNumber||fallbackNumber,times=[...normalized.matchAll(/\b([01]\d|2[0-3]):([0-5]\d)\b/g)].map(match=>match[0]);
     const dateMatch=normalized.match(/\b\d{1,2}[.\-/ ](?:[A-Z]{3,9}|\d{1,2})[.\-/ ]\d{2,4}\b/);
-    return {confidence:Math.min(ocrConfidence,72),machineChecks:[],flight:{airline:numberParts?.[1]||'',number:numberParts?.[2]||'',date:dateMatch?upper(dateMatch[0]).replace(/[ .\-/]/g,'').slice(0,5):'',from:route?.[1]||'',to:route?.[2]||'',departure:times[0]||'',arrival:times[1]||'',booking:upper(labeled(normalized,'PNR|BOOKING REFERENCE|RESERVATION CODE','[A-Z0-9]{5,8}')).replace(/\s/g,'')}};
+    const nameLine=String(text).split(/\r?\n/).map(line=>upper(line)).map(line=>line.match(/(?:PASSENGER(?: NAME)?|NAME OF PASSENGER|TRAVELL?ER)\s*[:#-]?\s*([A-Z][A-Z ,.'\/-]{3,60})/)?.[1]||'').find(Boolean)||'';
+    return {confidence:Math.min(ocrConfidence,72),machineChecks:[],fields:{name:clean(nameLine.replace(/\b(?:MR|MRS|MS|MISS|CAPT|CAPTAIN)\b\.?/g,' '))},flight:{airline:numberParts?.[1]||'',number:numberParts?.[2]||'',date:dateMatch?upper(dateMatch[0]).replace(/[ .\-/]/g,'').slice(0,5):'',from:route?.[1]||'',to:route?.[2]||'',departure:times[0]||'',arrival:times[1]||'',booking:upper(labeled(normalized,'PNR|BOOKING REFERENCE|RESERVATION CODE','[A-Z0-9]{5,8}')).replace(/\s/g,'')}};
   }
   function extractFromText(type,text,confidence=100){
     const result=type==='passport'?extractPassport(text,confidence):type==='seamanBook'?extractSeaman(text,confidence):extractFlight(text,confidence);
@@ -73,7 +74,7 @@
     return {text,confidence};
   }
   async function read(file,type,onProgress){
-    if(!file)throw Error('Please choose a document.');if(file.size>MAX_FILE_BYTES)throw Error('File is larger than 15 MB.');
+    if(!file)throw Error('Please choose a document.');if(file.size>MAX_FILE_BYTES)throw Error('File is larger than 30 MB.');
     const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name),image=/^image\//.test(file.type)||/\.(png|jpe?g|webp|bmp)$/i.test(file.name);if(!pdf&&!image)throw Error('Use a PDF, JPG, PNG, WebP or BMP file.');
     onProgress?.(0);const source=pdf?await readPdf(file,onProgress):await recognize(file,onProgress),result=extractFromText(type,source.text,source.confidence);result.fileName=file.name;result.checkedAt=new Date().toISOString();return result;
   }
@@ -99,5 +100,5 @@
     const status=warnings.length?'warning':'ok';next.documentChecks[result.type]={fileName:result.fileName||'',confidence:Math.round(result.confidence||0),checkedAt:result.checkedAt||new Date().toISOString(),status,messages:warnings,changes,expiry:result.type==='passport'?result.fields?.passportExpiry:result.type==='seamanBook'?result.fields?.seamanBookExpiry:''};
     return {person:next,changes,conflicts,warnings,status};
   }
-  window.HarborFlowDocumentImport={read,extractFromText,applyToPerson,parseDate,daysUntil};
+  window.HarborFlowDocumentImport={read,extractFromText,applyToPerson,parseDate,daysUntil,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
 })();

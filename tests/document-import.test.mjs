@@ -42,7 +42,8 @@ test('reads a seaman book number and adds the missing expiry field',()=>{
 });
 
 test('creates a flight row from a ticket without replacing existing flights',()=>{
-  const result=reader.extractFromText('flightTicket','FLIGHT: TG 123\nBKK - HKT\n21 OCT 2026\n08:30 09:50\nPNR: DEMO1',96);
+  const result=reader.extractFromText('flightTicket','PASSENGER NAME: DEMO CREW\nFLIGHT: TG 123\nBKK - HKT\n21 OCT 2026\n08:30 09:50\nPNR: DEMO1',96);
+  assert.equal(result.fields.name,'DEMO CREW');
   const applied=reader.applyToPerson({flights:[{airline:'SQ',number:'711'}]},result);
   assert.equal(applied.person.flights.length,2);
   assert.deepEqual({...applied.person.flights[1]}, {airline:'TG',number:'123',date:'21OCT',from:'BKK',to:'HKT',departure:'08:30',arrival:'09:50',booking:'DEMO1'});
