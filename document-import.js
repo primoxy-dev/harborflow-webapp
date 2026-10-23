@@ -133,6 +133,12 @@
     {x:.48,y:.46,width:.50,height:.53},
     {x:.02,y:.46,width:.50,height:.53}
   ];
+  const combinedPassportRegions=()=>[
+    {x:0,y:.56,width:.42,height:.42},
+    {x:.58,y:.56,width:.42,height:.42},
+    {x:0,y:.46,width:.50,height:.53},
+    {x:.50,y:.46,width:.50,height:.53}
+  ];
   function loadScript(src){return new Promise((resolve,reject)=>{const existing=document.querySelector(`script[src="${src}"]`);if(existing){if(window.Tesseract)return resolve();existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',()=>reject(Error('OCR library could not be loaded.')),{once:true});return;}const script=document.createElement('script');script.src=src;script.crossOrigin='anonymous';script.onload=resolve;script.onerror=()=>reject(Error('OCR library could not be loaded.'));document.head.append(script);});}
   async function pdfLibrary(){if(!pdfPromise)pdfPromise=import(PDF_JS).then(module=>{module.GlobalWorkerOptions.workerSrc=PDF_WORKER;return module;});return pdfPromise;}
   async function tesseract(){if(!tesseractPromise)tesseractPromise=loadScript(TESSERACT_JS).then(()=>window.Tesseract);return tesseractPromise;}
@@ -174,18 +180,18 @@
   }
   async function recognizePhilippineNameFields(file,onProgress){
     const areas=await preparePhilippineNameFields(file);if(!areas.length)return {text:'',confidence:0};
-    const api=await tesseract(),values=[],confidences=[],worker=await api.createWorker('eng');
+    const api=await tesseract(),values=[],fields={},confidences=[],worker=await api.createWorker('eng');
     try{
       await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ .-'"});
       for(let index=0;index<areas.length;index++){
-        const [key,canvas]=areas[index],output=await worker.recognize(canvas),value=clean(upper(output.data.text).replace(/[^A-Z .'-]/g,' ')),labels={surname:'SURNAME',given:'GIVEN NAMES',middle:'MIDDLE NAME'};values.push(`${labels[key]}: ${value}`);confidences.push(Number(output.data.confidence||0));onProgress?.(Math.round(((index+1)/areas.length)*100));
+        const [key,canvas]=areas[index],output=await worker.recognize(canvas),value=clean(upper(output.data.text).replace(/[^A-Z .'-]/g,' ')),labels={surname:'SURNAME',given:'GIVEN NAMES',middle:'MIDDLE NAME'};fields[key]=value;values.push(`${labels[key]}: ${value}`);confidences.push(Number(output.data.confidence||0));onProgress?.(Math.round(((index+1)/areas.length)*100));
       }
     }finally{await worker.terminate();}
-    return {text:values.join('\n'),confidence:confidences.reduce((sum,value)=>sum+value,0)/confidences.length};
+    return {text:values.join('\n'),fields,confidence:confidences.reduce((sum,value)=>sum+value,0)/confidences.length};
   }
   async function prepareFilipinoSeamanNumberAreas(file){
     if(typeof createImageBitmap!=='function')return [];
-    const bitmap=await createImageBitmap(file),specs=[['legacy',.305,.715,.13,.055],['srb',.82,.165,.17,.06]],fields=[];
+    const bitmap=await createImageBitmap(file),specs=[['legacy',.29,.65,.22,.12],['srb',.82,.165,.17,.06]],fields=[];
     for(const [key,x,y,width,height] of specs){
       const sourceX=Math.round(bitmap.width*x),sourceY=Math.round(bitmap.height*y),sourceWidth=Math.round(bitmap.width*width),sourceHeight=Math.round(bitmap.height*height),scale=Math.min(7,Math.max(3,1400/sourceWidth)),canvas=document.createElement('canvas');
       canvas.width=Math.round(sourceWidth*scale);canvas.height=Math.round(sourceHeight*scale);
@@ -199,7 +205,7 @@
     try{
       await worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'});
       for(let index=0;index<areas.length;index++){
-        const [,canvas]=areas[index],output=await worker.recognize(canvas),compact=upper(output.data.text).replace(/[^A-Z0-9]/g,''),number=compact.match(/[A-Z]\d{7}/)?.[0]||'';
+        const [key,canvas]=areas[index];await worker.setParameters({tessedit_pageseg_mode:key==='legacy'?'6':'7',tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'});const output=await worker.recognize(canvas),compact=upper(output.data.text).replace(/[^A-Z0-9]/g,''),number=compact.match(/[A-Z]\d{7}/)?.[0]||'';
         if(number)values.push(`SRB NO: ${number}`);confidences.push(Number(output.data.confidence||0));onProgress?.(Math.round(((index+1)/areas.length)*100));
       }
     }finally{await worker.terminate();}
@@ -242,6 +248,19 @@
     }
     return best;
   }
+  function reconcileCombinedPassportFields(printed,mrz){
+    const fields={...(printed||{})},reliable=mrz&&mrz.checks?.length===3&&mrz.checks.every(Boolean)&&!noisyMrzName(clean(`${mrz.given||''} ${mrz.surname||''}`));if(!reliable)return fields;
+    const printedGiven=clean(fields.given),mrzGiven=clean(mrz.given),withoutLeading=mrzGiven.slice(1),consensus=withoutLeading.startsWith(printedGiven)&&withoutLeading.length-printedGiven.length<=1?withoutLeading:mrzGiven.startsWith(printedGiven)&&mrzGiven.length-printedGiven.length<=1?mrzGiven:printedGiven;
+    fields.given=consensus||mrzGiven;fields.surname=clean(mrz.surname)||fields.surname;return fields;
+  }
+  async function recognizeCombinedPassport(image,onProgress,knownFull){
+    let best={text:knownFull.text,confidence:knownFull.confidence,score:0};const regions=combinedPassportRegions();
+    for(let index=0;index<regions.length;index++){
+      const start=index/regions.length,end=(index+1)/regions.length,fields=await recognizePhilippineNameFields(cropCanvas(image,regions[index]),progress=>onProgress?.(Math.round((start+(progress/100)*(end-start))*100))),corrected=reconcileCombinedPassportFields(fields.fields,mrzPassport(knownFull.text)),correctedText=`SURNAME: ${corrected.surname||''}\nGIVEN NAMES: ${corrected.given||''}\nMIDDLE NAME: ${corrected.middle||''}`,source={text:`${correctedText}\n${knownFull.text}`,confidence:Math.max(knownFull.confidence,fields.confidence)},result=extractPassport(source.text,source.confidence),printedCount=Object.values(result.printedFieldsDetected||{}).filter(Boolean).length,score=(result.fields.name?10:0)+printedCount*5+fields.confidence/100;
+      if(score>best.score)best={...source,score};if(printedCount===3)return source;
+    }
+    return best;
+  }
   const looksCombinedDocuments=text=>/(?:\bPASSPORT\b|P<[A-Z]{3})/i.test(text)&&/(?:SEAFARER|MARITIME INDUSTRY AUTHORITY|\bSRB\b|VALID UNTIL)/i.test(text);
   async function readPdf(file,onProgress,type){
     const pdfjs=await pdfLibrary(),pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='',confidence=100,combined=false;const images=[];
@@ -249,7 +268,7 @@
     if(images.length){const values=[];for(let index=0;index<images.length;index++){
       const pageStart=index/images.length,pageEnd=(index+1)/images.length,pageProgress=value=>onProgress?.(Math.round((pageStart+(value/100)*(pageEnd-pageStart))*100)),oriented=await recognizeBestOrientation(images[index],type,value=>pageProgress(value*.6));let pageText=oriented.result.text,pageConfidence=oriented.result.confidence;
       const isCombined=looksCombinedDocuments(pageText);combined=combined||isCombined;
-      if(isCombined){const seaman=await recognizeCombinedSeaman(oriented.canvas,value=>pageProgress(60+value*.4));pageText+=`\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,seaman.confidence);}else if(type==='seamanBook'){const seaman=await recognizeSeamanSource(oriented.canvas,value=>pageProgress(60+value*.4),oriented.result);pageText+=`\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,seaman.confidence);}text+='\n'+pageText;values.push(pageConfidence);
+      if(isCombined){const passport=await recognizeCombinedPassport(oriented.canvas,value=>pageProgress(60+value*.2),oriented.result),seaman=await recognizeCombinedSeaman(oriented.canvas,value=>pageProgress(80+value*.2));pageText=`${passport.text}\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,passport.confidence,seaman.confidence);}else if(type==='seamanBook'){const seaman=await recognizeSeamanSource(oriented.canvas,value=>pageProgress(60+value*.4),oriented.result);pageText+=`\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,seaman.confidence);}text+='\n'+pageText;values.push(pageConfidence);
     }confidence=values.reduce((sum,value)=>sum+value,0)/Math.max(1,values.length);}
     return {text,confidence,combined};
   }
@@ -294,5 +313,5 @@
     const status=warnings.length?'warning':'ok';next.documentChecks[result.type]={fileName:result.fileName||'',confidence:Math.round(result.confidence||0),checkedAt:result.checkedAt||new Date().toISOString(),status,messages:warnings,changes,expiry:result.type==='passport'?result.fields?.passportExpiry:result.type==='seamanBook'?result.fields?.seamanBookExpiry:''};
     return {person:next,changes,conflicts,warnings,status};
   }
-  window.HarborFlowDocumentImport={read,extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,documentSignal,mergeCombinedResults,combinedIdentityRegions,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
+  window.HarborFlowDocumentImport={read,extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,documentSignal,mergeCombinedResults,combinedIdentityRegions,combinedPassportRegions,reconcileCombinedPassportFields,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
 })();

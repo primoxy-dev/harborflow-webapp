@@ -141,6 +141,23 @@ test('checks the lower-right identity page first in a combined document scan',()
   assert.deepEqual({...reader.combinedIdentityRegions()[0]},{x:.42,y:.58,width:.44,height:.415});
 });
 
+test('checks the lower-left passport data page first in a combined document scan',()=>{
+  assert.deepEqual({...reader.combinedPassportRegions()[0]},{x:0,y:.56,width:.42,height:.42});
+});
+
+test('keeps the labelled Filipino seaman book number below the numeric MARINA number',()=>{
+  const result=reader.extractFromText('seamanBook','REPUBLIC OF THE PHILIPPINES\nNAME\nRUEL L. EPE\n1358735\nC1271467',94);
+  assert.equal(result.fields.seamanBook,'C1271467');
+});
+
+test('reconciles noisy combined-scan passport fields with a valid MRZ',()=>{
+  const result=reader.reconcileCombinedPassportFields(
+    {surname:'BREEN',given:'RUE',middle:'LABANDERO'},
+    {surname:'EPE',given:'KRUEL',checks:[true,true,true]}
+  );
+  assert.deepEqual({...result},{surname:'EPE',given:'RUEL',middle:'LABANDERO'});
+});
+
 test('uses only Filipino given name and surname from a legacy seaman book',()=>{
   const result=reader.extractFromText('seamanBook','REPUBLIC OF THE PHILIPPINES\nNAME\nALPHA B. CHARLIE\nC1271467',94);
   assert.equal(result.fields.name,'ALPHA CHARLIE');
