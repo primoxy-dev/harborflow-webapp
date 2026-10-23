@@ -176,3 +176,20 @@ test('creates a flight row from a ticket without replacing existing flights',()=
   assert.equal(applied.person.flights.length,2);
   assert.deepEqual({...applied.person.flights[1]}, {airline:'TG',number:'123',date:'21OCT',from:'BKK',to:'HKT',departure:'08:30',arrival:'09:50',booking:'DEMO1'});
 });
+
+test('reads an Amadeus marine travel ticket and matches surname-first traveler names',()=>{
+  reader.setFlightCodeData({
+    airlines:[['PR','PHILIPPINE AIRLINES','','PHILIPPINES']],
+    airports:[['MNL','NINOY AQUINO INTERNATIONAL AIRPORT','PASAY','PH'],['BKK','SUVARNABHUMI AIRPORT','BANGKOK','TH']]
+  });
+  const result=reader.extractFromText('flightTicket',[
+    'Your trip Booking ref: 5GIPCV Document Issue Date: 22 October 2026',
+    'Traveler EPE/RUEL LABANDERO Agency GLOBAL MARINE TRAVEL',
+    'Monday 26 October 2026 Philippine Airlines PR 736',
+    'Departure 26 October 16:10 Manila, (Ninoy Aquino Intl) (+) Terminal: 1',
+    'Arrival 26 October 18:45 Bangkok, (Suvarnabhumi Intl) (+)',
+    'Duration 03:35 (Non stop)'
+  ].join(' '),96);
+  assert.equal(result.fields.name,'RUEL LABANDERO EPE');
+  assert.deepEqual({...result.flight},{airline:'PR',number:'736',date:'26OCT',from:'MNL',to:'BKK',departure:'16:10',arrival:'18:45',booking:'5GIPCV'});
+});

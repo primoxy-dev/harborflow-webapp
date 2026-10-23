@@ -9,7 +9,7 @@ const root=process.cwd();
 const job={id:'demo-job',data:{jobNo:'DEMO-IMPORT',vessel:'DEMO VESSEL',eta:'2026-10-22T06:00',status:'Open'}};
 const service={id:'crew-change',job_id:job.id,seq:1,data:{type:'Crew Change',status:'In Progress'}};
 const person={id:'crew-1',kind:'crew',data:{name:'DEMO CREW',category:'On-signers',serviceIds:[service.id],passport:'KEEP-ME',flights:[]}};
-const filipinoPerson={id:'crew-2',kind:'crew',data:{name:'MR. RUEL L. EPE',category:'On-signers',serviceIds:[service.id],flights:[]}};
+const filipinoPerson={id:'crew-2',kind:'crew',data:{name:'MR. RUEL LABANDERO EPE',category:'On-signers',serviceIds:[service.id],flights:[]}};
 const people=[person,filipinoPerson];
 const browser=await chromium.launch({channel:'chrome',headless:true});
 try{
@@ -37,7 +37,7 @@ try{
       if(file.name.includes('no-name'))return {type,fileName:file.name,confidence:90,checkedAt:new Date().toISOString(),machineChecks:[],fields:{passport:'UNKNOWN'}};
       if(type==='passport')return {type,fileName:file.name,confidence:74,checkedAt:new Date().toISOString(),machineChecks:[true,false,true],nameNeedsTitle:true,nameWithoutTitle:'CREW DEMO',fields:{name:'CREW DEMO',passport:'P1234567',passportExpiry:'2027-01-10',nationality:'THAI',dob:'1990-02-03'}};
       if(type==='seamanBook')return {type,fileName:file.name,confidence:92,checkedAt:new Date().toISOString(),machineChecks:[],matchStrategy:'given-surname',fields:{name:file.name.includes('unmatched')?'OTHER CREW':'RUEL EPE',seamanBook:'SB999999',seamanBookExpiry:'2030-01-01'}};
-      return {type,fileName:file.name,confidence:92,checkedAt:new Date().toISOString(),machineChecks:[],fields:{name:'CREW DEMO'},flight:{airline:'TG',number:'123',date:'24OCT',from:'BKK',to:'HKT',departure:'08:30',arrival:'09:50',booking:'DEMO1'}};};
+      return {type,fileName:file.name,confidence:92,checkedAt:new Date().toISOString(),machineChecks:[],fields:{name:'RUEL LABANDERO EPE'},flight:{airline:'PR',number:'736',date:'26OCT',from:'MNL',to:'BKK',departure:'16:10',arrival:'18:45',booking:'5GIPCV'}};};
   });
   await page.locator('[data-open-job]').first().click();
   await page.locator('[data-open-service="crew-change"]').click();
@@ -59,7 +59,7 @@ try{
   await page.locator('[data-doc-file="seamanBook"]').setInputFiles({name:'seaman-match.pdf',mimeType:'application/pdf',buffer:Buffer.from('demo')});
   await page.getByText('Batch complete').waitFor();
   assert.equal(people.length,2);
-  assert.equal(filipinoPerson.data.name,'MR. RUEL L. EPE');
+  assert.equal(filipinoPerson.data.name,'MR. RUEL LABANDERO EPE');
   assert.equal(filipinoPerson.data.seamanBook,'SB999999');
   await page.locator('[data-doc-file="seamanBook"]').setInputFiles({name:'seaman-unmatched.pdf',mimeType:'application/pdf',buffer:Buffer.from('demo')});
   await page.getByText('Batch complete').waitFor();
@@ -67,9 +67,10 @@ try{
   assert.match(await page.locator('.hfo-doc-batch-results').innerText(),/No existing crew matched the Given name and Surname/);
   await page.locator('[data-doc-file="flightTicket"]').setInputFiles({name:'ticket-demo.pdf',mimeType:'application/pdf',buffer:Buffer.from('demo')});
   await page.getByText('Batch complete').waitFor();
-  assert.equal(people.length,2,'reversed name order must match the existing crew');
-  assert.equal(person.data.flights[0].airline,'TG');
-  assert.equal(person.data.flights[0].from,'BKK');
+  assert.equal(people.length,2,'title-free ticket name must match the existing crew');
+  assert.equal(filipinoPerson.data.flights[0].airline,'PR');
+  assert.equal(filipinoPerson.data.flights[0].from,'MNL');
+  assert.equal(filipinoPerson.data.flights[0].booking,'5GIPCV');
   await mkdir(path.join(root,'output/document-import-qa'),{recursive:true});
   await page.screenshot({path:path.join(root,'output/document-import-qa/crew-document-import.png'),fullPage:true});
   await page.setViewportSize({width:390,height:900});

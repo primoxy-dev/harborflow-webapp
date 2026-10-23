@@ -4,9 +4,15 @@
   const PDF_WORKER='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
   const TESSERACT_JS='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
   const SIX_MONTHS_DAYS=183,MAX_FILE_BYTES=30*1024*1024;
-  let pdfPromise,tesseractPromise;
+  let pdfPromise,tesseractPromise,flightCodePromise,flightCodeData={airlines:[],airports:[]};
   const clean=value=>String(value||'').replace(/\s+/g,' ').trim();
   const upper=value=>clean(value).toUpperCase();
+  function setFlightCodeData(value){flightCodeData={airlines:Array.isArray(value?.airlines)?value.airlines:[],airports:Array.isArray(value?.airports)?value.airports:[]};return flightCodeData;}
+  async function loadFlightCodeData(){
+    if(flightCodeData.airports.length||flightCodePromise)return flightCodePromise||flightCodeData;
+    if(typeof fetch!=='function')return flightCodeData;
+    flightCodePromise=fetch('/data/flight-codes.json',{cache:'no-cache'}).then(response=>response.ok?response.json():Promise.reject(Error('Flight code list unavailable'))).then(setFlightCodeData).catch(()=>flightCodeData);return flightCodePromise;
+  }
   const NATIONALITIES={AFG:'AFGHAN',ALB:'ALBANIAN',DZA:'ALGERIAN',USA:'AMERICAN',AGO:'ANGOLAN',ARG:'ARGENTINIAN',ARM:'ARMENIAN',AUS:'AUSTRALIAN',AUT:'AUSTRIAN',AZE:'AZERBAIJANI',BHR:'BAHRAINI',BGD:'BANGLADESHI',BLR:'BELARUSIAN',BEL:'BELGIAN',BOL:'BOLIVIAN',BIH:'BOSNIAN',BRA:'BRAZILIAN',GBR:'BRITISH',BGR:'BULGARIAN',KHM:'CAMBODIAN',CMR:'CAMEROONIAN',CAN:'CANADIAN',CHL:'CHILEAN',CHN:'CHINESE',COL:'COLOMBIAN',HRV:'CROATIAN',CUB:'CUBAN',CYP:'CYPRIOT',CZE:'CZECH',DNK:'DANISH',NLD:'DUTCH',ECU:'ECUADORIAN',EGY:'EGYPTIAN',ARE:'EMIRATI',EST:'ESTONIAN',ETH:'ETHIOPIAN',FJI:'FIJIAN',PHL:'FILIPINO',FIN:'FINNISH',FRA:'FRENCH',GEO:'GEORGIAN',DEU:'GERMAN',GHA:'GHANAIAN',GRC:'GREEK',HUN:'HUNGARIAN',ISL:'ICELANDIC',IND:'INDIAN',IDN:'INDONESIAN',IRN:'IRANIAN',IRQ:'IRAQI',IRL:'IRISH',ISR:'ISRAELI',ITA:'ITALIAN',JAM:'JAMAICAN',JPN:'JAPANESE',JOR:'JORDANIAN',KAZ:'KAZAKH',KEN:'KENYAN',KOR:'KOREAN',PRK:'KOREAN',KWT:'KUWAITI',LAO:'LAO',LVA:'LATVIAN',LBN:'LEBANESE',LBR:'LIBERIAN',LTU:'LITHUANIAN',MDG:'MALAGASY',MYS:'MALAYSIAN',MDV:'MALDIVIAN',MLT:'MALTESE',MEX:'MEXICAN',MNG:'MONGOLIAN',MAR:'MOROCCAN',MOZ:'MOZAMBICAN',MMR:'MYANMAR',NPL:'NEPALESE',NZL:'NEW ZEALANDER',NGA:'NIGERIAN',NOR:'NORWEGIAN',OMN:'OMANI',PAK:'PAKISTANI',PAN:'PANAMANIAN',PER:'PERUVIAN',POL:'POLISH',PRT:'PORTUGUESE',QAT:'QATARI',ROU:'ROMANIAN',RUS:'RUSSIAN',SAU:'SAUDI',SEN:'SENEGALESE',SRB:'SERBIAN',SGP:'SINGAPOREAN',SVK:'SLOVAK',SVN:'SLOVENIAN',ZAF:'SOUTH AFRICAN',ESP:'SPANISH',LKA:'SRI LANKAN',SDN:'SUDANESE',SWE:'SWEDISH',CHE:'SWISS',SYR:'SYRIAN',TWN:'TAIWANESE',TZA:'TANZANIAN',THA:'THAI',TUN:'TUNISIAN',TUR:'TURKISH',UGA:'UGANDAN',UKR:'UKRAINIAN',URY:'URUGUAYAN',UZB:'UZBEK',VEN:'VENEZUELAN',VNM:'VIETNAMESE',YEM:'YEMENI',ZMB:'ZAMBIAN',ZWE:'ZIMBABWEAN'};
   const NATIONALITY_ALIASES={THAILAND:'THAI',PHILIPPINES:'FILIPINO','UNITED STATES':'AMERICAN','UNITED STATES OF AMERICA':'AMERICAN','UNITED KINGDOM':'BRITISH',ENGLAND:'BRITISH',VIETNAM:'VIETNAMESE',INDONESIA:'INDONESIAN',INDIA:'INDIAN',CHINA:'CHINESE',MYANMAR:'MYANMAR',BURMA:'MYANMAR','SOUTH KOREA':'KOREAN','REPUBLIC OF KOREA':'KOREAN',RUSSIA:'RUSSIAN',UKRAINE:'UKRAINIAN'};
   const nationalityChoice=value=>{const raw=upper(value).replace(/[^A-Z ]/g,'').trim();if(NATIONALITIES[raw])return NATIONALITIES[raw];if(NATIONALITY_ALIASES[raw])return NATIONALITY_ALIASES[raw];if(Object.values(NATIONALITIES).includes(raw))return raw;const alias=Object.keys(NATIONALITY_ALIASES).find(value=>raw.includes(value));return alias?NATIONALITY_ALIASES[alias]:raw;};
@@ -108,11 +114,28 @@
       seamanBookExpiry:parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|VALID UNTIL|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
     }};
   }
+  const MONTHS={JANUARY:'JAN',FEBRUARY:'FEB',MARCH:'MAR',APRIL:'APR',MAY:'MAY',JUNE:'JUN',JULY:'JUL',AUGUST:'AUG',SEPTEMBER:'SEP',OCTOBER:'OCT',NOVEMBER:'NOV',DECEMBER:'DEC'};
+  const cleanTicketName=value=>{
+    const source=clean(upper(value).replace(/\b(?:MR|MRS|MS|MISS|CAPT|CAPTAIN)\b\.?/g,' '));if(!source)return '';
+    if(source.includes('/')){const [surname,...given]=source.split('/'),givenNames=clean(given.join(' ').replace(/[^A-Z .'-]/g,' '));return clean(`${givenNames} ${clean(surname.replace(/[^A-Z .'-]/g,' '))}`);}
+    if(source.includes(',')){const [surname,...given]=source.split(','),givenNames=clean(given.join(' ').replace(/[^A-Z .'-]/g,' '));return clean(`${givenNames} ${clean(surname.replace(/[^A-Z .'-]/g,' '))}`);}
+    return clean(source.replace(/[^A-Z .'-]/g,' '));
+  };
+  const flightLookupText=value=>upper(value).replace(/\bINTL\b/g,'INTERNATIONAL').replace(/\bAIRPORT\b/g,' ').replace(/[^A-Z0-9]+/g,' ').trim();
+  function airportCodeFor(value){
+    const source=flightLookupText(value),direct=source.match(/(?:^|\s)([A-Z]{3})(?:\s|$)/)?.[1];if(direct&&flightCodeData.airports.some(row=>row[0]===direct))return direct;
+    let best='',score=0;for(const row of flightCodeData.airports){const name=flightLookupText(row[1]),city=flightLookupText(row[2]);let candidate=0;if(name&&source.includes(name))candidate=100+name.length;else if(city&&source.includes(city))candidate=50+city.length;if(candidate>score){score=candidate;best=row[0];}}
+    return best;
+  }
+  function airlineCodeFor(value){const source=flightLookupText(value);let best='',score=0;for(const row of flightCodeData.airlines){const names=[row[1],row[2]].map(flightLookupText).filter(Boolean);for(const name of names)if(source.includes(name)&&name.length>score){score=name.length;best=row[0];}}return best;}
+  const ticketDate=(day,month)=>`${String(day||'').padStart(2,'0')}${MONTHS[upper(month)]||upper(month).slice(0,3)}`;
   function extractFlight(text,ocrConfidence=100){
-    const normalized=upper(text),route=normalized.match(/\b([A-Z]{3})\s*(?:-|TO|→|>)\s*([A-Z]{3})\b/),labeledNumber=normalized.match(/(?:FLIGHT(?: NO)?|FLT)\s*[:#-]?\s*([A-Z0-9]{2,3})\s*([0-9]{2,4}[A-Z]?)/),fallbackNumber=normalized.match(/\b([A-Z0-9]{2,3})\s*([0-9]{2,4}[A-Z]?)\b/),numberParts=labeledNumber||fallbackNumber,times=[...normalized.matchAll(/\b([01]\d|2[0-3]):([0-5]\d)\b/g)].map(match=>match[0]);
-    const dateMatch=normalized.match(/\b\d{1,2}[.\-/ ](?:[A-Z]{3,9}|\d{1,2})[.\-/ ]\d{2,4}\b/);
-    const nameLine=String(text).split(/\r?\n/).map(line=>upper(line)).map(line=>line.match(/(?:PASSENGER(?: NAME)?|NAME OF PASSENGER|TRAVELL?ER)\s*[:#-]?\s*([A-Z][A-Z ,.'\/-]{3,60})/)?.[1]||'').find(Boolean)||'';
-    return {confidence:Math.min(ocrConfidence,72),machineChecks:[],fields:{name:clean(nameLine.replace(/\b(?:MR|MRS|MS|MISS|CAPT|CAPTAIN)\b\.?/g,' '))},flight:{airline:numberParts?.[1]||'',number:numberParts?.[2]||'',date:dateMatch?upper(dateMatch[0]).replace(/[ .\-/]/g,'').slice(0,5):'',from:route?.[1]||'',to:route?.[2]||'',departure:times[0]||'',arrival:times[1]||'',booking:upper(labeled(normalized,'PNR|BOOKING REFERENCE|RESERVATION CODE','[A-Z0-9]{5,8}')).replace(/\s/g,'')}};
+    const normalized=upper(text),route=normalized.match(/\b([A-Z]{3})\s*(?:-|TO|→|>)\s*([A-Z]{3})\b/),traveler=normalized.match(/(?:PASSENGER(?: NAME)?|NAME OF PASSENGER|TRAVELL?ER)\s*[:#-]?\s*(.+?)(?=\s+(?:AGENCY|TELEPHONE|BOOKING|FLIGHT|DEPARTURE|ARRIVAL|PNR)\b|\s+\d{1,2}\s+[A-Z]{3,9}\s+\d{4}\b|$)/)?.[1]||'',ticketFor=normalized.match(/\bFOR\s+([A-Z][A-Z ,.'\/-]{3,60}?)(?=\s+(?:GENERAL|TRAVEL|AIRLINE|DATA|$))/)?.[1]||'',name=cleanTicketName(traveler||ticketFor);
+    const departure=normalized.match(/\bDEPARTURE\s+(\d{1,2})\s*([A-Z]{3,9})\s*(?:\d{4}\s*)?([012]\d:[0-5]\d)\s+(.+?)(?=\s+TERMINAL\s*:|\s+ARRIVAL\b|\s+DURATION\b)/),arrival=normalized.match(/\bARRIVAL\s+(\d{1,2})\s*([A-Z]{3,9})\s*(?:\d{4}\s*)?([012]\d:[0-5]\d)\s+(.+?)(?=\s+DURATION\b|\s+DISTANCE\b|\s+BOOKING STATUS\b|$)/);
+    const labeledNumber=normalized.match(/(?:FLIGHT(?: NO)?|FLT)\s*[:#-]?\s*([A-Z0-9]{2,3})\s*([0-9]{2,4}[A-Z]?)/),airlineHeader=normalized.match(/\b([A-Z][A-Z &.'-]{2,45}(?:AIRLINES?|AIRWAYS?))\s+([A-Z0-9]{2})\s*([0-9]{2,4}[A-Z]?)\b/),fallbackNumber=normalized.match(/\b([A-Z0-9]{2,3})\s+([0-9]{2,4}[A-Z]?)\b/),numberParts=labeledNumber||airlineHeader&&[airlineHeader[0],airlineHeader[2],airlineHeader[3]]||fallbackNumber;
+    const dateMatch=normalized.match(/\b\d{1,2}[.\-/ ](?:[A-Z]{3,9}|\d{1,2})[.\-/ ]\d{2,4}\b/),booking=normalized.match(/\b(?:PNR|BOOKING\s*(?:REFERENCE|REF|CODE)\b|RESERVATION CODE)\s*[:#-]?\s*([A-Z0-9]{5,8})\b/)?.[1]||normalized.match(/\b[A-Z0-9]{2}\s*\([^)]*(?:AIRLINES?|AIRWAYS?)[^)]*\)\s*:\s*([A-Z0-9]{5,8})\b/)?.[1]||'';
+    const airline=numberParts?.[1]||airlineCodeFor(airlineHeader?.[1]||normalized),number=numberParts?.[2]||'',date=departure?ticketDate(departure[1],departure[2]):dateMatch?upper(dateMatch[0]).replace(/[ .\-/]/g,'').slice(0,5):'',times=[...normalized.matchAll(/\b([01]\d|2[0-3]):([0-5]\d)\b/g)].map(match=>match[0]);
+    return {confidence:Math.min(ocrConfidence,86),machineChecks:[],fields:{name},flight:{airline,number,date,from:airportCodeFor(departure?.[4]||'')||route?.[1]||'',to:airportCodeFor(arrival?.[4]||'')||route?.[2]||'',departure:departure?.[3]||times[0]||'',arrival:arrival?.[3]||times[1]||'',booking}};
   }
   function extractFromText(type,text,confidence=100){
     const result=type==='passport'?extractPassport(text,confidence):type==='seamanBook'?extractSeaman(text,confidence):extractFlight(text,confidence);
@@ -275,7 +298,7 @@
   async function read(file,type,onProgress){
     if(!file)throw Error('Please choose a document.');if(file.size>MAX_FILE_BYTES)throw Error('File is larger than 30 MB.');
     const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name),image=/^image\//.test(file.type)||/\.(png|jpe?g|webp|bmp)$/i.test(file.name);if(!pdf&&!image)throw Error('Use a PDF, JPG, PNG, WebP or BMP file.');
-    onProgress?.(0);let source;
+    onProgress?.(0);if(type==='flightTicket')await loadFlightCodeData();let source;
     if(pdf)source=await readPdf(file,onProgress,type);
     else if(type==='passport'){
       const full=await recognize(file,progress=>onProgress?.(Math.round(progress*.35)));
@@ -313,5 +336,5 @@
     const status=warnings.length?'warning':'ok';next.documentChecks[result.type]={fileName:result.fileName||'',confidence:Math.round(result.confidence||0),checkedAt:result.checkedAt||new Date().toISOString(),status,messages:warnings,changes,expiry:result.type==='passport'?result.fields?.passportExpiry:result.type==='seamanBook'?result.fields?.seamanBookExpiry:''};
     return {person:next,changes,conflicts,warnings,status};
   }
-  window.HarborFlowDocumentImport={read,extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,documentSignal,mergeCombinedResults,combinedIdentityRegions,combinedPassportRegions,reconcileCombinedPassportFields,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
+  window.HarborFlowDocumentImport={read,extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,documentSignal,mergeCombinedResults,combinedIdentityRegions,combinedPassportRegions,reconcileCombinedPassportFields,setFlightCodeData,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
 })();
