@@ -101,7 +101,7 @@
     return '';
   }
   function extractSeaman(text,ocrConfidence=100){
-    const normalized=upper(text),isPhilippine=/(?:REPUBLIC OF THE PHILIPPINES|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/.test(normalized),labelledBook=upper(labeled(normalized,'SRB|SEAMAN(?: BOOK)?|SEAFARER(?: BOOK)?|CDC|BOOK NO','[A-Z0-9-]{5,18}')).replace(/[^A-Z0-9]/g,''),philippineBooks=isPhilippine?[...normalized.matchAll(/\b[A-Z]\s*\d(?:[\s-]*\d){6}\b/g)].map(match=>upper(match[0]).replace(/[^A-Z0-9]/g,'')):[];
+    const normalized=upper(text),isPhilippine=/(?:REPUBLIC OF THE PHILIPPINES|\bPHILIPPINES\b|\bFILIPINO\b|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/.test(normalized),labelledBook=upper(labeled(normalized,'SRB|SEAMAN(?: BOOK)?|SEAFARER(?: BOOK)?|CDC|BOOK NO','[A-Z0-9-]{5,18}')).replace(/[^A-Z0-9]/g,''),philippineBooks=isPhilippine?[...normalized.matchAll(/\b[A-Z]\s*\d(?:[\s-]*\d){6}\b/g)].map(match=>upper(match[0]).replace(/[^A-Z0-9]/g,'')):[];
     return {confidence:Math.min(ocrConfidence,75),machineChecks:[],matchStrategy:isPhilippine?'given-surname':'exact',fields:{
       name:isPhilippine?printedSeamanName(text):labeled(normalized,'NAME|GIVEN NAMES?|SURNAME',"[A-Z][A-Z .,'/-]{3,50}"),
       seamanBook:labelledBook||philippineBooks.at(-1)||'',
@@ -219,7 +219,7 @@
         const nameArea=await recognize(await preparePassportNameArea(file),progress=>onProgress?.(35+Math.round(progress*.65)),{tessedit_pageseg_mode:'6'});source={text:`${nameArea.text}\n${full.text}`,confidence:Math.max(full.confidence,nameArea.confidence)};
       }
     }else if(type==='seamanBook'){
-      const full=await recognize(file,progress=>onProgress?.(Math.round(progress*.35))),isPhilippine=/(?:PHILIPPINES|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/i.test(full.text),numbers=isPhilippine?await recognizeFilipinoSeamanNumbers(file,progress=>onProgress?.(35+Math.round(progress*.3))):{text:'',confidence:0},name=isPhilippine?await recognizeFilipinoSeamanName(file,progress=>onProgress?.(65+Math.round(progress*.35))):{text:'',confidence:0};source={text:`${numbers.text}\n${name.text}\n${full.text}`,confidence:Math.max(full.confidence,numbers.confidence,name.confidence)};
+      const full=await recognize(file,progress=>onProgress?.(Math.round(progress*.35))),numbers=await recognizeFilipinoSeamanNumbers(file,progress=>onProgress?.(35+Math.round(progress*.3))),isPhilippine=/(?:PHILIPPINES|FILIPINO|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/i.test(full.text)||Boolean(numbers.text),name=isPhilippine?await recognizeFilipinoSeamanName(file,progress=>onProgress?.(65+Math.round(progress*.35))):{text:'',confidence:0};source={text:`${numbers.text}\n${name.text}\n${full.text}`,confidence:Math.max(full.confidence,numbers.confidence,name.confidence)};
     }else source=await recognize(file,onProgress);
     const result=extractFromText(type,source.text,source.confidence);result.fileName=file.name;result.checkedAt=new Date().toISOString();return result;
   }

@@ -106,6 +106,15 @@ test('reads the Filipino seaman book number from the lower legacy field',()=>{
   assert.equal(result.fields.seamanBook,'C1271467');
 });
 
+test('treats FILIPINO and PHILIPPINES as the same seaman book profile',()=>{
+  const filipino=reader.extractFromText('seamanBook','FILIPINO\nSEAMAN NAME: ALPHA B. CHARLIE\nSRB NO. A0578403',94);
+  const philippines=reader.extractFromText('seamanBook','PHILIPPINES\nSEAMAN NAME: ALPHA B. CHARLIE\nSRB NO. A0578403',94);
+  assert.equal(filipino.fields.name,'ALPHA CHARLIE');
+  assert.equal(filipino.fields.seamanBook,'A0578403');
+  assert.equal(filipino.matchStrategy,'given-surname');
+  assert.deepEqual(filipino.fields,philippines.fields);
+});
+
 test('uses only Filipino given name and surname from a legacy seaman book',()=>{
   const result=reader.extractFromText('seamanBook','REPUBLIC OF THE PHILIPPINES\nNAME\nALPHA B. CHARLIE\nC1271467',94);
   assert.equal(result.fields.name,'ALPHA CHARLIE');
