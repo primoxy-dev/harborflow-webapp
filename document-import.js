@@ -39,6 +39,21 @@
   };
   const mrzValue=char=>char==='<'?0:/\d/.test(char)?Number(char):char.charCodeAt(0)-55;
   function validMrz(value,digit){if(!/\d/.test(digit||''))return false;const weights=[7,3,1];return [...value].reduce((sum,char,index)=>sum+mrzValue(char)*weights[index%3],0)%10===Number(digit);}
+  function repairMrzDocumentNumber(value,digit){
+    if(validMrz(value,digit))return value;
+    const swaps={2:'Z',Z:'2',0:'O',O:'0',1:'I',I:'1',5:'S',S:'5',6:'G',G:'6',8:'B',B:'8'},matches=[];
+    for(let index=0;index<value.length;index++){const replacement=swaps[value[index]];if(!replacement)continue;const candidate=value.slice(0,index)+replacement+value.slice(index+1);if(validMrz(candidate,digit))matches.push(candidate);}
+    const passportPattern=matches.filter(candidate=>/^[A-Z]\d{7}</.test(candidate));return passportPattern.length===1?passportPattern[0]:matches.length===1?matches[0]:value;
+  }
+  function restoreMrzNameSpacing(text,value){
+    const target=upper(value).replace(/[^A-Z]/g,'');if(!target)return '';
+    const near=(left,right)=>{if(Math.abs(left.length-right.length)>1)return false;let a=0,b=0,differences=0;while(a<left.length&&b<right.length){if(left[a]===right[b]){a++;b++;continue;}if(++differences>1)return false;if(left.length>right.length)a++;else if(right.length>left.length)b++;else{a++;b++;}}return differences+(a<left.length||b<right.length?1:0)<=1;};
+    for(const line of String(text).split(/\r?\n/)){
+      const words=upper(line).match(/[A-Z]{2,}/g)||[];
+      for(let start=0;start<words.length;start++)for(let end=start+2;end<=Math.min(words.length,start+5);end++){const candidate=words.slice(start,end).join('');if(candidate===target||target.length>=8&&near(candidate,target))return words.slice(start,end).join(' ');}
+    }
+    return clean(value);
+  }
   function printedPassport(text){
     const lines=String(text).split(/\r?\n/).map(line=>upper(line)).filter(Boolean);
     const anyLabel=/(?:SURNAME|FAMILY NAME|GIVEN NAMES?|FIRST NAMES?|MIDDLE NAME|NATIONALITY|SEX|GENDER|PASSPORT(?: NO)?|DOCUMENT NO|DATE OF BIRTH|BIRTH DATE|DOB|DATE OF EXPIRY|EXPIRY DATE|EXPIRES)/;
@@ -64,15 +79,15 @@
   function mrzPassport(text){
     const lines=String(text).split(/\r?\n/).map(line=>upper(line).replace(/\s/g,'').replace(/[^A-Z0-9<]/g,'')).filter(line=>line.length>=40);
     const first=lines.find(line=>line.startsWith('P<'));if(!first)return null;const index=lines.indexOf(first),second=lines[index+1];if(!second||second.length<28)return null;
-    const names=first.slice(5).split('<<'),surname=clean(names[0].replace(/</g,' ')),given=clean((names[1]||'').replace(/</g,' '));
-    const passport=second.slice(0,9).replace(/</g,''),nationality=nationalityChoice(second.slice(10,13).replace(/</g,'')),birthRaw=second.slice(13,19),sex=['M','F'].includes(second[20])?second[20]:'',expiryRaw=second.slice(21,27);
-    const checks=[validMrz(second.slice(0,9),second[9]),validMrz(birthRaw,second[19]),validMrz(expiryRaw,second[27])];
+    const names=first.slice(5).split('<<'),surname=clean(names[0].replace(/</g,' ')),given=clean((names[1]||'').replace(/(?:<|[CLK]){5,}.*$/,'').replace(/</g,' '));
+    const rawPassport=second.slice(0,9),passport=repairMrzDocumentNumber(rawPassport,second[9]).replace(/</g,''),nationality=nationalityChoice(second.slice(10,13).replace(/</g,'')),birthRaw=second.slice(13,19),sex=['M','F'].includes(second[20])?second[20]:'',expiryRaw=second.slice(21,27);
+    const checks=[validMrz(passport.padEnd(9,'<'),second[9]),validMrz(birthRaw,second[19]),validMrz(expiryRaw,second[27])];
     const nameWithoutTitle=clean([given,surname].filter(Boolean).join(' '));
     return {fields:{name:passportName(given,surname,sex)||nameWithoutTitle,passport,nationality,dob:parseDate(birthRaw,{birth:true}),passportExpiry:parseDate(expiryRaw)},given,surname,sex,nameWithoutTitle,nameNeedsTitle:!sex,checks,confidence:checks.filter(Boolean).length===3?99:78};
   }
   function extractPassport(text,ocrConfidence=100){
     const normalized=upper(text),printed=printedPassport(text),mrz=mrzPassport(text),warnings=[];
-    const mrzName=mrz?.nameWithoutTitle||'',mrzNameNoisy=noisyMrzName(mrzName),useMrzGiven=printed.given&&printed.given.length<3&&mrz?.given&&!noisyMrzName(mrz.given),useMrzSurname=printed.surname&&printed.surname.length<3&&mrz?.surname&&!noisyMrzName(mrz.surname),given=useMrzGiven?mrz.given:printed.given,surname=useMrzSurname?mrz.surname:printed.surname;
+    const mrzGiven=restoreMrzNameSpacing(text,mrz?.given||''),mrzName=clean([mrzGiven,mrz?.surname].filter(Boolean).join(' ')),mrzNameNoisy=noisyMrzName(mrzName),useMrzGiven=printed.given&&printed.given.length<3&&mrzGiven&&!noisyMrzName(mrzGiven),useMrzSurname=printed.surname&&printed.surname.length<3&&mrz?.surname&&!noisyMrzName(mrz.surname),given=useMrzGiven?mrzGiven:printed.given,surname=useMrzSurname?mrz.surname:printed.surname;
     const printedName=clean([given,printed.middle,surname].filter(Boolean).join(' '));
     if(mrzNameNoisy)warnings.push('MRZ name contains repeated OCR characters; used the printed name fields instead');
     if(useMrzGiven||useMrzSurname)warnings.push('A short printed name field was unclear; the matching MRZ field was used to correct it');
@@ -80,7 +95,7 @@
     if(printedName&&mrzName&&!mrzNameNoisy&&upper(printedName)!==upper(mrzName))warnings.push('Printed name and MRZ name differ; the printed Surname / Given names / Middle name fields were used');
     const printedFullName=printedName?passportName(given,surname,sex,printed.middle):'';
     return {confidence:Math.min(ocrConfidence,mrz?.confidence||70),machineChecks:mrz?.checks||[],sex,nameWithoutTitle,nameNeedsTitle:!sex,nameSource:printedName?'printed':mrzName&&!mrzNameNoisy?'mrz':'fallback',printedFieldsDetected:{given:Boolean(printed.given),middle:Boolean(printed.middle),surname:Boolean(printed.surname)},extractionWarnings:warnings,fields:{
-      name:printedFullName||(!mrzNameNoisy?mrz?.fields.name:'')||nameWithoutTitle,
+      name:printedFullName||(!mrzNameNoisy?passportName(mrzGiven,mrz?.surname||'',sex):'')||nameWithoutTitle,
       passport:printed.passport||mrz?.fields.passport||upper(labeled(normalized,'PASSPORT(?: NO)?|DOCUMENT NO','[A-Z0-9]{6,14}')).replace(/\s/g,''),
       nationality:printed.nationality||mrz?.fields.nationality||nationalityChoice(labeled(normalized,'NATIONALITY','[A-Z ]{3,30}')),
       dob:mrz?.fields.dob||parseDate(labeled(normalized,'DATE OF BIRTH|BIRTH DATE|DOB','[0-9A-Z .\\-/]{6,20}'),{birth:true}),
@@ -106,12 +121,25 @@
     }
     return '';
   }
+  function indianSeamanName(text){
+    const lines=String(text).split(/\r?\n/).map(line=>upper(line));
+    const labelIndex=lines.findIndex(line=>/NAME OF SEAFARER/.test(line));if(labelIndex<0)return '';
+    for(let offset=1;offset<=2&&labelIndex+offset<lines.length;offset++){
+      const line=lines[labelIndex+offset],punctuated=line.match(/(?:^|[^A-Z])([A-Z]{2,}(?:\s+[A-Z]{2,}){1,4})\s*[.,]/),plain=line.match(/^\W*([A-Z]{2,}(?:\s+[A-Z]{2,}){1,3})(?=\s+\d|$)/),name=clean((punctuated||plain)?.[1]||'');
+      if(name&&!/(?:DATE|PLACE|MUMBAI|GOVERNMENT|NATIONALITY)/.test(name))return name;
+    }
+    return '';
+  }
+  function latestDocumentDate(text){
+    const dates=[...String(text).matchAll(/\b\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}\b/g)].map(match=>parseDate(match[0])).filter(Boolean).sort();
+    return dates.at(-1)||'';
+  }
   function extractSeaman(text,ocrConfidence=100){
-    const normalized=upper(text),isPhilippine=/(?:REPUBLIC OF THE PHILIPPINES|\bPHILIPPINES\b|\bFILIPINO\b|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/.test(normalized),labelledBook=upper(labeled(normalized,'SRB|SEAMAN(?: BOOK)?|SEAFARER(?: BOOK)?|CDC|BOOK NO','[A-Z0-9-]{5,18}')).replace(/[^A-Z0-9]/g,''),philippineBooks=isPhilippine?[...normalized.matchAll(/\b[A-Z]\s*\d(?:[\s-]*\d){6}\b/g)].map(match=>upper(match[0]).replace(/[^A-Z0-9]/g,'')):[];
+    const normalized=upper(text),isPhilippine=/(?:REPUBLIC OF THE PHILIPPINES|\bPHILIPPINES\b|\bFILIPINO\b|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/.test(normalized),isIndian=/(?:GOVERNMENT OF INDIA|REPUBLIC OF INDIA|\bINDIAN\b)/.test(normalized),labelledBook=upper(labeled(normalized,'SRB|SEAMAN(?: BOOK)?|SEAFARER(?: BOOK)?|CDC|BOOK NO','[A-Z0-9-]{5,18}')).replace(/[^A-Z0-9]/g,''),indianBook=isIndian?normalized.match(/\b[A-Z]{3}\s*\d{6}\b/)?.[0].replace(/\s/g,'')||'':'',philippineBooks=isPhilippine?[...normalized.matchAll(/\b[A-Z]\s*\d(?:[\s-]*\d){6}\b/g)].map(match=>upper(match[0]).replace(/[^A-Z0-9]/g,'')):[];
     return {confidence:Math.min(ocrConfidence,75),machineChecks:[],matchStrategy:isPhilippine?'given-surname':'exact',fields:{
-      name:isPhilippine?printedSeamanName(text):labeled(normalized,'NAME|GIVEN NAMES?|SURNAME',"[A-Z][A-Z .,'/-]{3,50}"),
-      seamanBook:labelledBook||philippineBooks.at(-1)||'',
-      seamanBookExpiry:parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|VALID UNTIL|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
+      name:isPhilippine?printedSeamanName(text):isIndian?indianSeamanName(text):labeled(normalized,'NAME|GIVEN NAMES?|SURNAME',"[A-Z][A-Z .,'/-]{3,50}"),
+      seamanBook:indianBook||labelledBook||philippineBooks.at(-1)||'',
+      seamanBookExpiry:isIndian?latestDocumentDate(text):parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|VALID UNTIL|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
     }};
   }
   const MONTHS={JANUARY:'JAN',FEBRUARY:'FEB',MARCH:'MAR',APRIL:'APR',MAY:'MAY',JUNE:'JUN',JULY:'JUL',AUGUST:'AUG',SEPTEMBER:'SEP',OCTOBER:'OCT',NOVEMBER:'NOV',DECEMBER:'DEC'};
@@ -142,7 +170,7 @@
     result.type=type;result.rawLength=String(text||'').length;return result;
   }
   function documentSignal(type,text,confidence=0){
-    const result=extractFromText(type,text,confidence),fields=result.fields||{},number=type==='passport'?fields.passport:type==='seamanBook'?fields.seamanBook:result.flight?.number,markers=(upper(text).match(/\b(?:PASSPORT|SURNAME|GIVEN|PHILIPPINES|FILIPINO|MARITIME|SEAFARER|SRB|VALID|FLIGHT|PNR)\b/g)||[]).length;
+    const result=extractFromText(type,text,confidence),fields=result.fields||{},number=type==='passport'?fields.passport:type==='seamanBook'?fields.seamanBook:result.flight?.number,markers=(upper(text).match(/\b(?:PASSPORT|SURNAME|GIVEN|PHILIPPINES|FILIPINO|MARITIME|SEAFARER|SRB|INDIA|INDIAN|CDC|VALID|FLIGHT|PNR)\b/g)||[]).length;
     return (fields.name?12:0)+(number?10:0)+(fields.passportExpiry||fields.seamanBookExpiry||result.flight?.date?2:0)+Math.min(markers,10)+Math.min(Number(confidence||0)/25,4);
   }
   function mergeCombinedResults(requestedType,passportResult,seamanResult){

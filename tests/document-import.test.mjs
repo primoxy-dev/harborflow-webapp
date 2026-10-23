@@ -44,6 +44,24 @@ test('an uncertain passport sex requires title choice and does not fill the name
   assert.match(applied.warnings.join('\n'),/MR\. หรือ MS\./);
 });
 
+test('repairs an Indian passport MRZ with OCR filler and a Z read as 2',()=>{
+  const result=reader.extractFromText('passport',[
+    'REPUBLIC OF INDIA',
+    'sm Sumame',
+    'io KUMAR',
+    'ft Ar / Gvenomet) ad',
+    'Wd ARJUN DEV 08',
+    'P<INDKUMAR<<ARJUNKDEV<CLLLLLLLLLLLLLLLLLLK',
+    '21234567<1IND9001011M3012316<<<<<<<<<<<<<<<<'
+  ].join('\n'),57);
+  assert.equal(result.fields.name,'MR. ARJUN DEV KUMAR');
+  assert.equal(result.fields.passport,'Z1234567');
+  assert.equal(result.fields.nationality,'INDIAN');
+  assert.equal(result.fields.dob,'1990-01-01');
+  assert.equal(result.fields.passportExpiry,'2030-12-31');
+  assert.deepEqual([...result.machineChecks],[true,true,true]);
+});
+
 test('printed surname, given names and middle name override a noisy MRZ name',()=>{
   const result=reader.extractFromText('passport',[
     'Apelyido/Surname',
@@ -94,6 +112,21 @@ test('reads a seaman book number and adds the missing expiry field',()=>{
   assert.equal(applied.person.seamanBook,'SB123456');
   assert.equal(applied.person.seamanBookExpiry,'2030-01-01');
   assert.ok(applied.changes.includes('Seaman book expiry'));
+});
+
+test('reads an Indian CDC when OCR places both labels before both dates',()=>{
+  const result=reader.extractFromText('seamanBook',[
+    'GOVERNMENT OF INDIA',
+    'Name of Seafarer in ful WME, Wem cocne,. MUM 246810 b',
+    '| KUMAR ARJUN DEV. 4 iq coi, MUMBAI',
+    'Date of issue Date of expiry',
+    '17/12/2020 16/12/2030',
+    'Date of birth 01/01/1990',
+    'Nationality INDIAN'
+  ].join('\n'),42);
+  assert.equal(result.fields.name,'KUMAR ARJUN DEV');
+  assert.equal(result.fields.seamanBook,'MUM246810');
+  assert.equal(result.fields.seamanBookExpiry,'2030-12-16');
 });
 
 test('reads the Filipino SRB number from the labelled top-right field',()=>{
