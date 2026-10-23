@@ -115,6 +115,32 @@ test('treats FILIPINO and PHILIPPINES as the same seaman book profile',()=>{
   assert.deepEqual(filipino.fields,philippines.fields);
 });
 
+test('scores an upright combined Passport and Seaman Book scan above unreadable sideways OCR',()=>{
+  const sideways=reader.documentSignal('passport','mw | ll | 11',28);
+  const upright=reader.documentSignal('passport',[
+    'PASSPORT',
+    'P<PHLALPHA<<BRAVO<<<<<<<<<<<<<<<<<<<<<<<<',
+    'X12345670PHL9001011M3012315<<<<<<<<<<<<<<',
+    'REPUBLIC OF THE PHILIPPINES',
+    'MARITIME INDUSTRY AUTHORITY',
+    'SRB NO. A0578403'
+  ].join('\n'),88);
+  assert.ok(upright>sideways);
+});
+
+test('merges Passport and Seaman Book fields from a combined scan without changing the requested name',()=>{
+  const passport=reader.extractFromText('passport','P<PHLALPHA<<BRAVO<<<<<<<<<<<<<<<<<<<<<<<<\nX12345670PHL9001011M3012315<<<<<<<<<<<<<<',90);
+  const seaman=reader.extractFromText('seamanBook','PHILIPPINES\nSEAMAN NAME: BRAVO ALPHA\nSRB NO. A0578403',90);
+  const combined=reader.mergeCombinedResults('passport',passport,seaman);
+  assert.equal(combined.fields.name,passport.fields.name);
+  assert.equal(combined.fields.passport,passport.fields.passport);
+  assert.equal(combined.fields.seamanBook,seaman.fields.seamanBook);
+});
+
+test('checks the lower-right identity page first in a combined document scan',()=>{
+  assert.deepEqual({...reader.combinedIdentityRegions()[0]},{x:.42,y:.58,width:.44,height:.415});
+});
+
 test('uses only Filipino given name and surname from a legacy seaman book',()=>{
   const result=reader.extractFromText('seamanBook','REPUBLIC OF THE PHILIPPINES\nNAME\nALPHA B. CHARLIE\nC1271467',94);
   assert.equal(result.fields.name,'ALPHA CHARLIE');
