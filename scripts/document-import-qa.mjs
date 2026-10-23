@@ -45,6 +45,11 @@ try{
   const panelTop=await page.locator('.hfo-doc-batch').evaluate(node=>node.getBoundingClientRect().top);
   const tableTop=await page.locator('.hfo-roster-table').first().evaluate(node=>node.getBoundingClientRect().top);
   assert.ok(panelTop<tableTop,'batch upload must appear above crew tables');
+  await page.locator('[data-edit-person="crew-2"]').click();
+  assert.equal(await page.locator('#hfoPersonForm [data-person-document-field]').count(),0,'expanded crew details must not repeat passport and seaman book fields');
+  assert.equal(await page.locator('#hfoPersonForm').getByText('Passport no.').count(),0);
+  assert.equal(await page.locator('#hfoPersonForm').getByText('Seaman book no.').count(),0);
+  await page.locator('[data-close-person]').click();
   await page.locator('[data-doc-file="passport"]').setInputFiles([
     {name:'passport-demo.jpg',mimeType:'image/jpeg',buffer:Buffer.from('demo')},
     {name:'passport-no-name.jpg',mimeType:'image/jpeg',buffer:Buffer.from('demo')}

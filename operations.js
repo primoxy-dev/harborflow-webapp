@@ -606,13 +606,6 @@
       ${messages.length?`<ul>${messages.map(message=>`<li>${escape(message)}</li>`).join('')}</ul>`:''}
     </div>`;
   }
-  function documentFieldsHtml(p,editable) {
-    const documentField=(label,key,type='text')=>`<label class="hfo-field"><span>${escape(label)}</span><input type="${type}" data-person-document-field="${key}" value="${escape(p[key]||'')}" ${editable?'':'disabled'}></label>`;
-    return `<section class="hfo-doc-fields" aria-label="Crew document fields">
-        ${documentField('Passport no.','passport')}${documentField('Passport expiry','passportExpiry','date')}
-        ${documentField('Seaman book no.','seamanBook')}${documentField('Seaman book expiry','seamanBookExpiry','date')}
-    </section>`;
-  }
   function documentBatchHtml(editable) {
     const batch=state.documentBatch||{busy:false,category:'On-signers',completed:0,total:0,results:[]};
     const results=batch.results||[];
@@ -639,7 +632,6 @@
 
   const dis=edit?'':'disabled';
   return `<form id="hfoPersonForm" class="hfo-person-expanded"><div class="hfo-toolbar"><h4>${draft.kind==='crew'?'Immigration & flight details':'Flight details'} · ${escape(p.name)}</h4><button type="button" class="hfo-btn" data-close-person>Close</button></div>
-    ${draft.kind==='crew'?documentFieldsHtml(p,edit):''}
     ${draft.kind==='crew'?`<div class="hfo-immigration-row">
       ${FLAT_VISITORS[service()?.data.type]?'':sel(draft.kind==='crew'?'Change role':'Visitor role',p.category,'category',draft.kind==='crew'?CATEGORIES.slice(0,2):CATEGORIES.slice(2),dis)}
       <fieldset class="hfo-immigration-compact"><legend>Immigration</legend><div class="hfo-immigration-codes">${codes.map(code=>`<label><input type="checkbox" name="immigration-${code}" ${checked(code)?'checked':''} ${dis}><span>${code}</span></label>`).join('')}</div></fieldset>
@@ -929,7 +921,6 @@
       draft.data.immigration={...(draft.data.immigration||{}),status:String(d.get('immigrationStatus')||'Not started'),codes,notes:String(d.get('immigrationNotes')||'')};
       delete draft.data.immigration.visa;delete draft.data.immigration.oktb;
     }
-    form.querySelectorAll('[data-person-document-field]').forEach(input=>{draft.data[input.dataset.personDocumentField]=input.value;});
     if(!Array.isArray(draft.data.flights))draft.data.flights=[];
     form.querySelectorAll('[data-flight]').forEach(input=>{
       const i=Number(input.dataset.flight),key=input.dataset.flightField;
