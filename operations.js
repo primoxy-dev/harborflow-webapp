@@ -943,6 +943,12 @@
     if(output){output.textContent=message;output.classList.toggle('hfo-doc-error',failed);}
   }
   const normalizedCrewName=value=>String(value||'').toUpperCase().replace(/\b(?:MR|MRS|MS|MISS|CAPT|CAPTAIN)\b\.?/g,' ').replace(/[^A-Z0-9]+/g,' ').trim().split(/\s+/).filter(Boolean).sort().join(' ');
+  const crewNameTokens=value=>String(value||'').toUpperCase().replace(/\b(?:MR|MRS|MS|MISS|CAPT|CAPTAIN)\b\.?/g,' ').replace(/[^A-Z0-9]+/g,' ').trim().split(/\s+/).filter(Boolean);
+  function matchesGivenSurname(documentName,crewName) {
+    const documentTokens=crewNameTokens(documentName),crewTokens=crewNameTokens(crewName);if(documentTokens.length<2||crewTokens.length<2)return false;
+    const surname=documentTokens.at(-1);if(crewTokens.at(-1)!==surname)return false;
+    const given=documentTokens.slice(0,-1);return given.every((token,index)=>crewTokens[index]===token);
+  }
   async function saveImportedCrew(person,nextData) {
     const data={...nextData,serviceIds:[...new Set([...(nextData.serviceIds||[]),service().id])]};
     const patch=Object.fromEntries(Object.entries(data).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(person.data[key])));
@@ -959,12 +965,15 @@
     if(result.nameNeedsTitle&&detectedName){item.needsTitle=true;item.pendingResult=result;item.outcome='Choose MR. or MS.';item.warnings=['อ่านเพศจาก Passport ไม่ชัดเจน ระบบยังไม่กรอกชื่อหรือข้อมูลจนกว่าจะเลือกคำนำหน้า'];return;}
     const key=normalizedCrewName(result.fields?.name||detectedName);
     if(!key){item.outcome='Needs review';item.error='No readable crew name was found. Nothing was added.';return;}
-    let person=state.people.find(candidate=>candidate.kind==='crew'&&normalizedCrewName(candidate.data.name)===key);
+    const givenSurnameOnly=result.matchStrategy==='given-surname';
+    let person=state.people.find(candidate=>candidate.kind==='crew'&&(givenSurnameOnly?matchesGivenSurname(result.fields?.name||detectedName,candidate.data.name):normalizedCrewName(candidate.data.name)===key));
     if(person){
       const safeResult=structuredClone(result);safeResult.fields={...(safeResult.fields||{}),name:person.data.name};
       const applied=reader.applyToPerson(person.data,safeResult);
       await saveImportedCrew(person,applied.person);
       Object.assign(item,{name:person.data.name,outcome:'Matched existing crew',changes:applied.changes,warnings:applied.warnings,needsTitle:false,pendingResult:null,error:''});
+    }else if(givenSurnameOnly){
+      item.outcome='Needs review';item.error='No existing crew matched the Given name and Surname. Nothing was added.';return;
     }else{
       const seed={name:String(result.fields?.name||detectedName).toUpperCase(),category:state.documentBatch.category||'On-signers',serviceIds:[service().id],flights:[]};
       const applied=reader.applyToPerson(seed,result),out=await api('createPerson',{jobId:job().id,kind:'crew',data:applied.person});

@@ -85,11 +85,11 @@
     const source=upper(value).replace(/[^A-Z ,.'-]/g,' ').replace(/\s+/g,' ').trim();if(!source)return '';
     if(source.includes(',')){
       const [surname,...remainder]=source.split(','),tokens=clean(remainder.join(' ')).split(' ').filter(Boolean);if(!surname||!tokens.length)return '';
-      const middle=tokens.length>1?tokens.pop():'',initial=middle?`${middle.replace(/[^A-Z]/g,'').slice(0,1)}.`:'';return clean([...tokens,initial,clean(surname)].filter(Boolean).join(' '));
+      if(tokens.length>1)tokens.pop();return clean([...tokens,clean(surname)].filter(Boolean).join(' '));
     }
     const tokens=source.split(' ').filter(Boolean);if(tokens.length<2)return '';
     if(tokens.length===2)return tokens.join(' ');
-    const surname=tokens.pop(),middle=tokens.pop()||'',initial=middle?`${middle.replace(/[^A-Z]/g,'').slice(0,1)}.`:'';return clean([...tokens,initial,surname].filter(Boolean).join(' '));
+    const surname=tokens.pop();tokens.pop();return clean([...tokens,surname].filter(Boolean).join(' '));
   }
   function printedSeamanName(text){
     const lines=String(text).split(/\r?\n/).map(line=>upper(line)).filter(Boolean),blocked=/(?:DATE OF|PLACE OF|HEIGHT|WEIGHT|EYES|HAIR|DISTINGUISHING|VALID UNTIL|SEX|MARITIME|REPUBLIC|SRB NO)/;
@@ -102,7 +102,7 @@
   }
   function extractSeaman(text,ocrConfidence=100){
     const normalized=upper(text),isPhilippine=/(?:REPUBLIC OF THE PHILIPPINES|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/.test(normalized),labelledBook=upper(labeled(normalized,'SRB|SEAMAN(?: BOOK)?|SEAFARER(?: BOOK)?|CDC|BOOK NO','[A-Z0-9-]{5,18}')).replace(/[^A-Z0-9]/g,''),philippineBooks=isPhilippine?[...normalized.matchAll(/\b[A-Z]\s*\d(?:[\s-]*\d){6}\b/g)].map(match=>upper(match[0]).replace(/[^A-Z0-9]/g,'')):[];
-    return {confidence:Math.min(ocrConfidence,75),machineChecks:[],fields:{
+    return {confidence:Math.min(ocrConfidence,75),machineChecks:[],matchStrategy:isPhilippine?'given-surname':'exact',fields:{
       name:isPhilippine?printedSeamanName(text):labeled(normalized,'NAME|GIVEN NAMES?|SURNAME',"[A-Z][A-Z .,'/-]{3,50}"),
       seamanBook:labelledBook||philippineBooks.at(-1)||'',
       seamanBookExpiry:parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|VALID UNTIL|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
