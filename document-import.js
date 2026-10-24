@@ -76,6 +76,14 @@
     return {given,middle,surname,sex,nationality:nationalityChoice(read('NATIONALITY')),passport:upper(read('PASSPORT(?: NO)?|DOCUMENT NO',/^[A-Z0-9]{6,14}$/)).replace(/\s/g,'')};
   }
   const noisyMrzName=value=>/([A-Z])\1{5,}/.test(value)||/[LK]{8,}/.test(value)||String(value||'').length>70;
+  function editDistance(left,right){
+    const previous=Array.from({length:right.length+1},(_,index)=>index);for(let row=1;row<=left.length;row++){let diagonal=previous[0];previous[0]=row;for(let column=1;column<=right.length;column++){const above=previous[column],cost=left[row-1]===right[column-1]?0:1;previous[column]=Math.min(previous[column]+1,previous[column-1]+1,diagonal+cost);diagonal=above;}}return previous[right.length];
+  }
+  function repairIndianNameFromFileName(name,fileName,sex){
+    const current=upper(name).replace(/^(?:MR|MS|MRS|MISS)\.?\s+/,'').replace(/[^A-Z]/g,''),tokens=upper(String(fileName||'').replace(/\.[^.]+$/,'')).split(/[^A-Z]+/).filter(token=>token&&!/^(?:MR|MS|MRS|MISS|PASSPORT|PASS|INDIA|INDIAN|COPY|SCAN)$/.test(token));
+    if(tokens.length<2)return name;const hint=tokens.join(''),surname=tokens.at(-1),currentWords=upper(name).replace(/^(?:MR|MS|MRS|MISS)\.?\s+/,'').split(/\s+/);if(currentWords.at(-1)!==surname)return name;
+    const tolerance=Math.max(2,Math.ceil(hint.length*.1));return editDistance(current,hint)<=tolerance?passportName(tokens.slice(0,-1).join(' '),surname,sex):name;
+  }
   function mrzPassport(text){
     const lines=String(text).split(/\r?\n/).map(line=>upper(line).replace(/\s/g,'').replace(/[^A-Z0-9<]/g,'')).filter(line=>line.length>=40);
     const first=lines.find(line=>line.startsWith('P<'));if(!first)return null;const index=lines.indexOf(first),second=lines[index+1];if(!second||second.length<28)return null;
@@ -85,7 +93,7 @@
     const nameWithoutTitle=clean([given,surname].filter(Boolean).join(' '));
     return {fields:{name:passportName(given,surname,sex)||nameWithoutTitle,passport,nationality,dob:parseDate(birthRaw,{birth:true}),passportExpiry:parseDate(expiryRaw)},given,surname,sex,nameWithoutTitle,nameNeedsTitle:!sex,checks,confidence:checks.filter(Boolean).length===3?99:78};
   }
-  function extractPassport(text,ocrConfidence=100){
+  function extractPassport(text,ocrConfidence=100,fileName=''){
     const normalized=upper(text),printed=printedPassport(text),mrz=mrzPassport(text),warnings=[];
     const mrzGiven=restoreMrzNameSpacing(text,mrz?.given||''),mrzName=clean([mrzGiven,mrz?.surname].filter(Boolean).join(' ')),mrzNameNoisy=noisyMrzName(mrzName),useMrzGiven=printed.given&&printed.given.length<3&&mrzGiven&&!noisyMrzName(mrzGiven),useMrzSurname=printed.surname&&printed.surname.length<3&&mrz?.surname&&!noisyMrzName(mrz.surname),given=useMrzGiven?mrzGiven:printed.given,surname=useMrzSurname?mrz.surname:printed.surname;
     const printedName=clean([given,printed.middle,surname].filter(Boolean).join(' '));
@@ -93,9 +101,10 @@
     if(useMrzGiven||useMrzSurname)warnings.push('A short printed name field was unclear; the matching MRZ field was used to correct it');
     const sex=printed.sex||mrz?.sex||'',nameWithoutTitle=printedName||(!mrzNameNoisy?mrzName:'')||labeled(normalized,'NAME','[A-Z][A-Z ]{3,50}');
     if(printedName&&mrzName&&!mrzNameNoisy&&upper(printedName)!==upper(mrzName))warnings.push('Printed name and MRZ name differ; the printed Surname / Given names / Middle name fields were used');
-    const printedFullName=printedName?passportName(given,surname,sex,printed.middle):'';
+    const printedFullName=printedName?passportName(given,surname,sex,printed.middle):'',extractedName=printedFullName||(!mrzNameNoisy?passportName(mrzGiven,mrz?.surname||'',sex):'')||nameWithoutTitle,repairedName=/(?:REPUBLIC OF INDIA|\bINDIAN\b|P<IND)/.test(normalized)?repairIndianNameFromFileName(extractedName,fileName,sex):extractedName;
+    if(repairedName!==extractedName)warnings.push('MRZ name separators were unclear; spacing was restored from the matching document filename');
     return {confidence:Math.min(ocrConfidence,mrz?.confidence||70),machineChecks:mrz?.checks||[],sex,nameWithoutTitle,nameNeedsTitle:!sex,nameSource:printedName?'printed':mrzName&&!mrzNameNoisy?'mrz':'fallback',printedFieldsDetected:{given:Boolean(printed.given),middle:Boolean(printed.middle),surname:Boolean(printed.surname)},extractionWarnings:warnings,fields:{
-      name:printedFullName||(!mrzNameNoisy?passportName(mrzGiven,mrz?.surname||'',sex):'')||nameWithoutTitle,
+      name:repairedName,
       passport:printed.passport||mrz?.fields.passport||upper(labeled(normalized,'PASSPORT(?: NO)?|DOCUMENT NO','[A-Z0-9]{6,14}')).replace(/\s/g,''),
       nationality:printed.nationality||mrz?.fields.nationality||nationalityChoice(labeled(normalized,'NATIONALITY','[A-Z ]{3,30}')),
       dob:mrz?.fields.dob||parseDate(labeled(normalized,'DATE OF BIRTH|BIRTH DATE|DOB','[0-9A-Z .\\-/]{6,20}'),{birth:true}),
@@ -165,8 +174,8 @@
     const airline=numberParts?.[1]||airlineCodeFor(airlineHeader?.[1]||normalized),number=numberParts?.[2]||'',date=departure?ticketDate(departure[1],departure[2]):dateMatch?upper(dateMatch[0]).replace(/[ .\-/]/g,'').slice(0,5):'',times=[...normalized.matchAll(/\b([01]\d|2[0-3]):([0-5]\d)\b/g)].map(match=>match[0]);
     return {confidence:Math.min(ocrConfidence,86),machineChecks:[],fields:{name},flight:{airline,number,date,from:airportCodeFor(departure?.[4]||'')||route?.[1]||'',to:airportCodeFor(arrival?.[4]||'')||route?.[2]||'',departure:departure?.[3]||times[0]||'',arrival:arrival?.[3]||times[1]||'',booking}};
   }
-  function extractFromText(type,text,confidence=100){
-    const result=type==='passport'?extractPassport(text,confidence):type==='seamanBook'?extractSeaman(text,confidence):extractFlight(text,confidence);
+  function extractFromText(type,text,confidence=100,fileName=''){
+    const result=type==='passport'?extractPassport(text,confidence,fileName):type==='seamanBook'?extractSeaman(text,confidence):extractFlight(text,confidence);
     result.type=type;result.rawLength=String(text||'').length;return result;
   }
   function documentSignal(type,text,confidence=0){
@@ -319,7 +328,7 @@
     if(images.length){const values=[];for(let index=0;index<images.length;index++){
       const pageStart=index/images.length,pageEnd=(index+1)/images.length,pageProgress=value=>onProgress?.(Math.round((pageStart+(value/100)*(pageEnd-pageStart))*100)),oriented=await recognizeBestOrientation(images[index],type,value=>pageProgress(value*.6));let pageText=oriented.result.text,pageConfidence=oriented.result.confidence;
       const isCombined=looksCombinedDocuments(pageText);combined=combined||isCombined;
-      if(isCombined){const passport=await recognizeCombinedPassport(oriented.canvas,value=>pageProgress(60+value*.2),oriented.result),seaman=await recognizeCombinedSeaman(oriented.canvas,value=>pageProgress(80+value*.2));pageText=`${passport.text}\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,passport.confidence,seaman.confidence);}else if(type==='seamanBook'){const seaman=await recognizeSeamanSource(oriented.canvas,value=>pageProgress(60+value*.4),oriented.result);pageText+=`\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,seaman.confidence);}text+='\n'+pageText;values.push(pageConfidence);
+      if(isCombined){const passport=await recognizeCombinedPassport(oriented.canvas,value=>pageProgress(60+value*.2),oriented.result),seaman=await recognizeCombinedSeaman(oriented.canvas,value=>pageProgress(80+value*.2));pageText=`${passport.text}\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,passport.confidence,seaman.confidence);}else if(type==='passport'){const nameArea=await recognize(await preparePassportNameArea(oriented.canvas),value=>pageProgress(60+value*.4),{tessedit_pageseg_mode:'6'});pageText=`${nameArea.text}\n${pageText}`;pageConfidence=Math.max(pageConfidence,nameArea.confidence);}else if(type==='seamanBook'){const seaman=await recognizeSeamanSource(oriented.canvas,value=>pageProgress(60+value*.4),oriented.result);pageText+=`\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,seaman.confidence);}text+='\n'+pageText;values.push(pageConfidence);
     }confidence=values.reduce((sum,value)=>sum+value,0)/Math.max(1,values.length);}
     return {text,confidence,combined};
   }
@@ -338,7 +347,7 @@
     }else if(type==='seamanBook'){
       source=await recognizeSeamanSource(file,onProgress);
     }else source=await recognize(file,onProgress);
-    let result=extractFromText(type,source.text,source.confidence);if(pdf&&source.combined){const passportResult=extractFromText('passport',source.text,source.confidence),seamanResult=extractFromText('seamanBook',source.text,source.confidence);result=mergeCombinedResults(type,passportResult,seamanResult);result.type=type;result.rawLength=source.text.length;}result.fileName=file.name;result.checkedAt=new Date().toISOString();onProgress?.(100);return result;
+    let result=extractFromText(type,source.text,source.confidence,file.name);if(pdf&&source.combined){const passportResult=extractFromText('passport',source.text,source.confidence,file.name),seamanResult=extractFromText('seamanBook',source.text,source.confidence,file.name);result=mergeCombinedResults(type,passportResult,seamanResult);result.type=type;result.rawLength=source.text.length;}result.fileName=file.name;result.checkedAt=new Date().toISOString();onProgress?.(100);return result;
   }
   const daysUntil=value=>value?Math.ceil((new Date(`${value}T00:00:00Z`)-new Date())/86400000):null;
   function applyToPerson(person,result){
