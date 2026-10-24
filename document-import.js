@@ -33,6 +33,16 @@
     if(named){const month=months[named[2].slice(0,3)];let year=Number(named[3]);if(year<100)year=birth?(year<=new Date().getUTCFullYear()%100-16?2000+year:1900+year):2000+year;return month?isoDate(year,month,named[1]):'';}
     return '';
   }
+  function dateNearLabel(text,label,{birth=false}={}){
+    const lines=String(text).split(/\r?\n/),date=/\b(?:\d{1,2}[.\-/ ]\d{1,2}[.\-/ ]\d{4}|\d{1,2}[.\-/ ]*[A-Z]{3,9}[.\-/ ]*\d{4})\b/i;
+    for(let index=0;index<lines.length;index++){
+      if(!label.test(lines[index]))continue;
+      for(let offset=0;offset<=2&&index+offset<lines.length;offset++){
+        const match=lines[index+offset].match(date),value=match&&parseDate(match[0],{birth});if(value)return value;
+      }
+    }
+    return '';
+  }
   const labeled=(text,labels,pattern='[A-Z0-9][A-Z0-9 .\\-/]{2,30}')=>{
     const found=text.match(new RegExp(`(?:${labels})\\s*(?:NO\\.?|NUMBER|DATE)?\\s*[:#-]?\\s*(${pattern})`,'i'));
     return clean(found?.[1]||'');
@@ -45,12 +55,12 @@
     for(let index=0;index<value.length;index++){const replacement=swaps[value[index]];if(!replacement)continue;const candidate=value.slice(0,index)+replacement+value.slice(index+1);if(validMrz(candidate,digit))matches.push(candidate);}
     const passportPattern=matches.filter(candidate=>/^[A-Z]\d{7}</.test(candidate));return passportPattern.length===1?passportPattern[0]:matches.length===1?matches[0]:value;
   }
-  function restoreMrzNameSpacing(text,value){
+  function restoreMrzNameSpacing(text,value,maxDistance=1){
     const target=upper(value).replace(/[^A-Z]/g,'');if(!target)return '';
     const near=(left,right)=>{if(Math.abs(left.length-right.length)>1)return false;let a=0,b=0,differences=0;while(a<left.length&&b<right.length){if(left[a]===right[b]){a++;b++;continue;}if(++differences>1)return false;if(left.length>right.length)a++;else if(right.length>left.length)b++;else{a++;b++;}}return differences+(a<left.length||b<right.length?1:0)<=1;};
     for(const line of String(text).split(/\r?\n/)){
       const words=upper(line).match(/[A-Z]{2,}/g)||[];
-      for(let start=0;start<words.length;start++)for(let end=start+2;end<=Math.min(words.length,start+5);end++){const candidate=words.slice(start,end).join('');if(candidate===target||target.length>=8&&near(candidate,target))return words.slice(start,end).join(' ');}
+      for(let start=0;start<words.length;start++)for(let end=start+2;end<=Math.min(words.length,start+5);end++){const candidate=words.slice(start,end).join('');if(candidate===target||target.length>=8&&near(candidate,target)||target.length>=12&&maxDistance>1&&editDistance(candidate,target)<=maxDistance)return words.slice(start,end).join(' ');}
     }
     return clean(value);
   }
@@ -95,7 +105,7 @@
   }
   function extractPassport(text,ocrConfidence=100,fileName=''){
     const normalized=upper(text),printed=printedPassport(text),mrz=mrzPassport(text),warnings=[];
-    const mrzGiven=restoreMrzNameSpacing(text,mrz?.given||''),mrzName=clean([mrzGiven,mrz?.surname].filter(Boolean).join(' ')),mrzNameNoisy=noisyMrzName(mrzName),useMrzGiven=printed.given&&printed.given.length<3&&mrzGiven&&!noisyMrzName(mrzGiven),useMrzSurname=printed.surname&&printed.surname.length<3&&mrz?.surname&&!noisyMrzName(mrz.surname),given=useMrzGiven?mrzGiven:printed.given,surname=useMrzSurname?mrz.surname:printed.surname;
+    const indian=/(?:REPUBLIC OF INDIA|\bINDIAN\b|P<IND)/.test(normalized),mrzGiven=restoreMrzNameSpacing(text,mrz?.given||'',indian?2:1),mrzName=clean([mrzGiven,mrz?.surname].filter(Boolean).join(' ')),mrzNameNoisy=noisyMrzName(mrzName),useMrzGiven=printed.given&&printed.given.length<3&&mrzGiven&&!noisyMrzName(mrzGiven),useMrzSurname=printed.surname&&printed.surname.length<3&&mrz?.surname&&!noisyMrzName(mrz.surname),given=useMrzGiven?mrzGiven:printed.given||indian&&!mrzNameNoisy&&mrzGiven||'',surname=useMrzSurname?mrz.surname:printed.surname||indian&&mrz?.surname||'';
     const printedName=clean([given,printed.middle,surname].filter(Boolean).join(' '));
     if(mrzNameNoisy)warnings.push('MRZ name contains repeated OCR characters; used the printed name fields instead');
     if(useMrzGiven||useMrzSurname)warnings.push('A short printed name field was unclear; the matching MRZ field was used to correct it');
@@ -107,7 +117,7 @@
       name:repairedName,
       passport:printed.passport||mrz?.fields.passport||upper(labeled(normalized,'PASSPORT(?: NO)?|DOCUMENT NO','[A-Z0-9]{6,14}')).replace(/\s/g,''),
       nationality:printed.nationality||mrz?.fields.nationality||nationalityChoice(labeled(normalized,'NATIONALITY','[A-Z ]{3,30}')),
-      dob:mrz?.fields.dob||parseDate(labeled(normalized,'DATE OF BIRTH|BIRTH DATE|DOB','[0-9A-Z .\\-/]{6,20}'),{birth:true}),
+      dob:mrz?.checks[1]?mrz.fields.dob:dateNearLabel(text,/DATE OF BIRTH|BIRTH DATE|\bDOB\b/i,{birth:true})||mrz?.fields.dob||parseDate(labeled(normalized,'DATE OF BIRTH|BIRTH DATE|DOB','[0-9A-Z .\\-/]{6,20}'),{birth:true}),
       passportExpiry:mrz?.fields.passportExpiry||parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
     }};
   }

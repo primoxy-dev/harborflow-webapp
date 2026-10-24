@@ -85,6 +85,28 @@ test('restores spaces in a noisy Indian MRZ name from a matching document filena
   assert.equal(result.fields.name,'MR. SREENATH NARAYANA SWAMY');
 });
 
+test('recovers the Indian passport name when printed labels and MRZ separators are misread',()=>{
+  const text=[
+    'REPUBLIC OF INDIA',
+    'SWAMY',
+    'fermt am SP / Given Namels',
+    'rs AW SREENATH NARAYANA',
+    'Date of Birth fo / Sex',
+    'Bb amam Ba dha FT',
+    'se sumame',
+    'SWAMY',
+    'feat Given Nomet) 32',
+    'SREENATH NARAYANA iS |',
+    'fi / Date of Birth fis',
+    '30/10/1986 HM =',
+    'P<INDSWAMY<<SREENATHKNARAYANAS<CLLLLLLLLLRLK',
+    '26975453<4INDB610304M320905505C4069336622<24'
+  ].join('\n');
+  const result=reader.extractFromText('passport',text,44,'passport-scan.pdf');
+  assert.equal(result.fields.name,'MR. SREENATH NARAYANA SWAMY');
+  assert.equal(result.fields.dob,'1986-10-30');
+});
+
 test('printed surname, given names and middle name override a noisy MRZ name',()=>{
   const result=reader.extractFromText('passport',[
     'Apelyido/Surname',

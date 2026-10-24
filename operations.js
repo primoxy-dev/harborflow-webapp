@@ -958,11 +958,16 @@
     if(!key){item.outcome='Needs review';item.error='No readable crew name was found. Nothing was added.';return;}
     const givenSurnameOnly=result.matchStrategy==='given-surname';
     let person=state.people.find(candidate=>candidate.kind==='crew'&&(givenSurnameOnly?matchesGivenSurname(result.fields?.name||detectedName,candidate.data.name):normalizedCrewName(candidate.data.name)===key));
+    const passportMatches=!person&&result.type==='passport'&&result.fields?.passport?state.people.filter(candidate=>candidate.kind==='crew'&&String(candidate.data.passport||'').toUpperCase()===String(result.fields.passport).toUpperCase()):[];
+    const matchedByPassport=passportMatches.length===1;if(matchedByPassport)person=passportMatches[0];
     if(person){
       const safeResult=structuredClone(result);safeResult.fields={...(safeResult.fields||{}),name:person.data.name};
       const applied=reader.applyToPerson(person.data,safeResult);
       await saveImportedCrew(person,applied.person);
-      Object.assign(item,{name:person.data.name,outcome:'Matched existing crew',changes:applied.changes,warnings:applied.warnings,needsTitle:false,pendingResult:null,error:''});
+      const nameWarning=matchedByPassport?`Passport matches an existing crew member. Review Name - Surname: saved “${person.data.name}”, document “${result.fields.name}”.`:'';
+      Object.assign(item,{name:person.data.name,outcome:matchedByPassport?'Matched by Passport · Review name':'Matched existing crew',changes:applied.changes,warnings:[...applied.warnings,...(nameWarning?[nameWarning]:[])],needsTitle:false,pendingResult:null,error:''});
+    }else if(passportMatches.length>1){
+      item.outcome='Needs review';item.error='More than one crew member has this Passport number. Nothing was added.';return;
     }else if(givenSurnameOnly){
       item.outcome='Needs review';item.error='No existing crew matched the Given name and Surname. Nothing was added.';return;
     }else{
