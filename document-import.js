@@ -141,11 +141,10 @@
     return '';
   }
   function indianSeamanName(text){
-    const lines=String(text).split(/\r?\n/).map(line=>upper(line));
-    const labelIndex=lines.findIndex(line=>/NAME OF SEAFARER/.test(line));if(labelIndex<0)return '';
-    for(let offset=1;offset<=2&&labelIndex+offset<lines.length;offset++){
-      const line=lines[labelIndex+offset],punctuated=line.match(/(?:^|[^A-Z])([A-Z]{2,}(?:\s+[A-Z]{2,}){1,4})\s*[.,]/),plain=line.match(/^\W*([A-Z]{2,}(?:\s+[A-Z]{2,}){1,3})(?=\s+\d|$)/),name=clean((punctuated||plain)?.[1]||'');
-      if(name&&!/(?:DATE|PLACE|MUMBAI|GOVERNMENT|NATIONALITY)/.test(name))return name;
+    const lines=String(text).split(/\r?\n/),labelIndex=lines.findIndex(line=>/NAME OF SEAFARER/i.test(line));if(labelIndex<0)return '';
+    for(let offset=1;offset<=3&&labelIndex+offset<lines.length;offset++){
+      const line=lines[labelIndex+offset],match=line.match(/^\W*([A-Z]{2,}(?:\s+[A-Z]{2,}){1,3})(?=\s+(?:[a-z]|\d)|[.,]|$)/),tokens=clean(match?.[1]||'').split(' ').filter(Boolean);
+      if(tokens.length>=2&&!tokens.some(token=>/(?:DATE|PLACE|MUMBAI|GOVERNMENT|NATIONALITY|PORT|ISSUE)/.test(token)))return clean([...tokens.slice(1),tokens[0]].join(' '));
     }
     return '';
   }
@@ -154,11 +153,11 @@
     return dates.at(-1)||'';
   }
   function extractSeaman(text,ocrConfidence=100){
-    const normalized=upper(text),isPhilippine=/(?:REPUBLIC OF THE PHILIPPINES|\bPHILIPPINES\b|\bFILIPINO\b|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/.test(normalized),isIndian=/(?:GOVERNMENT OF INDIA|REPUBLIC OF INDIA|\bINDIAN\b)/.test(normalized),labelledBook=upper(labeled(normalized,'SRB|SEAMAN(?: BOOK)?|SEAFARER(?: BOOK)?|CDC|BOOK NO','[A-Z0-9-]{5,18}')).replace(/[^A-Z0-9]/g,''),indianBook=isIndian?normalized.match(/\b[A-Z]{3}\s*\d{6}\b/)?.[0].replace(/\s/g,'')||'':'',philippineBooks=isPhilippine?[...normalized.matchAll(/\b[A-Z]\s*\d(?:[\s-]*\d){6}\b/g)].map(match=>upper(match[0]).replace(/[^A-Z0-9]/g,'')):[];
-    return {confidence:Math.min(ocrConfidence,75),machineChecks:[],matchStrategy:isPhilippine?'given-surname':'exact',fields:{
+    const normalized=upper(text),isIndian=/(?:GOVERNMENT OF INDIA|REPUBLIC OF INDIA|\bINDIAN\b)/.test(normalized),isPhilippine=!isIndian&&/(?:REPUBLIC OF THE PHILIPPINES|\bPHILIPPINES\b|\bFILIPINO\b|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/.test(normalized),labelledBook=upper(labeled(normalized,'SRB|SEAMAN(?: BOOK)?|SEAFARER(?: BOOK)?|CDC|BOOK NO','[A-Z0-9-]{5,18}')).replace(/[^A-Z0-9]/g,''),indianText=isIndian?normalized.slice(Math.max(0,normalized.indexOf('GOVERNMENT OF INDIA'))):'',indianBook=indianText.match(/\bCDC\s*(?:NO\.?|NUMBER)?\s*[:#-]?\s*([A-Z]{3})\s*(\d{6})\b/)?.slice(1).join('')||indianText.match(/\b[A-Z]{3}\s*\d{6}\b/)?.[0].replace(/\s/g,'')||'',philippineBooks=isPhilippine?[...normalized.matchAll(/\b[A-Z]\s*\d(?:[\s-]*\d){6}\b/g)].map(match=>upper(match[0]).replace(/[^A-Z0-9]/g,'')):[],renewal=isIndian&&/RENEWAL STICKER/.test(normalized);
+    return {confidence:Math.min(ocrConfidence,75),machineChecks:[],matchStrategy:isPhilippine?'given-surname':'exact',extractionWarnings:renewal?['CDC renewal sticker: confirm the new expiry date from the original document.']:[],fields:{
       name:isPhilippine?printedSeamanName(text):isIndian?indianSeamanName(text):labeled(normalized,'NAME|GIVEN NAMES?|SURNAME',"[A-Z][A-Z .,'/-]{3,50}"),
-      seamanBook:indianBook||labelledBook||philippineBooks.at(-1)||'',
-      seamanBookExpiry:isIndian?latestDocumentDate(text):parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|VALID UNTIL|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
+      seamanBook:isIndian?indianBook:labelledBook||philippineBooks.at(-1)||'',
+      seamanBookExpiry:isIndian?(renewal?'':latestDocumentDate(text)):parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|VALID UNTIL|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
     }};
   }
   const MONTHS={JANUARY:'JAN',FEBRUARY:'FEB',MARCH:'MAR',APRIL:'APR',MAY:'MAY',JUNE:'JUN',JULY:'JUL',AUGUST:'AUG',SEPTEMBER:'SEP',OCTOBER:'OCT',NOVEMBER:'NOV',DECEMBER:'DEC'};
@@ -241,7 +240,7 @@
     const sourceX=Math.max(0,Math.round(source.width*spec.x)),sourceY=Math.max(0,Math.round(source.height*spec.y)),sourceWidth=Math.min(source.width-sourceX,Math.round(source.width*spec.width)),sourceHeight=Math.min(source.height-sourceY,Math.round(source.height*spec.height)),canvas=document.createElement('canvas');canvas.width=sourceWidth;canvas.height=sourceHeight;canvas.getContext('2d').drawImage(source,sourceX,sourceY,sourceWidth,sourceHeight,0,0,sourceWidth,sourceHeight);return canvas;
   }
   async function recognizeBestOrientation(image,type,onProgress){
-    const candidates=[image,rotateCanvas(image,-90),rotateCanvas(image,90)],segment=100/candidates.length;let best=null;
+    const candidates=[image,rotateCanvas(image,-90),rotateCanvas(image,90),rotateCanvas(image,180)],segment=100/candidates.length;let best=null;
     for(let index=0;index<candidates.length;index++){
       const result=await recognize(candidates[index],progress=>onProgress?.(Math.round(index*segment+progress*segment/100))),score=documentSignal(type,result.text,result.confidence),candidate={canvas:candidates[index],result,score};if(!best||score>best.score)best=candidate;
       if(score>=18)break;
@@ -307,7 +306,7 @@
     const candidate=candidates[0];return {text:candidate?`SEAMAN NAME: ${candidate.value}`:'',confidence:candidate?.confidence||0};
   }
   async function recognizeSeamanSource(image,onProgress,knownFull){
-    const full=knownFull||await recognize(image,progress=>onProgress?.(Math.round(progress*.35))),numbers=await recognizeFilipinoSeamanNumbers(image,progress=>onProgress?.(35+Math.round(progress*.3))),isPhilippine=/(?:PHILIPPINES|FILIPINO|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/i.test(full.text)||Boolean(numbers.text),name=isPhilippine?await recognizeFilipinoSeamanName(image,progress=>onProgress?.(65+Math.round(progress*.35))):{text:'',confidence:0};
+    const full=knownFull||await recognize(image,progress=>onProgress?.(Math.round(progress*.35))),isIndian=/(?:GOVERNMENT OF INDIA|REPUBLIC OF INDIA|\bINDIAN\b)/i.test(full.text),numbers=isIndian?{text:'',confidence:0}:await recognizeFilipinoSeamanNumbers(image,progress=>onProgress?.(35+Math.round(progress*.3))),isPhilippine=!isIndian&&(/(?:PHILIPPINES|FILIPINO|MARITIME INDUSTRY AUTHORITY|\bSRB\b)/i.test(full.text)||Boolean(numbers.text)),name=isPhilippine?await recognizeFilipinoSeamanName(image,progress=>onProgress?.(65+Math.round(progress*.35))):{text:'',confidence:0};
     return {text:`${numbers.text}\n${name.text}\n${full.text}`,confidence:Math.max(full.confidence,numbers.confidence,name.confidence)};
   }
   async function recognizeCombinedSeaman(image,onProgress){

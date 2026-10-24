@@ -169,9 +169,26 @@ test('reads an Indian CDC when OCR places both labels before both dates',()=>{
     'Date of birth 01/01/1990',
     'Nationality INDIAN'
   ].join('\n'),42);
-  assert.equal(result.fields.name,'KUMAR ARJUN DEV');
+  assert.equal(result.fields.name,'ARJUN DEV KUMAR');
   assert.equal(result.fields.seamanBook,'MUM246810');
   assert.equal(result.fields.seamanBookExpiry,'2030-12-16');
+});
+
+test('reads CDC No. and matches surname-first Indian renewal scan without trusting sideways noise',()=>{
+  const result=reader.extractFromText('seamanBook',[
+    'BR EEE 258132: |B=ES',
+    'GOVERNMENT OF INDIA',
+    'Name of Seafarer in full Ah. wwm/cocne, MUM 135604',
+    'SWAMY SREENATH NARAYANA a ot Port of issue MUMBAI',
+    'Date of issue Date of expiry',
+    '17/12/2016 16/12/2026',
+    'SPACE FOR RENEWAL STICKER',
+    'a period of Ten years with effect from 21/09/2026'
+  ].join('\n'),43);
+  assert.equal(result.fields.name,'SREENATH NARAYANA SWAMY');
+  assert.equal(result.fields.seamanBook,'MUM135604');
+  assert.equal(result.fields.seamanBookExpiry,'');
+  assert.match(result.extractionWarnings.join(' '),/confirm the new expiry date/);
 });
 
 test('reads the Filipino SRB number from the labelled top-right field',()=>{
