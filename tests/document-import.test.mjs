@@ -62,6 +62,20 @@ test('repairs an Indian passport MRZ with OCR filler and a Z read as 2',()=>{
   assert.deepEqual([...result.machineChecks],[true,true,true]);
 });
 
+test('reads Indian Given Name(s) before Surname from the printed passport fields',()=>{
+  const result=reader.extractFromText('passport',[
+    'REPUBLIC OF INDIA',
+    'Surname: SWAMY',
+    'Given Name(s): SREENATH NARAYANA',
+    'Nationality: INDIAN',
+    'Passport No: Z6975453',
+    'Date of Birth: 30/10/1986',
+    'Sex: M',
+    'Date of Expiry: 05/09/2032'
+  ].join('\n'),92);
+  assert.equal(result.fields.name,'MR. SREENATH NARAYANA SWAMY');
+});
+
 test('printed surname, given names and middle name override a noisy MRZ name',()=>{
   const result=reader.extractFromText('passport',[
     'Apelyido/Surname',

@@ -56,7 +56,7 @@
   }
   function printedPassport(text){
     const lines=String(text).split(/\r?\n/).map(line=>upper(line)).filter(Boolean);
-    const anyLabel=/(?:SURNAME|FAMILY NAME|GIVEN NAMES?|FIRST NAMES?|MIDDLE NAME|NATIONALITY|SEX|GENDER|PASSPORT(?: NO)?|DOCUMENT NO|DATE OF BIRTH|BIRTH DATE|DOB|DATE OF EXPIRY|EXPIRY DATE|EXPIRES)/;
+    const anyLabel=/(?:SURNAME|FAMILY NAME|GIVEN(?: NAME(?:\(S\)|S)?)?|FIRST NAMES?|MIDDLE NAME|NATIONALITY|SEX|GENDER|PASSPORT(?: NO)?|DOCUMENT NO|DATE OF BIRTH|BIRTH DATE|DOB|DATE OF EXPIRY|EXPIRY DATE|EXPIRES)/;
     const read=(labels,pattern=/^[A-Z][A-Z .,'/-]{0,60}$/)=>{
       const label=new RegExp(`(?:${labels})`);
       for(let index=0;index<lines.length;index++){
@@ -71,7 +71,7 @@
       }
       return '';
     };
-    const given=read('GIVEN(?: NAMES?)?|FIRST(?: NAMES?)?'),middle=read('MIDDLE(?: NAME)?'),surname=read('SURNAME|FAMILY NAME');
+    const given=read('GIVEN(?: NAME(?:\\(S\\)|S)?)?|FIRST(?: NAMES?)?'),middle=read('MIDDLE(?: NAME)?'),surname=read('SURNAME|FAMILY NAME');
     const sexText=read('SEX|GENDER',/^(?:MALE|FEMALE|M|F)$/),sex=/^M(?:ALE)?$/.test(sexText)?'M':/^F(?:EMALE)?$/.test(sexText)?'F':'';
     return {given,middle,surname,sex,nationality:nationalityChoice(read('NATIONALITY')),passport:upper(read('PASSPORT(?: NO)?|DOCUMENT NO',/^[A-Z0-9]{6,14}$/)).replace(/\s/g,'')};
   }
