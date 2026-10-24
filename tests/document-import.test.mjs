@@ -9,6 +9,23 @@ vm.createContext(context);
 vm.runInContext(source,context);
 const reader=context.window.HarborFlowDocumentImport;
 
+test('reuses one OCR worker for multiple reads within a document and releases it',async()=>{
+  const calls={created:0,recognized:0,terminated:0,modes:[]};
+  const session={window:{Tesseract:{async createWorker(){
+    calls.created++;
+    return {async setParameters(parameters){calls.modes.push(parameters.tessedit_pageseg_mode);},async recognize(){calls.recognized++;return {data:{text:'PASSPORT NO: Z1234567\nGIVEN NAMES: ARJUN\nSURNAME: KUMAR\nSEX: M',confidence:95}};},async terminate(){calls.terminated++;}};
+  }}},document:{querySelector(){return {};}},structuredClone,Date,console};
+  vm.createContext(session);vm.runInContext(source,session);
+  const result=await session.window.HarborFlowDocumentImport.read({name:'passport.png',type:'image/png',size:1},'passport');
+  assert.equal(result.fields.passport,'Z1234567');
+  assert.deepEqual(calls,{created:1,recognized:2,terminated:1,modes:['6','6']});
+  const batch=session.window.HarborFlowDocumentImport.createBatchReader();
+  await batch.read({name:'first.png',type:'image/png',size:1},'passport');
+  await batch.read({name:'second.png',type:'image/png',size:1},'passport');
+  await batch.close();
+  assert.deepEqual(calls,{created:2,recognized:6,terminated:2,modes:['6','6','6','6','6','6']});
+});
+
 test('reads a machine-readable passport and validates its check digits',()=>{
   const result=reader.extractFromText('passport',[
     'P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<',
@@ -189,6 +206,18 @@ test('reads CDC No. and matches surname-first Indian renewal scan without trusti
   assert.equal(result.fields.seamanBook,'MUM135604');
   assert.equal(result.fields.seamanBookExpiry,'');
   assert.match(result.extractionWarnings.join(' '),/confirm the new expiry date/);
+});
+
+test('finds Indian CDC name when OCR splits the label, number and name across lines',()=>{
+  const result=reader.extractFromText('seamanBook',[
+    'GOVERNMENT OF INDIA',
+    'Name of Seafarer in ful',
+    'sds sem cocne. MUM 135604',
+    'MUMBAI',
+    'SWAMY SREENATH NARAYANA o_o'
+  ].join('\n'),50);
+  assert.equal(result.fields.name,'SREENATH NARAYANA SWAMY');
+  assert.equal(result.fields.seamanBook,'MUM135604');
 });
 
 test('reads the Filipino SRB number from the labelled top-right field',()=>{

@@ -985,15 +985,19 @@
     batch.busy=true;batch.completed=0;batch.total=queue.length;batch.results=[];
     if(chosen.length>limit)batch.results.push({fileName:`${chosen.length-limit} file(s)`,error:`Only the first ${limit} files were accepted.`,outcome:'Not processed'});
     render();
-    for(const file of queue){
-      documentProgress(type,`Reading ${file.name}…`);
-      try{
-        const result=await reader.read(file,type,progress=>documentProgress(type,`Reading ${file.name}… ${progress||0}%`));
-        const item={fileName:file.name,name:'',outcome:'Needs review'};batch.results.push(item);await applyImportedResult(result,item);
-      }catch(error){batch.results.push({fileName:file.name,name:'',outcome:'Not processed',error:error.message||'Document could not be read.'});}
-      batch.completed+=1;render();
+    const batchReader=reader.createBatchReader?.()||reader;
+    try{
+      for(const file of queue){
+        documentProgress(type,`Reading ${file.name}…`);
+        try{
+          const result=await batchReader.read(file,type,progress=>documentProgress(type,`Reading ${file.name}… ${progress||0}%`));
+          const item={fileName:file.name,name:'',outcome:'Needs review'};batch.results.push(item);await applyImportedResult(result,item);
+        }catch(error){batch.results.push({fileName:file.name,name:'',outcome:'Not processed',error:error.message||'Document could not be read.'});}
+        batch.completed+=1;render();
+      }
+    }finally{
+      try{await batchReader.close?.();}finally{batch.busy=false;state.sync='Saved '+new Date().toLocaleTimeString();render();}
     }
-    batch.busy=false;state.sync='Saved '+new Date().toLocaleTimeString();render();
   }
   function captureNewPersonRow() {
     const draft=state.personDraft,row=document.querySelector('.hfo-new-person');

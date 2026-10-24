@@ -40,6 +40,7 @@ try{
       if(type==='passport')return {type,fileName:file.name,confidence:74,checkedAt:new Date().toISOString(),machineChecks:[true,false,true],nameNeedsTitle:true,nameWithoutTitle:'CREW DEMO',fields:{name:'CREW DEMO',passport:'P1234567',passportExpiry:'2027-01-10',nationality:'THAI',dob:'1990-02-03'}};
       if(type==='seamanBook')return {type,fileName:file.name,confidence:92,checkedAt:new Date().toISOString(),machineChecks:[],matchStrategy:'given-surname',fields:{name:file.name.includes('unmatched')?'OTHER CREW':'RUEL EPE',seamanBook:'SB999999',seamanBookExpiry:'2030-01-01'}};
       return {type,fileName:file.name,confidence:92,checkedAt:new Date().toISOString(),machineChecks:[],fields:{name:'RUEL LABANDERO EPE'},flight:{airline:'PR',number:'736',date:'26OCT',from:'MNL',to:'BKK',departure:'16:10',arrival:'18:45',booking:'5GIPCV'}};};
+    base.createBatchReader=()=>({read:base.read,close:async()=>{}});
   });
   await page.locator('[data-open-job]').first().click();
   await page.locator('[data-open-service="crew-change"]').click();
