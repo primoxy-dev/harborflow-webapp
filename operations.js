@@ -173,18 +173,20 @@
   }
   function monthlyChartData() {
     const current=monthJobs(),previous=monthJobs(state.anchor,-1);
+    const activeCurrent=current.filter(j=>jobStatus(j.data.status)!=='Cancelled');
+    const activePrevious=previous.filter(j=>jobStatus(j.data.status)!=='Cancelled');
     const currentLabel=state.anchor.toLocaleDateString('en',{month:'long',year:'numeric'});
     const previousDate=new Date(state.anchor.getFullYear(),state.anchor.getMonth()-1,1);
     const previousLabel=previousDate.toLocaleDateString('en',{month:'long',year:'numeric'});
-    const currentPorts=countBy(current,j=>j.data.port||'No Port / Terminal');
-    const previousPorts=countBy(previous,j=>j.data.port||'No Port / Terminal');
+    const currentPorts=countBy(activeCurrent,j=>j.data.port||'No Port / Terminal');
+    const previousPorts=countBy(activePrevious,j=>j.data.port||'No Port / Terminal');
     const ports=[...new Set([...currentPorts.keys(),...previousPorts.keys()])].sort((a,b)=>(currentPorts.get(b)||0)-(currentPorts.get(a)||0)||(previousPorts.get(b)||0)-(previousPorts.get(a)||0)||a.localeCompare(b));
-    const types=[...countBy(current,j=>j.data.vesselType||'Other').entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+    const types=[...countBy(activeCurrent,j=>j.data.vesselType||'Other').entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
     const statuses=[...countBy(current,j=>jobStatus(j.data.status)).entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
-    return {current,previous,currentLabel,previousLabel,currentPorts,previousPorts,ports,types,statuses};
+    return {current,previous,activeCurrent,activePrevious,currentLabel,previousLabel,currentPorts,previousPorts,ports,types,statuses};
   }
   function monthlyCharts() {
-    const {current,previous,currentLabel,previousLabel,currentPorts,previousPorts,ports,types,statuses}=monthlyChartData();
+    const {current,activeCurrent,activePrevious,currentLabel,previousLabel,currentPorts,previousPorts,ports,types,statuses}=monthlyChartData();
     const vesselList=list=>list.length?list.sort((a,b)=>String(a.data.eta||'').localeCompare(String(b.data.eta||''))||String(a.data.vessel||'').localeCompare(String(b.data.vessel||''))).map(j=>`<button type="button" class="hfo-status-vessel" data-open-job="${escape(j.id)}"><b>${escape(j.data.vessel||'Port Call')}</b><small>${state.public?'':`${escape(j.data.jobNo||'No Job No.')} · `}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}</small></button>`).join(''):'<small class="hfo-chart-no-vessels">No Port Calls</small>';
     const portMax=Math.max(1,...ports.flatMap(port=>[currentPorts.get(port)||0,previousPorts.get(port)||0]));
     const portRows=ports.length?ports.map(port=>{
@@ -192,17 +194,17 @@
       return `<details class="hfo-chart-group" data-port-chart-row data-current="${now}" data-previous="${prior}"><summary class="hfo-chart-row" aria-label="${escape(port)}: ${now} vessels in ${escape(currentLabel)}, ${prior} in ${escape(previousLabel)}; show lists"><span class="hfo-chart-label" title="${escape(port)}"><i class="hfo-status-caret" aria-hidden="true">▸</i>${escape(port)}</span><span class="hfo-chart-pair">
         <span class="hfo-chart-track"><i class="hfo-bar current" style="width:${Math.round(now/portMax*100)}%"></i><b>${now}</b></span>
         <span class="hfo-chart-track"><i class="hfo-bar previous" style="width:${Math.round(prior/portMax*100)}%"></i><b>${prior}</b></span>
-      </span></summary><div class="hfo-status-vessels"><div class="hfo-chart-month"><strong>${escape(currentLabel)} · ${now}</strong>${vesselList(current.filter(j=>(j.data.port||'No Port / Terminal')===port))}</div><div class="hfo-chart-month"><strong>${escape(previousLabel)} · ${prior}</strong>${vesselList(previous.filter(j=>(j.data.port||'No Port / Terminal')===port))}</div></div></details>`;
+      </span></summary><div class="hfo-status-vessels"><div class="hfo-chart-month"><strong>${escape(currentLabel)} · ${now}</strong>${vesselList(activeCurrent.filter(j=>(j.data.port||'No Port / Terminal')===port))}</div><div class="hfo-chart-month"><strong>${escape(previousLabel)} · ${prior}</strong>${vesselList(activePrevious.filter(j=>(j.data.port||'No Port / Terminal')===port))}</div></div></details>`;
     }).join(''):'<div class="hfo-empty">No Port Calls in these two months.</div>';
     const typeMax=Math.max(1,...types.map(([,count])=>count));
-    const typeRows=types.length?types.map(([type,count],index)=>`<details class="hfo-chart-group" data-vessel-chart-row data-count="${count}"><summary class="hfo-status-row" aria-label="${escape(type)}: ${count} vessels, show list"><span class="hfo-chart-label" title="${escape(type)}"><i class="hfo-status-caret" aria-hidden="true">▸</i>${escape(type)}</span><span class="hfo-chart-track"><i class="hfo-bar vessel-type type-${index%6}" style="width:${Math.round(count/typeMax*100)}%"></i><b>${count}</b></span></summary><div class="hfo-status-vessels">${vesselList(current.filter(j=>(j.data.vesselType||'Other')===type))}</div></details>`).join(''):`<div class="hfo-empty">No Port Calls in ${escape(currentLabel)}.</div>`;
+    const typeRows=types.length?types.map(([type,count],index)=>`<details class="hfo-chart-group" data-vessel-chart-row data-count="${count}"><summary class="hfo-status-row" aria-label="${escape(type)}: ${count} vessels, show list"><span class="hfo-chart-label" title="${escape(type)}"><i class="hfo-status-caret" aria-hidden="true">▸</i>${escape(type)}</span><span class="hfo-chart-track"><i class="hfo-bar vessel-type type-${index%6}" style="width:${Math.round(count/typeMax*100)}%"></i><b>${count}</b></span></summary><div class="hfo-status-vessels">${vesselList(activeCurrent.filter(j=>(j.data.vesselType||'Other')===type))}</div></details>`).join(''):`<div class="hfo-empty">No Port Calls in ${escape(currentLabel)}.</div>`;
     const statusMax=Math.max(1,...statuses.map(([,count])=>count));
     const statusRows=statuses.map(([status,count],index)=>{
       const vessels=current.filter(j=>jobStatus(j.data.status)===status);
       return `<details class="hfo-status-group" data-status-chart-row data-count="${count}"><summary class="hfo-status-row" aria-label="${escape(status)}: ${count} vessels, show list"><span class="hfo-chart-label" title="${escape(status)}"><i class="hfo-status-caret" aria-hidden="true">▸</i>${escape(status)}</span><span class="hfo-chart-track"><i class="hfo-bar status status-${index%6}" style="width:${Math.round(count/statusMax*100)}%"></i><b>${count}</b></span></summary><div class="hfo-status-vessels">${vesselList(vessels)}</div></details>`;
     }).join('');
-    return `<section class="hfo-card hfo-analysis-card" data-chart="port-terminal"><div class="hfo-chart-head"><div><span>Port / Terminal volume</span><small>${escape(currentLabel)} vs ${escape(previousLabel)} · Click a row to see vessels</small></div><div class="hfo-chart-legend"><span><i class="current"></i>${escape(currentLabel)}</span><span><i class="previous"></i>${escape(previousLabel)}</span></div></div><div class="hfo-chart-list">${portRows}</div></section>
-      <section class="hfo-card hfo-analysis-card" data-chart="vessel-type"><div class="hfo-chart-head"><div><span>Vessel type</span><small>${escape(currentLabel)} · ${current.length} Port Calls · Click a type to see vessels</small></div></div><div class="hfo-vessel-chart">${typeRows}</div></section>
+    return `<section class="hfo-card hfo-analysis-card" data-chart="port-terminal"><div class="hfo-chart-head"><div><span>Port / Terminal volume</span><small>${escape(currentLabel)} vs ${escape(previousLabel)} · excludes Cancelled · Click a row to see vessels</small></div><div class="hfo-chart-legend"><span><i class="current"></i>${escape(currentLabel)}</span><span><i class="previous"></i>${escape(previousLabel)}</span></div></div><div class="hfo-chart-list">${portRows}</div></section>
+      <section class="hfo-card hfo-analysis-card" data-chart="vessel-type"><div class="hfo-chart-head"><div><span>Vessel type</span><small>${escape(currentLabel)} · ${activeCurrent.length} Port Calls · excludes Cancelled · Click a type to see vessels</small></div></div><div class="hfo-vessel-chart">${typeRows}</div></section>
       <section class="hfo-card hfo-analysis-card" data-chart="status"><div class="hfo-chart-head"><div><span>Vessel status</span><small>${escape(currentLabel)} · ${current.length} Port Calls · Click a status to see vessels</small></div></div><div class="hfo-status-chart">${statusRows||`<div class="hfo-empty">No Port Calls in ${escape(currentLabel)}.</div>`}</div></section>`;
   }
   function startOfWeek(date) { const d = new Date(date); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; }
@@ -271,7 +273,7 @@
     const cards=[
       {title:metricLabel,subtitle:metricTrend,kind:'metric'},
       {title:'Port / Terminal volume',subtitle:`${chart.currentLabel} vs ${chart.previousLabel}`,kind:'ports'},
-      {title:'Vessel type',subtitle:`${chart.currentLabel} · ${chart.current.length} Port Calls`,kind:'types'},
+      {title:'Vessel type',subtitle:`${chart.currentLabel} · ${chart.activeCurrent.length} Port Calls`,kind:'types'},
       {title:'Vessel status',subtitle:`${chart.currentLabel} · ${chart.current.length} Port Calls`,kind:'statuses'}
     ];
     cards.forEach((card,index)=>{const x=pad+index*(cardWidth+gap),y=130;roundRect(x,y,cardWidth,chartHeight);font(20,700);ctx.fillStyle='#172033';ctx.fillText(card.title,x+20,y+20);font(14,400);ctx.fillStyle='#64748b';ctx.fillText(fitText(card.subtitle,cardWidth-40),x+20,y+50);if(card.kind==='metric'){font(50,700);ctx.fillStyle='#10233d';ctx.fillText(String(metricValue),x+20,y+94);font(14,400);ctx.fillStyle='#64748b';ctx.fillText('Excludes Cancelled',x+20,y+158);}else if(card.kind==='ports'){barList(chart.ports.map(port=>[port,chart.currentPorts.get(port)||0,chart.previousPorts.get(port)||0]),x+20,y+86,cardWidth-40,'#0f8a78',true);}else if(card.kind==='types'){barList(chart.types,x+20,y+86,cardWidth-40,'#4978c8');}else{barList(chart.statuses,x+20,y+86,cardWidth-40,'#7857d8');}});
