@@ -17,6 +17,21 @@
 
 .hfo-download{position:relative}.hfo-download-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:12;min-width:150px;padding:5px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;box-shadow:0 10px 28px #10233d24}.hfo-download-menu[hidden]{display:none}.hfo-download-menu button{display:block;width:100%;padding:9px 11px;border:0;border-radius:5px;background:#fff;color:#172033;text-align:left}.hfo-download-menu button:hover,.hfo-download-menu button:focus{background:#eef7f6}.hfo-download-menu button:disabled{opacity:.5}
 
+.hfo-status-chart{max-height:none;overflow:visible}
+.hfo-status-group{min-width:0}
+.hfo-status-group>summary{list-style:none;cursor:pointer;border-radius:6px;padding:4px 2px}
+.hfo-status-group>summary::-webkit-details-marker{display:none}
+.hfo-status-group>summary:hover,.hfo-status-group>summary:focus-visible{background:#f1f7f8;outline:2px solid transparent}
+.hfo-status-group>summary:focus-visible{outline-color:#0f8a78}
+.hfo-status-group .hfo-chart-label{display:flex;align-items:center;gap:3px}
+.hfo-status-caret{display:inline-block;font-style:normal;font-size:13px;transition:transform .15s}
+.hfo-status-group[open] .hfo-status-caret{transform:rotate(90deg)}
+.hfo-status-vessels{display:grid;gap:4px;max-height:230px;overflow:auto;margin:5px 0 5px 13px;padding:4px 0 4px 9px;border-left:2px solid #dbe3ed}
+.hfo-status-vessel{width:100%;border:1px solid #dbe3ed;border-radius:6px;background:#fff;padding:7px 9px;text-align:left;color:#172033;cursor:pointer}
+.hfo-status-vessel:hover,.hfo-status-vessel:focus-visible{border-color:#0f8a78;background:#f1f7f8}
+.hfo-status-vessel b,.hfo-status-vessel small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hfo-status-vessel b{font-size:12px}.hfo-status-vessel small{margin-top:2px;color:#64748b;font-size:10px}
+
 .hfo-service-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(154px,1fr));gap:12px;margin-top:14px}
 .hfo-service-card{position:relative;min-width:0}
 .hfo-service-tile{width:100%;height:100%;min-height:154px;border:1px solid #dbe3ed;border-radius:13px;background:#fff;display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding:15px;text-align:left;color:#10233d;box-shadow:0 2px 10px #10233d0a}
