@@ -38,6 +38,11 @@ test('field conflict lists original, shared and local; unrelated field does not 
   assert.equal(fieldConflicts({ details: { quantity: '20' } }, { details: { quantity: '10' } }, { details: { quantity: '30' } })[0].field, 'details.quantity');
 });
 
+test('a legacy null vessel type does not conflict with the blank value shown in the editor', () => {
+  assert.deepEqual(fieldConflicts({ vesselType: null }, { vesselType: '' }, { vesselType: 'Oil/Chemical Tanker' }), []);
+  assert.equal(fieldConflicts({ vesselType: 'Bulk Carrier' }, { vesselType: '' }, { vesselType: 'Oil/Chemical Tanker' })[0].field, 'vesselType');
+});
+
 test('PIC alone never grants editing; Crew and Visitor grants are independent', () => {
   const job = { data: { pic: 'alice' } }, service = { data: { pic: 'bob' } };
   assert.equal(canEditJob({ role: 'viewer' }, 'alice', job), false);
