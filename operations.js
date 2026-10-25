@@ -518,7 +518,7 @@
     const flat=FLAT_VISITORS[s.data.type];
     const category=s.data.type==='SIRE Inspector'?'SIRE Inspectors':s.data.type==='Surveyor'?'Surveyors':'Other';
     return `<div class="hfo-section"><div class="hfo-toolbar"><h3>${escape(title)}</h3><small class="hfo-muted">${list.length} people · ${crew?'Immigration & flight details':'Flight details'}</small></div>
-      ${crew?documentBatchHtml(canEditPeople(kind)):''}
+      ${crew||flat?documentBatchHtml(canEditPeople(kind)&&state.peopleLoadedFor===s.job_id,kind,crew?'Crew':title):''}
       ${flat?table(list,category):(crew?CATEGORIES.slice(0,2):CATEGORIES.slice(2)).map(cat=>`<details class="hfo-group" open><summary>${escape(cat)} (${list.filter(p=>p.data.category===cat).length})</summary>${table(list.filter(p=>p.data.category===cat),cat)}</details>`).join('')}</div>`;
   }
 
@@ -606,14 +606,15 @@
       ${messages.length?`<ul>${messages.map(message=>`<li>${escape(message)}</li>`).join('')}</ul>`:''}
     </div>`;
   }
-  function documentBatchHtml(editable) {
+  function documentBatchHtml(editable,kind='crew',title='Crew') {
     const batch=state.documentBatch||{busy:false,category:'On-signers',completed:0,total:0,results:[]};
     const results=batch.results||[];
+    const crew=kind==='crew',types=crew?DOCUMENT_TYPES:DOCUMENT_TYPES.filter(([type])=>type!=='seamanBook');
     return `<section class="hfo-doc-import hfo-doc-batch" aria-labelledby="hfoDocImportTitle">
-      <div class="hfo-toolbar"><div><h4 id="hfoDocImportTitle">Read crew documents</h4><p class="hfo-muted">Upload several files at once. HarborFlow matches the crew name, fills blank fields only, and adds a new row when no matching name exists.</p></div>
-      ${editable?sel('New crew group',batch.category||'On-signers','documentBatchCategory',CATEGORIES.slice(0,2),batch.busy?'disabled':''):''}</div>
+      <div class="hfo-toolbar"><div><h4 id="hfoDocImportTitle">Read ${escape(title)} documents</h4><p class="hfo-muted">Upload several files at once. HarborFlow matches names in this service, fills blank fields only, and adds a new row when no matching name exists.</p></div>
+      ${editable&&crew?sel('New crew group',batch.category||'On-signers','documentBatchCategory',CATEGORIES.slice(0,2),batch.busy?'disabled':''):''}</div>
       <div class="hfo-doc-privacy" role="note">🔒 Original files and full text stay on this device. PDF, JPG, PNG, WebP or BMP · up to 20 files per batch · 30 MB per file.</div>
-      <div class="hfo-doc-grid">${DOCUMENT_TYPES.map(([type,label,description])=>`<article class="hfo-doc-card">
+      <div class="hfo-doc-grid">${types.map(([type,label,description])=>`<article class="hfo-doc-card">
         <div><b>${escape(label)}</b><small>${escape(description)}</small></div>
         <div class="hfo-doc-drop" data-doc-drop="${type}">
           ${editable?`<input type="file" data-doc-file="${type}" accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,application/pdf,image/*" multiple hidden ${batch.busy?'disabled':''}><button type="button" class="hfo-btn" data-doc-choose="${type}" ${batch.busy?'disabled':''}>Choose files</button><span>or drop multiple files</span>`:'<span>View only</span>'}
@@ -940,47 +941,57 @@
     const surname=documentTokens.at(-1);if(crewTokens.at(-1)!==surname)return false;
     const given=documentTokens.slice(0,-1);return given.every((token,index)=>crewTokens[index]===token);
   }
-  async function saveImportedCrew(person,nextData) {
+  async function saveImportedPerson(person,nextData) {
     const data={...nextData,serviceIds:[...new Set([...(nextData.serviceIds||[]),service().id])]};
     const patch=Object.fromEntries(Object.entries(data).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(person.data[key])));
     if(!Object.keys(patch).length)return person;
     const base=Object.fromEntries(Object.keys(patch).map(key=>[key,person.data[key]]));
-    const out=await api('updatePerson',{id:person.id,kind:'crew',patch,base});
+    const out=await api('updatePerson',{id:person.id,kind:person.kind,patch,base});
     Object.assign(person,out.record);
     if(state.personDraft?.id===person.id)state.personDraft.data=structuredClone(person.data);
     return person;
   }
   async function applyImportedResult(result,item) {
     const reader=window.HarborFlowDocumentImport,detectedName=String(result.nameWithoutTitle||result.fields?.name||'').trim();
+    const currentService=service(),kind=currentService?.data.type==='Crew Change'?'crew':'visitor';
+    if(!currentService||(kind==='visitor'&&!FLAT_VISITORS[currentService.data.type]))throw Error('Open a supported service before importing documents.');
+    if(kind==='visitor'&&result.type==='seamanBook')throw Error('Seaman book import is only available in Crew Change.');
     item.fileName=result.fileName||item.fileName;item.name=detectedName;
     if(result.nameNeedsTitle&&detectedName){item.needsTitle=true;item.pendingResult=result;item.outcome='Choose MR. or MS.';item.warnings=['อ่านเพศจาก Passport ไม่ชัดเจน ระบบยังไม่กรอกชื่อหรือข้อมูลจนกว่าจะเลือกคำนำหน้า'];return;}
     const key=normalizedCrewName(result.fields?.name||detectedName);
     if(!key){item.outcome='Needs review';item.error='No readable crew name was found. Nothing was added.';return;}
     const givenSurnameOnly=result.matchStrategy==='given-surname';
-    let person=state.people.find(candidate=>candidate.kind==='crew'&&(givenSurnameOnly?matchesGivenSurname(result.fields?.name||detectedName,candidate.data.name):normalizedCrewName(candidate.data.name)===key));
-    const passportMatches=!person&&result.type==='passport'&&result.fields?.passport?state.people.filter(candidate=>candidate.kind==='crew'&&String(candidate.data.passport||'').toUpperCase()===String(result.fields.passport).toUpperCase()):[];
+    const scopedPeople=state.people.filter(candidate=>candidate.kind===kind&&(kind==='crew'||candidate.data.serviceIds?.includes(currentService.id)));
+    const nameMatches=scopedPeople.filter(candidate=>givenSurnameOnly?matchesGivenSurname(result.fields?.name||detectedName,candidate.data.name):normalizedCrewName(candidate.data.name)===key);
+    if(nameMatches.length>1){item.outcome='Needs review';item.error='More than one person in this service has the same name. Nothing was added.';return;}
+    let person=nameMatches[0];
+    const passportMatches=!person&&result.type==='passport'&&result.fields?.passport?scopedPeople.filter(candidate=>String(candidate.data.passport||'').toUpperCase()===String(result.fields.passport).toUpperCase()):[];
     const matchedByPassport=passportMatches.length===1;if(matchedByPassport)person=passportMatches[0];
     if(person){
       const safeResult=structuredClone(result);safeResult.fields={...(safeResult.fields||{}),name:person.data.name};
       const applied=reader.applyToPerson(person.data,safeResult);
-      await saveImportedCrew(person,applied.person);
-      const nameWarning=matchedByPassport?`Passport matches an existing crew member. Review Name - Surname: saved “${person.data.name}”, document “${result.fields.name}”.`:'';
-      Object.assign(item,{name:person.data.name,outcome:matchedByPassport?'Matched by Passport · Review name':'Matched existing crew',changes:applied.changes,warnings:[...applied.warnings,...(nameWarning?[nameWarning]:[])],needsTitle:false,pendingResult:null,error:''});
+      await saveImportedPerson(person,applied.person);
+      const nameWarning=matchedByPassport?`Passport matches an existing person. Review Name - Surname: saved “${person.data.name}”, document “${result.fields.name}”.`:'';
+      Object.assign(item,{name:person.data.name,outcome:matchedByPassport?'Matched by Passport · Review name':'Matched existing person',changes:applied.changes,warnings:[...applied.warnings,...(nameWarning?[nameWarning]:[])],needsTitle:false,pendingResult:null,error:''});
     }else if(passportMatches.length>1){
-      item.outcome='Needs review';item.error='More than one crew member has this Passport number. Nothing was added.';return;
+      item.outcome='Needs review';item.error='More than one person in this service has this Passport number. Nothing was added.';return;
     }else if(givenSurnameOnly){
-      item.outcome='Needs review';item.error='No existing crew matched the Given name and Surname. Nothing was added.';return;
+      item.outcome='Needs review';item.error='No existing person matched the Given name and Surname. Nothing was added.';return;
     }else{
-      const seed={name:String(result.fields?.name||detectedName).toUpperCase(),category:state.documentBatch.category||'On-signers',serviceIds:[service().id],flights:[]};
-      const applied=reader.applyToPerson(seed,result),out=await api('createPerson',{jobId:job().id,kind:'crew',data:applied.person});
+      const category=kind==='crew'?state.documentBatch.category||'On-signers':currentService.data.type==='SIRE Inspector'?'SIRE Inspectors':currentService.data.type==='Surveyor'?'Surveyors':'Other';
+      const seed={name:String(result.fields?.name||detectedName).toUpperCase(),category,serviceIds:[currentService.id],flights:[]};
+      const applied=reader.applyToPerson(seed,result),out=await api('createPerson',{jobId:job().id,kind,data:applied.person});
       person=out.person;state.people.push(person);
-      Object.assign(item,{name:person.data.name,outcome:'Added new crew',changes:applied.changes,warnings:applied.warnings,needsTitle:false,pendingResult:null,error:''});
+      Object.assign(item,{name:person.data.name,outcome:'Added new person',changes:applied.changes,warnings:applied.warnings,needsTitle:false,pendingResult:null,error:''});
     }
     state.peopleLoadedFor=job().id;
   }
-  async function importCrewDocuments(files,type) {
+  async function importPersonDocuments(files,type) {
     const reader=window.HarborFlowDocumentImport,batch=state.documentBatch;
-    if(!reader||!canEditPeople('crew')||batch.busy)return;
+    const currentService=service(),kind=currentService?.data.type==='Crew Change'?'crew':'visitor';
+    if(!reader||!currentService||(kind==='visitor'&&!FLAT_VISITORS[currentService.data.type])||!canEditPeople(kind)||state.peopleLoadedFor!==currentService.job_id||batch.busy)return;
+    if(kind==='visitor'&&type==='seamanBook')return;
+    const serviceId=currentService.id,jobId=job()?.id;
     const chosen=[...files],limit=reader.limits?.maxBatchFiles||20,queue=chosen.slice(0,limit);
     batch.busy=true;batch.completed=0;batch.total=queue.length;batch.results=[];
     if(chosen.length>limit)batch.results.push({fileName:`${chosen.length-limit} file(s)`,error:`Only the first ${limit} files were accepted.`,outcome:'Not processed'});
@@ -988,9 +999,11 @@
     const batchReader=reader.createBatchReader?.()||reader;
     try{
       for(const file of queue){
+        if(service()?.id!==serviceId||job()?.id!==jobId){batch.results.push({fileName:file.name,outcome:'Not processed',error:'Service changed during import. Reopen the original service and retry.'});batch.completed+=1;continue;}
         documentProgress(type,`Reading ${file.name}…`);
         try{
           const result=await batchReader.read(file,type,progress=>documentProgress(type,`Reading ${file.name}… ${progress||0}%`));
+          if(service()?.id!==serviceId||job()?.id!==jobId)throw Error('Service changed during import. Nothing was saved.');
           const item={fileName:file.name,name:'',outcome:'Needs review'};batch.results.push(item);await applyImportedResult(result,item);
         }catch(error){batch.results.push({fileName:file.name,name:'',outcome:'Not processed',error:error.message||'Document could not be read.'});}
         batch.completed+=1;render();
@@ -1187,11 +1200,11 @@
     }
     if(b.hasAttribute('data-download-toggle')){const menu=b.parentElement.querySelector('[data-download-menu]'),open=menu.hidden;menu.hidden=!open;b.setAttribute('aria-expanded',String(open));return;}
     if(b.dataset.download){b.closest('[data-download-menu]').hidden=true;await downloadCalendarReport(b.dataset.download);return;}
-if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
+if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.documentBatch={busy:false,category:'On-signers',completed:0,total:0,results:[]};state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
     if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
     if(b.hasAttribute('data-sync-job-folder')){await perform('syncJobFolder',{id:job().id},out=>{Object.assign(job(),out.record);render();});return;}
     if(b.dataset.imoChoice){const grid=b.closest('.hfo-form-grid'),input=grid?.querySelector('[name="imo"]');if(input){input.value=b.dataset.imoChoice;grid.querySelector('[data-imo-feedback]').textContent='IMO selected. Verify with ship documents.';if(input.hasAttribute('data-job-field'))input.dispatchEvent(new Event('change',{bubbles:true}));}return;}
-if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=service()?.data.type==='Crew Change'?'crew':FLAT_VISITORS[service()?.data.type]?'visitors':'details';state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
+if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.documentBatch={busy:false,category:'On-signers',completed:0,total:0,results:[]};state.tab=service()?.data.type==='Crew Change'?'crew':FLAT_VISITORS[service()?.data.type]?'visitors':'details';state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
     if(b.dataset.shift){shift(Number(b.dataset.shift));return;}
     if(b.hasAttribute('data-grants')){state.modal='grants';state.openJobId=null;state.openServiceId=null;render();return;}
     if(b.hasAttribute('data-close')){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.modal=null;state.openJobId=null;state.openServiceId=null;state.people=[];state.peopleLoadedFor=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
@@ -1224,7 +1237,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
   });
   document.body.addEventListener('change',async event=>{
     const t=event.target;
-    if(t.dataset.docFile){const files=[...(t.files||[])];if(files.length)await importCrewDocuments(files,t.dataset.docFile);t.value='';return;}
+    if(t.dataset.docFile){const files=[...(t.files||[])];if(files.length)await importPersonDocuments(files,t.dataset.docFile);t.value='';return;}
     if(t.name==='documentBatchCategory'){state.documentBatch.category=t.value;return;}
     if(t.id==='hfoView'){state.view=t.value;render();return;}
     if(t.dataset.jobDate||t.dataset.jobTime){const hidden=syncJobDateTime(t);if(hidden?.hasAttribute('data-job-field'))await saveJobField(hidden);return;}
@@ -1267,7 +1280,7 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.tab=se
   document.body.addEventListener('pointerdown',event=>{if(event.target.closest('[data-flight-code]'))event.preventDefault();});
   document.body.addEventListener('dragover',event=>{const drop=event.target.closest('[data-doc-drop]');if(!drop)return;event.preventDefault();drop.classList.add('is-dragging');});
   document.body.addEventListener('dragleave',event=>{const drop=event.target.closest('[data-doc-drop]');if(drop&&!drop.contains(event.relatedTarget))drop.classList.remove('is-dragging');});
-  document.body.addEventListener('drop',event=>{const drop=event.target.closest('[data-doc-drop]');if(!drop)return;event.preventDefault();drop.classList.remove('is-dragging');const files=[...(event.dataTransfer?.files||[])];if(files.length)void importCrewDocuments(files,drop.dataset.docDrop);});
+  document.body.addEventListener('drop',event=>{const drop=event.target.closest('[data-doc-drop]');if(!drop)return;event.preventDefault();drop.classList.remove('is-dragging');const files=[...(event.dataTransfer?.files||[])];if(files.length)void importPersonDocuments(files,drop.dataset.docDrop);});
   document.body.addEventListener('keydown',event=>{
     const t=event.target;
     if(!t.dataset.codeKind)return;
