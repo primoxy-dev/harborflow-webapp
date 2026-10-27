@@ -28,7 +28,7 @@ test('customer projection never includes cost, margin, rate references or intern
 function fixture({role='editor',commercial={quote_view:true,quote_edit:true,cost_view:false,cost_manage:false},login='alice'}={}){
   const original=structuredClone({id:quotationId,job_id:null,created_by:'alice',shared_with:[],status:'draft',revision:1,version:1,data});
   const calls=[];let saved=null;
-  const sql={async query(q,p=[]){calls.push(q);if(q.includes('quotation_grants WHERE'))return [commercial];if(q.includes('FROM operation_jobs'))return [];if(q.startsWith('SELECT * FROM quotations WHERE'))return [original];if(q.startsWith('SELECT * FROM quotations ORDER'))return [original];if(q.startsWith('SELECT * FROM quotation_rates'))return [];if(q.startsWith('UPDATE quotations SET job_id')){saved=JSON.parse(p[2]);return [{...original,data:saved,version:2}];}throw Error('Unexpected query '+q);}};
+  const sql={async query(q,p=[]){calls.push(q);if(q.includes('FROM quotation_categories'))return [];if(q.includes('quotation_grants WHERE'))return [commercial];if(q.includes('FROM operation_jobs'))return [];if(q.startsWith('SELECT * FROM quotations WHERE'))return [original];if(q.startsWith('SELECT * FROM quotations ORDER'))return [original];if(q.startsWith('SELECT * FROM quotation_rates'))return [];if(q.startsWith('UPDATE quotations SET job_id')){saved=JSON.parse(p[2]);return [{...original,data:saved,version:2}];}throw Error('Unexpected query '+q);}};
   return {calls,get saved(){return saved;},route:createQuotationRoute({db:()=>sql,permission:async()=>({role}),sessionLogin:()=>login,ensureSchema:async()=>{}})};
 }
 const get=()=>new Request('https://example.test/api/quotation?action=state');
@@ -89,7 +89,7 @@ test('marking sent records a revision and an edit after sending starts the next 
 });
 test('a newly selected time-based rate must match its approved terms and confirmed hours',async()=>{
   const rateId='33333333-3333-4333-8333-333333333333';let inserted=0;
-  const rate={id:rateId,status:'approved',version:1,data:{port:'Bangkok',amount:'9000',billingType:'hours',minimumHours:'2',additionalHourlyRate:'4500'}};
+  const rate={id:rateId,status:'approved',version:1,data:{port:'Bangkok',category:'Crew Change',amount:'9000',billingType:'hours',minimumHours:'2',additionalHourlyRate:'4500'}};
   const sql={async query(q,p=[]){
     if(q.includes('quotation_grants WHERE'))return [{quote_view:true,quote_edit:true,cost_view:true}];
     if(q.includes('FROM operation_jobs'))return [];

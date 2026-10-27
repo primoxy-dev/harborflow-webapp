@@ -11,6 +11,7 @@ const lineFields=['id','description','unit','saleQuantity','salePrice','vatMode'
 const costFields=['costUnit','costQuantity','costVatMode','costVatRate','costNote','rateId','rateVersion','rateDateConfirmed','markupType','markup','markupBase','billingType','costBaseUnit','minimumHours','hoursPerTrip','additionalHourlyRate'];
 const pick=(object,keys)=>Object.fromEntries(keys.filter(key=>Object.hasOwn(object||{},key)).map(key=>[key,object[key]]));
 const validText=(x,max=500)=>typeof x==='string'&&x.length<=max;
+const categoryName=value=>/^crew\s+change$/i.test(String(value||'').trim())?'Crew Change':String(value||'').trim().replace(/\s+/g,' ');
 const validDate=x=>x===''||typeof x==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x)&&!Number.isNaN(Date.parse(x))&&new Date(x).toISOString().slice(0,10)===x;
 const safeRate=rate=>rate&&typeof rate==='object'&&validText(rate.port,150)&&validText(rate.category,100)&&validText(rate.description,500)&&validText(rate.unit,80)&&validText(rate.conditions||'',2000)&&validText(rate.source||'',300)&&validText(rate.direction||'',100)&&validDate(rate.validFrom||'')&&validDate(rate.validUntil||'')&&(rate.amount==null||numeric(rate.amount))&&(!rate.billingType||['flat','hours'].includes(rate.billingType))&&(!rate.validFrom||!rate.validUntil||rate.validFrom<=rate.validUntil);
 
@@ -62,10 +63,12 @@ export function createQuotationRoute(deps={}) {
       if(request.method==='GET'&&action==='state'){
         const jobs=await getJobs();
         const quotes=grant.quoteView?await q('SELECT * FROM quotations ORDER BY updated_at DESC LIMIT 500'):[];
-        const rates=grant.costView?await q('SELECT * FROM quotation_rates ORDER BY updated_at DESC LIMIT 2000'):[];
+        const rates=grant.costView?await q('SELECT * FROM quotation_rates WHERE removed_at IS NULL ORDER BY updated_at DESC LIMIT 2000'):[];
+        const deletedRates=grant.costManage?await q('SELECT * FROM quotation_rates WHERE removed_at IS NOT NULL ORDER BY removed_at DESC LIMIT 2000'):[];
+        const categories=grant.costView||grant.quoteView?await q('SELECT port,name FROM quotation_categories ORDER BY port,name'):[];
         const grants=isOwner?await q('SELECT * FROM quotation_grants ORDER BY login'):[];
         const access=isOwner?await q('SELECT login,role FROM operation_grants ORDER BY login'):[];
-        return json({login,grant,role:op.role,jobs:[...jobs.values()].map(j=>({id:j.id,data:pick(j.data,['jobNo','vessel','port','principal','eta','pic'])})),quotations:quotes.filter(x=>canSee(x,login,op,grant,jobs)).map(x=>project(x,grant.costView)),rates,grants,access});
+        return json({login,grant,role:op.role,jobs:[...jobs.values()].map(j=>({id:j.id,data:pick(j.data,['jobNo','vessel','port','principal','eta','pic'])})),quotations:quotes.filter(x=>canSee(x,login,op,grant,jobs)).map(x=>project(x,grant.costView)),rates,deletedRates,categories,grants,access});
       }
       if(request.method==='GET'&&action==='revisions'){
         const jobs=await getJobs(),[quote]=await q('SELECT * FROM quotations WHERE id=$1',[input.id]);
@@ -89,18 +92,41 @@ export function createQuotationRoute(deps={}) {
         if(!grant.costManage)return fail('Cost management permission required',403);
         if(!Array.isArray(input.rates)||!input.rates.length||input.rates.length>500||input.rates.some(rate=>!safeRate(rate)))return fail('Invalid import data');
         // A single SQL statement makes the review batch all-or-nothing; nothing is approved on import.
-        const entries=input.rates.map(rate=>({id:randomUUID(),data:pick(rate,['port','category','description','unit','amount','conditions','source','direction','validFrom','validUntil','warning'])}));
-        await q(`INSERT INTO quotation_rates(id,data,status,updated_by) SELECT (x->>'id')::uuid,x->'data','pending',$2 FROM jsonb_array_elements($1::jsonb) x`,[JSON.stringify(entries),login]);
+        const entries=input.rates.map(rate=>({id:randomUUID(),data:{...pick(rate,['port','category','description','unit','amount','conditions','source','direction','validFrom','validUntil','warning']),category:categoryName(rate.category)}}));
+        await q(`WITH imported AS (INSERT INTO quotation_rates(id,data,status,updated_by) SELECT (x->>'id')::uuid,x->'data','pending',$2 FROM jsonb_array_elements($1::jsonb) x RETURNING data),
+          categories AS (INSERT INTO quotation_categories(port,name,created_by) SELECT DISTINCT data->>'port',data->>'category',$2 FROM imported WHERE btrim(data->>'port')<>'' AND btrim(data->>'category')<>'' ON CONFLICT DO NOTHING) SELECT count(*) FROM imported`,[JSON.stringify(entries),login]);
         return json({count:entries.length});
+      }
+      if(action==='addCategory'){
+        if(!grant.costManage)return fail('Cost management permission required',403);
+        if(!validText(input.port,150)||!validText(input.name,100))return fail('Invalid service category');
+        const port=input.port.trim(),name=categoryName(input.name);if(!port||!name)return fail('Port and category name are required');
+        const [created]=await q('INSERT INTO quotation_categories(port,name,created_by) VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING port,name',[port,name,login]);
+        if(created)return json({category:created},201);
+        return fail('This service category already exists for the Port',409);
+      }
+      if(['deleteRate','restoreRate'].includes(action)){
+        if(!grant.costManage)return fail('Cost management permission required',403);
+        if(!uuid(input.id)||!Number.isInteger(input.version)||input.version<1)return fail('Rate and current version required');
+        const removing=action==='deleteRate';
+        const [changed]=await q(`WITH changed AS (
+          UPDATE quotation_rates SET removed_at=${removing?'now()':'NULL'},updated_by=$3,updated_at=now(),version=version+1
+          WHERE id=$1 AND version=$2 AND removed_at IS ${removing?'NULL':'NOT NULL'} RETURNING *
+        ), logged AS (INSERT INTO quotation_rate_history(rate_id,version,actor,data,status,action)
+          SELECT id,version,$3,data,status,$4 FROM changed) SELECT * FROM changed`,[input.id,input.version,login,removing?'delete':'restore']);
+        return changed?json({rate:changed}):fail('Rate changed; reload and review',409);
       }
       if(action==='saveRate'){
         if(!grant.costManage)return fail('Cost management permission required',403);
         if(!safeRate(input.data)||!['pending','approved'].includes(input.status)||input.status==='approved'&&(!numeric(input.data.amount)||!input.data.description.trim()||!input.data.unit.trim()||!input.data.port.trim()||input.data.warning?.includes('minimum_and_additional_time')&&input.data.billingType!=='hours'||input.data.billingType==='hours'&&(!numeric(input.data.minimumHours)||!numeric(input.data.additionalHourlyRate))))return fail('Complete rate details before approval');
         const id=input.id||randomUUID();if(!uuid(id)||!Number.isInteger(input.version)||input.version<0)return fail('Invalid rate');
         const data=pick(input.data,['port','category','description','unit','amount','conditions','source','direction','validFrom','validUntil','warning','billingType','minimumHours','additionalHourlyRate']);
+        data.category=categoryName(data.category);data.port=data.port.trim();
+        if(!data.category||!data.port)return fail('Port and category are required');
         const [saved]=await q(`WITH inserted AS (INSERT INTO quotation_rates(id,data,status,updated_by) SELECT $1,$3::jsonb,$4,$5 WHERE $2=0 ON CONFLICT DO NOTHING RETURNING *),
-          updated AS (UPDATE quotation_rates SET data=$3::jsonb,status=$4,updated_by=$5,version=version+1,updated_at=now() WHERE id=$1 AND version=$2 AND $2>0 RETURNING *),
-          result AS (SELECT * FROM inserted UNION ALL SELECT * FROM updated), log AS (INSERT INTO quotation_rate_history(rate_id,version,actor,data,status) SELECT id,version,$5,data,status FROM result) SELECT * FROM result`,[id,input.version,JSON.stringify(data),input.status,login]);
+          updated AS (UPDATE quotation_rates SET data=$3::jsonb,status=$4,updated_by=$5,version=version+1,updated_at=now() WHERE id=$1 AND version=$2 AND $2>0 AND removed_at IS NULL RETURNING *),
+          result AS (SELECT * FROM inserted UNION ALL SELECT * FROM updated), log AS (INSERT INTO quotation_rate_history(rate_id,version,actor,data,status) SELECT id,version,$5,data,status FROM result),
+          categories AS (INSERT INTO quotation_categories(port,name,created_by) SELECT data->>'port',data->>'category',$5 FROM result ON CONFLICT DO NOTHING) SELECT * FROM result`,[id,input.version,JSON.stringify(data),input.status,login]);
         return saved?json({rate:saved}):fail('Rate changed; reload and review',409);
       }
       if(!grant.quoteEdit||op.role==='viewer')return fail('Quotation editing permission required',403);
@@ -127,7 +153,7 @@ export function createQuotationRoute(deps={}) {
               }else if(String(old.costUnit)===String(line.costUnit))continue;
             }
             const [rate]=await q('SELECT * FROM quotation_rates WHERE id=$1',[line.rateId]);
-            if(!rate||rate.status!=='approved'||rate.version!==Number(line.rateVersion)||rate.data.port!==data.port||line.rateDateConfirmed!==true)return fail('Approved cost rate must be current and confirmed before use',409);
+            if(!rate||rate.removed_at||rate.status!=='approved'||rate.version!==Number(line.rateVersion)||rate.data.port!==data.port||categoryName(rate.data.category)!==categoryName(data.category)||line.rateDateConfirmed!==true)return fail('Approved cost rate must be current and confirmed before use',409);
             if(rate.data.billingType==='hours'){
               if(line.billingType!=='hours'||Number(line.costBaseUnit)!==Number(rate.data.amount)||Number(line.minimumHours)!==Number(rate.data.minimumHours)||Number(line.additionalHourlyRate)!==Number(rate.data.additionalHourlyRate))return fail('Review the time-based rate',409);
               const expected=timeCostPerTrip(line.costBaseUnit,line.minimumHours,line.hoursPerTrip,line.additionalHourlyRate);
