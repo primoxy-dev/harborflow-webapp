@@ -15,12 +15,13 @@
   }
   const NATIONALITIES={AFG:'AFGHAN',ALB:'ALBANIAN',DZA:'ALGERIAN',USA:'AMERICAN',AGO:'ANGOLAN',ARG:'ARGENTINIAN',ARM:'ARMENIAN',AUS:'AUSTRALIAN',AUT:'AUSTRIAN',AZE:'AZERBAIJANI',BHR:'BAHRAINI',BGD:'BANGLADESHI',BLR:'BELARUSIAN',BEL:'BELGIAN',BOL:'BOLIVIAN',BIH:'BOSNIAN',BRA:'BRAZILIAN',GBR:'BRITISH',BGR:'BULGARIAN',KHM:'CAMBODIAN',CMR:'CAMEROONIAN',CAN:'CANADIAN',CHL:'CHILEAN',CHN:'CHINESE',COL:'COLOMBIAN',HRV:'CROATIAN',CUB:'CUBAN',CYP:'CYPRIOT',CZE:'CZECH',DNK:'DANISH',NLD:'DUTCH',ECU:'ECUADORIAN',EGY:'EGYPTIAN',ARE:'EMIRATI',EST:'ESTONIAN',ETH:'ETHIOPIAN',FJI:'FIJIAN',PHL:'FILIPINO',FIN:'FINNISH',FRA:'FRENCH',GEO:'GEORGIAN',DEU:'GERMAN',GHA:'GHANAIAN',GRC:'GREEK',HUN:'HUNGARIAN',ISL:'ICELANDIC',IND:'INDIAN',IDN:'INDONESIAN',IRN:'IRANIAN',IRQ:'IRAQI',IRL:'IRISH',ISR:'ISRAELI',ITA:'ITALIAN',JAM:'JAMAICAN',JPN:'JAPANESE',JOR:'JORDANIAN',KAZ:'KAZAKH',KEN:'KENYAN',KOR:'KOREAN',PRK:'KOREAN',KWT:'KUWAITI',LAO:'LAO',LVA:'LATVIAN',LBN:'LEBANESE',LBR:'LIBERIAN',LTU:'LITHUANIAN',MDG:'MALAGASY',MYS:'MALAYSIAN',MDV:'MALDIVIAN',MLT:'MALTESE',MEX:'MEXICAN',MNG:'MONGOLIAN',MAR:'MOROCCAN',MOZ:'MOZAMBICAN',MMR:'MYANMAR',NPL:'NEPALESE',NZL:'NEW ZEALANDER',NGA:'NIGERIAN',NOR:'NORWEGIAN',OMN:'OMANI',PAK:'PAKISTANI',PAN:'PANAMANIAN',PER:'PERUVIAN',POL:'POLISH',PRT:'PORTUGUESE',QAT:'QATARI',ROU:'ROMANIAN',RUS:'RUSSIAN',SAU:'SAUDI',SEN:'SENEGALESE',SRB:'SERBIAN',SGP:'SINGAPOREAN',SVK:'SLOVAK',SVN:'SLOVENIAN',ZAF:'SOUTH AFRICAN',ESP:'SPANISH',LKA:'SRI LANKAN',SDN:'SUDANESE',SWE:'SWEDISH',CHE:'SWISS',SYR:'SYRIAN',TWN:'TAIWANESE',TZA:'TANZANIAN',THA:'THAI',TUN:'TUNISIAN',TUR:'TURKISH',UGA:'UGANDAN',UKR:'UKRAINIAN',URY:'URUGUAYAN',UZB:'UZBEK',VEN:'VENEZUELAN',VNM:'VIETNAMESE',YEM:'YEMENI',ZMB:'ZAMBIAN',ZWE:'ZIMBABWEAN'};
   const NATIONALITY_ALIASES={THAILAND:'THAI',PHILIPPINES:'FILIPINO','UNITED STATES':'AMERICAN','UNITED STATES OF AMERICA':'AMERICAN','UNITED KINGDOM':'BRITISH',ENGLAND:'BRITISH',VIETNAM:'VIETNAMESE',INDONESIA:'INDONESIAN',INDIA:'INDIAN',CHINA:'CHINESE',MYANMAR:'MYANMAR',BURMA:'MYANMAR','SOUTH KOREA':'KOREAN','REPUBLIC OF KOREA':'KOREAN',RUSSIA:'RUSSIAN',UKRAINE:'UKRAINIAN'};
+  Object.assign(NATIONALITY_ALIASES,{CROATIA:'CROATIAN',HRVATSKO:'CROATIAN',PAKISTAN:'PAKISTANI'});
   const nationalityChoice=value=>{const raw=upper(value).replace(/[^A-Z ]/g,'').trim();if(NATIONALITIES[raw])return NATIONALITIES[raw];if(NATIONALITY_ALIASES[raw])return NATIONALITY_ALIASES[raw];if(Object.values(NATIONALITIES).includes(raw))return raw;const alias=Object.keys(NATIONALITY_ALIASES).find(value=>raw.includes(value));return alias?NATIONALITY_ALIASES[alias]:raw;};
   const passportTitle=sex=>sex==='M'?'MR.':sex==='F'?'MS.':'';
   const passportName=(given,surname,sex,middle='')=>clean([passportTitle(sex),clean(given),clean(middle),clean(surname)].filter(Boolean).join(' '));
   const isoDate=(year,month,day)=>{
     const date=new Date(Date.UTC(Number(year),Number(month)-1,Number(day)));
-    return Number.isNaN(date.valueOf())?'':`${String(date.getUTCFullYear()).padStart(4,'0')}-${String(date.getUTCMonth()+1).padStart(2,'0')}-${String(date.getUTCDate()).padStart(2,'0')}`;
+    return Number.isNaN(date.valueOf())||date.getUTCFullYear()!==Number(year)||date.getUTCMonth()+1!==Number(month)||date.getUTCDate()!==Number(day)?'':`${String(date.getUTCFullYear()).padStart(4,'0')}-${String(date.getUTCMonth()+1).padStart(2,'0')}-${String(date.getUTCDate()).padStart(2,'0')}`;
   };
   function parseDate(value,{birth=false}={}){
     const source=upper(value).replace(/[,]/g,' ').trim();
@@ -65,13 +66,13 @@
     return clean(value);
   }
   function printedPassport(text){
-    const lines=String(text).split(/\r?\n/).map(line=>upper(line)).filter(Boolean);
+    const lines=String(text).normalize('NFD').replace(/[\u0300-\u036f]/g,'').split(/\r?\n/).map(line=>upper(line).replace(/SUMAME|SURNANE/g,'SURNAME')).filter(Boolean);
     const anyLabel=/(?:SURNAME|FAMILY NAME|GIVEN(?: NAME(?:\(S\)|S)?)?|FIRST NAMES?|MIDDLE NAME|NATIONALITY|SEX|GENDER|PASSPORT(?: NO)?|DOCUMENT NO|DATE OF BIRTH|BIRTH DATE|DOB|DATE OF EXPIRY|EXPIRY DATE|EXPIRES)/;
     const read=(labels,pattern=/^[A-Z][A-Z .,'/-]{0,60}$/)=>{
       const label=new RegExp(`(?:${labels})`);
       for(let index=0;index<lines.length;index++){
         const match=label.exec(lines[index]);if(!match)continue;
-        const tail=clean(lines[index].slice(match.index+match[0].length).replace(/^\s*[:#/-]+\s*/,''));
+        const tail=clean(lines[index].slice(match.index+match[0].length).replace(/^(?:[\s:/,.-]*(?:PRENOM|NOM|NATIONALITE|SEXE)\b)+[\s:/,.-]*/,'').replace(/^\s*[:#/-]+\s*/,''));
         if(tail&&!anyLabel.test(tail)&&pattern.test(tail))return tail;
         for(let offset=1;offset<=2&&index+offset<lines.length;offset++){
           const candidate=clean(lines[index+offset].replace(/^\s*[:#/-]+\s*/,''));
@@ -82,8 +83,17 @@
       return '';
     };
     const given=read('GIVEN(?: NAME(?:\\(S\\)|S)?)?|FIRST(?: NAMES?)?'),middle=read('MIDDLE(?: NAME)?'),surname=read('SURNAME|FAMILY NAME');
-    const sexText=read('SEX|GENDER',/^(?:MALE|FEMALE|M|F)$/),sex=/^M(?:ALE)?$/.test(sexText)?'M':/^F(?:EMALE)?$/.test(sexText)?'F':'';
-    return {given,middle,surname,sex,nationality:nationalityChoice(read('NATIONALITY')),passport:upper(read('PASSPORT(?: NO)?|DOCUMENT NO',/^[A-Z0-9]{6,14}$/)).replace(/\s/g,'')};
+    const sexText=read('SEX|GENDER',/^(?:MALE|FEMALE|M|F)\b/),sex=/^M(?:ALE)?\b/.test(sexText)?'M':/^F(?:EMALE)?\b/.test(sexText)?'F':'';
+    let passport='';
+    for(let index=0;index<lines.length&&!passport;index++){
+      if(!/(?:PASSPORT\s*(?:NO\.?|NUMBER)|DOCUMENT\s*(?:NO\.?|NUMBER))/.test(lines[index])||/PREVIOUS|OLD PASSPORT/.test(lines[index]))continue;
+      for(let offset=0;offset<=2&&index+offset<lines.length;offset++){
+        const line=lines[index+offset];if(offset&&anyLabel.test(line)&&!/^PASSPORT\s+P\b/.test(line))break;
+        const matches=line.match(/\b(?=[A-Z0-9]{6,14}\b)(?=[A-Z0-9]*\d)[A-Z0-9]+\b/g)||[];
+        if(matches.length===1){passport=matches[0];break;}
+      }
+    }
+    return {given,middle,surname,sex,nationality:nationalityChoice(read('NATIONALITY')),passport};
   }
   const noisyMrzName=value=>/([A-Z])\1{5,}/.test(value)||/[LK]{8,}/.test(value)||String(value||'').length>70;
   function editDistance(left,right){
@@ -97,15 +107,17 @@
   function mrzPassport(text){
     const lines=String(text).split(/\r?\n/).map(line=>upper(line).replace(/\s/g,'').replace(/[^A-Z0-9<]/g,'')).filter(line=>line.length>=40);
     const first=lines.find(line=>line.startsWith('P<'));if(!first)return null;const index=lines.indexOf(first),second=lines[index+1];if(!second||second.length<28)return null;
-    const names=first.slice(5).split('<<'),surname=clean(names[0].replace(/</g,' ')),given=clean((names[1]||'').replace(/(?:<|[CLK]){5,}.*$/,'').replace(/</g,' '));
-    const rawPassport=second.slice(0,9),passport=repairMrzDocumentNumber(rawPassport,second[9]).replace(/</g,''),nationality=nationalityChoice(second.slice(10,13).replace(/</g,'')),birthRaw=second.slice(13,19),sex=['M','F'].includes(second[20])?second[20]:'',expiryRaw=second.slice(21,27);
+    const names=first.slice(5).replace(/<[CLK]</g,'<<').split('<<'),surname=clean(names[0].replace(/</g,' ')),given=clean((names[1]||'').replace(/(?:<|[CLK]){5,}.*$/,'').replace(/</g,' '));
+    const numericField=(value,digit)=>{const corrected=value.replace(/[OQ]/g,'0').replace(/[IL]/g,'1').replace(/Z/g,'2').replace(/S/g,'5').replace(/B/g,'8');return /^\d{6}$/.test(corrected)&&validMrz(corrected,digit)?corrected:value;};
+    const rawPassport=second.slice(0,9),passport=repairMrzDocumentNumber(rawPassport,second[9]).replace(/</g,''),nationality=nationalityChoice(second.slice(10,13).replace(/</g,'')),birthRaw=numericField(second.slice(13,19),second[19]),sex=['M','F'].includes(second[20])?second[20]:'',expiryRaw=numericField(second.slice(21,27),second[27]);
     const checks=[validMrz(passport.padEnd(9,'<'),second[9]),validMrz(birthRaw,second[19]),validMrz(expiryRaw,second[27])];
     const nameWithoutTitle=clean([given,surname].filter(Boolean).join(' '));
     return {fields:{name:passportName(given,surname,sex)||nameWithoutTitle,passport,nationality,dob:parseDate(birthRaw,{birth:true}),passportExpiry:parseDate(expiryRaw)},given,surname,sex,nameWithoutTitle,nameNeedsTitle:!sex,checks,confidence:checks.filter(Boolean).length===3?99:78};
   }
   function extractPassport(text,ocrConfidence=100,fileName=''){
     const normalized=upper(text),printed=printedPassport(text),mrz=mrzPassport(text),warnings=[];
-    const indian=/(?:REPUBLIC OF INDIA|\bINDIAN\b|P<IND)/.test(normalized),mrzGiven=restoreMrzNameSpacing(text,mrz?.given||'',indian?2:1),mrzName=clean([mrzGiven,mrz?.surname].filter(Boolean).join(' ')),mrzNameNoisy=noisyMrzName(mrzName),useMrzGiven=printed.given&&printed.given.length<3&&mrzGiven&&!noisyMrzName(mrzGiven),useMrzSurname=printed.surname&&printed.surname.length<3&&mrz?.surname&&!noisyMrzName(mrz.surname),given=useMrzGiven?mrzGiven:printed.given||indian&&!mrzNameNoisy&&mrzGiven||'',surname=useMrzSurname?mrz.surname:printed.surname||indian&&mrz?.surname||'';
+    if(mrz?.checks.every(Boolean))for(const key of ['given','surname']){const value=printed[key],reference=mrz[key];if(value&&reference&&value.endsWith(reference)&&value.length-reference.length<=3)printed[key]=reference;}
+    const indian=/(?:REPUBLIC OF INDIA|\bINDIAN\b|P<IND)/.test(normalized),mrzGiven=restoreMrzNameSpacing(text,mrz?.given||'',indian?2:1),mrzName=clean([mrzGiven,mrz?.surname].filter(Boolean).join(' ')),mrzNameNoisy=noisyMrzName(mrzName),useMrzGiven=printed.given&&printed.given.length<3&&mrzGiven&&!noisyMrzName(mrzGiven),useMrzSurname=printed.surname&&printed.surname.length<3&&mrz?.surname&&!noisyMrzName(mrz.surname),given=useMrzGiven?mrzGiven:printed.given||!mrzNameNoisy&&mrzGiven||'',surname=useMrzSurname?mrz.surname:printed.surname||!mrzNameNoisy&&mrz?.surname||'';
     const printedName=clean([given,printed.middle,surname].filter(Boolean).join(' '));
     if(mrzNameNoisy)warnings.push('MRZ name contains repeated OCR characters; used the printed name fields instead');
     if(useMrzGiven||useMrzSurname)warnings.push('A short printed name field was unclear; the matching MRZ field was used to correct it');
@@ -113,12 +125,13 @@
     if(printedName&&mrzName&&!mrzNameNoisy&&upper(printedName)!==upper(mrzName))warnings.push('Printed name and MRZ name differ; the printed Surname / Given names / Middle name fields were used');
     const printedFullName=printedName?passportName(given,surname,sex,printed.middle):'',extractedName=printedFullName||(!mrzNameNoisy?passportName(mrzGiven,mrz?.surname||'',sex):'')||nameWithoutTitle,repairedName=/(?:REPUBLIC OF INDIA|\bINDIAN\b|P<IND)/.test(normalized)?repairIndianNameFromFileName(extractedName,fileName,sex):extractedName;
     if(repairedName!==extractedName)warnings.push('MRZ name separators were unclear; spacing was restored from the matching document filename');
+    if(printed.passport&&mrz?.checks[0]&&printed.passport!==mrz.fields.passport)warnings.push('Printed passport number and MRZ differ; used the number validated by its MRZ check digit. Review the original.');
     return {confidence:Math.min(ocrConfidence,mrz?.confidence||70),machineChecks:mrz?.checks||[],sex,nameWithoutTitle,nameNeedsTitle:!sex,nameSource:printedName?'printed':mrzName&&!mrzNameNoisy?'mrz':'fallback',printedFieldsDetected:{given:Boolean(printed.given),middle:Boolean(printed.middle),surname:Boolean(printed.surname)},extractionWarnings:warnings,fields:{
       name:repairedName,
-      passport:printed.passport||mrz?.fields.passport||upper(labeled(normalized,'PASSPORT(?: NO)?|DOCUMENT NO','[A-Z0-9]{6,14}')).replace(/\s/g,''),
-      nationality:printed.nationality||mrz?.fields.nationality||nationalityChoice(labeled(normalized,'NATIONALITY','[A-Z ]{3,30}')),
+      passport:mrz?.checks[0]?mrz.fields.passport:printed.passport||mrz?.fields.passport||'',
+      nationality:Object.values(NATIONALITIES).includes(printed.nationality)?printed.nationality:mrz?.fields.nationality||printed.nationality||nationalityChoice(labeled(normalized,'NATIONALITY','[A-Z ]{3,30}')),
       dob:mrz?.checks[1]?mrz.fields.dob:dateNearLabel(text,/DATE OF BIRTH|BIRTH DATE|\bDOB\b/i,{birth:true})||mrz?.fields.dob||parseDate(labeled(normalized,'DATE OF BIRTH|BIRTH DATE|DOB','[0-9A-Z .\\-/]{6,20}'),{birth:true}),
-      passportExpiry:mrz?.fields.passportExpiry||parseDate(labeled(normalized,'DATE OF EXPIRY|EXPIRY DATE|EXPIRES','[0-9A-Z .\\-/]{6,20}'))
+      passportExpiry:mrz?.checks[2]?mrz.fields.passportExpiry:dateNearLabel(text,/DATE OF EXPIRY|EXPIRY DATE|EXPIRES/i)||mrz?.fields.passportExpiry||''
     }};
   }
   function filipinoSeamanName(value){
@@ -189,7 +202,39 @@
   }
   function documentSignal(type,text,confidence=0){
     const result=extractFromText(type,text,confidence),fields=result.fields||{},number=type==='passport'?fields.passport:type==='seamanBook'?fields.seamanBook:result.flight?.number,markers=(upper(text).match(/\b(?:PASSPORT|SURNAME|GIVEN|PHILIPPINES|FILIPINO|MARITIME|SEAFARER|SRB|INDIA|INDIAN|CDC|VALID|FLIGHT|PNR)\b/g)||[]).length;
+    if(type==='passport')return (result.printedFieldsDetected.given?6:0)+(result.printedFieldsDetected.surname?6:0)+(fields.name&&!result.nameNeedsTitle?8:0)+(number&&/\d/.test(number)?12:0)+(fields.dob?4:0)+(fields.passportExpiry?4:0)+(result.machineChecks.filter(Boolean).length*8)+Math.min(markers,5)+Math.min(Number(confidence||0)/25,4);
     return (fields.name?12:0)+(number?10:0)+(fields.passportExpiry||fields.seamanBookExpiry||result.flight?.date?2:0)+Math.min(markers,10)+Math.min(Number(confidence||0)/25,4);
+  }
+  function completePassport(text){const r=extractPassport(text);return Boolean(r.printedFieldsDetected.given&&r.printedFieldsDetected.surname&&r.fields.name&&r.fields.passport&&r.fields.dob&&r.fields.passportExpiry&&r.fields.nationality&&!r.nameNeedsTitle&&r.machineChecks.length===3&&r.machineChecks.every(Boolean));}
+  function reconcilePassportSources(sources){
+    const ranked=[...sources].sort((a,b)=>documentSignal('passport',b.text,b.confidence)-documentSignal('passport',a.text,a.confidence)),best=ranked[0];if(!best)return {text:'',confidence:0};
+    const identity=mrzPassport(best.text),compatible=ranked.filter(source=>{const mrz=mrzPassport(source.text);return !mrz||!identity||mrz.fields.passport===identity.fields.passport;});
+    const names={};
+    for(const key of ['given','surname']){
+      const references=compatible.map(source=>mrzPassport(source.text)?.[key]).filter(value=>value&&!noisyMrzName(value)),candidates=[];
+      for(const source of compatible){
+        const printed=printedPassport(source.text),values=[{value:printed[key],labelled:true}];
+        for(const line of String(source.text).split(/\r?\n/)){
+          if(line.includes('<'))continue;
+          values.push({value:clean(upper(line)),labelled:false});
+          const words=upper(line).match(/[A-Z]{2,}(?:['-][A-Z]+)*/g)||[];
+          for(let start=0;start<words.length;start++)for(let end=start+1;end<=Math.min(words.length,start+5);end++)values.push({value:words.slice(start,end).join(' '),labelled:false});
+        }
+        for(const {value,labelled} of values){
+          if(!value||!/^[A-Z][A-Z .'-]{1,59}$/.test(value)||/REPUBLIC|PASSPORT|NATIONALITY|SURNAME|GIVEN|DATE OF/.test(value))continue;
+          const compact=value.replace(/[^A-Z]/g,'');
+          for(const reference of references){const target=reference.replace(/[^A-Z]/g,'');let resolved='',score=0;
+            if(compact===target){resolved=value;score=100;}
+            else if(compact.startsWith(target)&&compact.length-target.length<=3){resolved=reference;score=97;}
+            else if(target.length-compact.length<=2&&target.length>compact.length&&(target.startsWith(compact)||target.endsWith(compact))){resolved=value;score=96;}
+            if(resolved)candidates.push({value:resolved,score:score+(labelled?2:0)});
+          }
+        }
+      }
+      candidates.sort((a,b)=>b.score-a.score);names[key]=candidates[0]?.value||'';
+    }
+    if(!names.given||!names.surname)return best;
+    return {...best,text:`SURNAME: ${names.surname}\nGIVEN NAMES: ${names.given}\n${best.text}`};
   }
   function mergeCombinedResults(requestedType,passportResult,seamanResult){
     const primary=requestedType==='seamanBook'?seamanResult:passportResult,secondary=requestedType==='seamanBook'?passportResult:seamanResult,fields={};
@@ -238,7 +283,7 @@
         progress=onProgress;
         if(!worker){const api=await tesseract();worker=await api.createWorker('eng',1,{logger:message=>{if(message.status==='recognizing text')progress?.(Math.round((message.progress||0)*100));}});}
         await worker.setParameters({tessedit_pageseg_mode:parameters?.tessedit_pageseg_mode||'6',tessedit_char_whitelist:parameters?.tessedit_char_whitelist||''});
-        const output=await worker.recognize(image);return {text:output.data.text||'',confidence:Number(output.data.confidence||0)};
+        const output=await worker.recognize(image,{rotateAuto:parameters?.rotateAuto===true});return {text:output.data.text||'',confidence:Number(output.data.confidence||0)};
       },
       async close(){if(worker)await worker.terminate();worker=null;}
     };
@@ -251,11 +296,36 @@
   function cropCanvas(source,spec){
     const sourceX=Math.max(0,Math.round(source.width*spec.x)),sourceY=Math.max(0,Math.round(source.height*spec.y)),sourceWidth=Math.min(source.width-sourceX,Math.round(source.width*spec.width)),sourceHeight=Math.min(source.height-sourceY,Math.round(source.height*spec.height)),canvas=document.createElement('canvas');canvas.width=sourceWidth;canvas.height=sourceHeight;canvas.getContext('2d').drawImage(source,sourceX,sourceY,sourceWidth,sourceHeight,0,0,sourceWidth,sourceHeight);return canvas;
   }
+  function trimPassportCanvas(source){
+    // Scans often contain a small passport spread in a large white page.
+    const context=source.getContext('2d',{willReadFrequently:true}),{data}=context.getImageData(0,0,source.width,source.height),step=4,rows=[],columns=[];
+    for(let y=0;y<source.height;y+=step)for(let x=0;x<source.width;x+=step){const offset=(y*source.width+x)*4;if(data[offset+3]>0&&data[offset]+data[offset+1]+data[offset+2]<660){rows[y]=(rows[y]||0)+1;columns[x]=(columns[x]||0)+1;}}
+    const ys=Object.keys(rows).map(Number).filter(y=>rows[y]>=Math.max(3,source.width/600)),xs=Object.keys(columns).map(Number).filter(x=>columns[x]>=Math.max(3,source.height/600));
+    if(!xs.length||!ys.length)return source;
+    const left=Math.max(0,xs[0]-12),top=Math.max(0,ys[0]-12),right=Math.min(source.width,xs.at(-1)+16),bottom=Math.min(source.height,ys.at(-1)+16);
+    if(right-left<source.width*.25||bottom-top<source.height*.2)return source;
+    return cropCanvas(source,{x:left/source.width,y:top/source.height,width:(right-left)/source.width,height:(bottom-top)/source.height});
+  }
+  async function recognizePassportSource(image,onProgress,knownFull,ocr){
+    let best=knownFull||await recognize(image,onProgress,null,ocr),score=documentSignal('passport',best.text,best.confidence);const sources=[best];
+    if(completePassport(best.text)||score<20)return best;
+    const specs=[{x:0,y:.46,width:1,height:.54},{x:0,y:0,width:1,height:1}],modes=['3','6'];
+    for(const spec of specs){
+      const canvas=cropCanvas(image,spec);
+      for(const mode of modes){
+        const candidate=await recognize(canvas,onProgress,{tessedit_pageseg_mode:mode,rotateAuto:true},ocr),candidateScore=documentSignal('passport',candidate.text,candidate.confidence);
+        sources.push(candidate);
+        if(candidateScore>score){best=candidate;score=candidateScore;}
+        const reconciled=reconcilePassportSources(sources);if(completePassport(reconciled.text))return reconciled;
+      }
+    }
+    return reconcilePassportSources(sources);
+  }
   async function recognizeBestOrientation(image,type,onProgress,ocr){
-    const candidates=[image,rotateCanvas(image,-90),rotateCanvas(image,90),rotateCanvas(image,180)],segment=100/candidates.length;let best=null;
+    const source=type==='passport'?trimPassportCanvas(image):image,candidates=[source,rotateCanvas(source,-90),rotateCanvas(source,90),rotateCanvas(source,180)],segment=100/candidates.length;let best=null;
     for(let index=0;index<candidates.length;index++){
-      const result=await recognize(candidates[index],progress=>onProgress?.(Math.round(index*segment+progress*segment/100)),null,ocr),score=documentSignal(type,result.text,result.confidence),candidate={canvas:candidates[index],result,score};if(!best||score>best.score)best=candidate;
-      if(score>=18)break;
+      const result=await recognize(candidates[index],progress=>onProgress?.(Math.round(index*segment+progress*segment/100)),type==='passport'?{rotateAuto:true}:null,ocr),score=documentSignal(type,result.text,result.confidence),candidate={canvas:candidates[index],result,score};if(!best||score>best.score)best=candidate;
+      if(type==='passport'?completePassport(result.text):score>=18)break;
     }
     return best;
   }
@@ -335,13 +405,14 @@
   }
   const looksCombinedDocuments=text=>/(?:\bPASSPORT\b|P<[A-Z]{3})/i.test(text)&&/(?:SEAFARER|MARITIME INDUSTRY AUTHORITY|\bSRB\b|VALID UNTIL)/i.test(text);
   async function readPdf(file,onProgress,type,ocr){
-    const pdfjs=await pdfLibrary(),pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='',confidence=100,combined=false;const images=[];
-    for(let pageNumber=1;pageNumber<=Math.min(pdf.numPages,3);pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent(),pageText=content.items.map(item=>item.str).join(' ');text+='\n'+pageText;if(clean(pageText).length<80){const viewport=page.getViewport({scale:3}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;images.push(canvas);}}
+    const pdfjs=await pdfLibrary(),pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='',confidence=100,combined=false;const images=[],passportPages=[];
+    for(let pageNumber=1;pageNumber<=Math.min(pdf.numPages,3);pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent(),pageText=content.items.map(item=>item.str+(item.hasEOL?'\n':' ')).join('');text+='\n'+pageText;if(clean(pageText).length<80){const viewport=page.getViewport({scale:3}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;images.push(canvas);}else if(type==='passport')passportPages.push({text:pageText,confidence:100});}
     if(images.length){const values=[];for(let index=0;index<images.length;index++){
       const pageStart=index/images.length,pageEnd=(index+1)/images.length,pageProgress=value=>onProgress?.(Math.round((pageStart+(value/100)*(pageEnd-pageStart))*100)),oriented=await recognizeBestOrientation(images[index],type,value=>pageProgress(value*.6),ocr);let pageText=oriented.result.text,pageConfidence=oriented.result.confidence;
       const isCombined=looksCombinedDocuments(pageText);combined=combined||isCombined;
-      if(isCombined){const passport=await recognizeCombinedPassport(oriented.canvas,value=>pageProgress(60+value*.2),oriented.result,ocr),seaman=await recognizeCombinedSeaman(oriented.canvas,value=>pageProgress(80+value*.2),ocr);pageText=`${passport.text}\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,passport.confidence,seaman.confidence);}else if(type==='passport'){const nameArea=await recognize(await preparePassportNameArea(oriented.canvas),value=>pageProgress(60+value*.4),{tessedit_pageseg_mode:'6'},ocr);pageText=`${nameArea.text}\n${pageText}`;pageConfidence=Math.max(pageConfidence,nameArea.confidence);}else if(type==='seamanBook'){const seaman=await recognizeSeamanSource(oriented.canvas,value=>pageProgress(60+value*.4),oriented.result,ocr);pageText+=`\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,seaman.confidence);}text+='\n'+pageText;values.push(pageConfidence);
+      if(isCombined){const passport=await recognizeCombinedPassport(oriented.canvas,value=>pageProgress(60+value*.2),oriented.result,ocr),seaman=await recognizeCombinedSeaman(oriented.canvas,value=>pageProgress(80+value*.2),ocr);pageText=`${passport.text}\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,passport.confidence,seaman.confidence);}else if(type==='passport'){const source=await recognizePassportSource(oriented.canvas,value=>pageProgress(60+value*.4),oriented.result,ocr);pageText=source.text;pageConfidence=source.confidence;}else if(type==='seamanBook'){const seaman=await recognizeSeamanSource(oriented.canvas,value=>pageProgress(60+value*.4),oriented.result,ocr);pageText+=`\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,seaman.confidence);}text+='\n'+pageText;values.push(pageConfidence);if(type==='passport')passportPages.push({text:pageText,confidence:pageConfidence});
     }confidence=values.reduce((sum,value)=>sum+value,0)/Math.max(1,values.length);}
+    if(type==='passport'&&!combined&&passportPages.length){passportPages.sort((a,b)=>documentSignal(type,b.text,b.confidence)-documentSignal(type,a.text,a.confidence));return {...passportPages[0],combined:false};}
     return {text,confidence,combined};
   }
   async function read(file,type,onProgress,sharedOcr){
@@ -352,7 +423,7 @@
       onProgress?.(0);if(type==='flightTicket')await loadFlightCodeData();let source;
       if(pdf)source=await readPdf(file,onProgress,type,ocr);
       else if(type==='passport'){
-        const full=await recognize(file,progress=>onProgress?.(Math.round(progress*.35)),null,ocr);
+        const full=await recognize(file,progress=>onProgress?.(Math.round(progress*.35)),{rotateAuto:true},ocr);
         if(/(?:PHILIPPINES|FILIPINO|PHL)/i.test(full.text)){
           const fields=await recognizePhilippineNameFields(file,progress=>onProgress?.(35+Math.round(progress*.65)),ocr);source={text:`${fields.text}\n${full.text}`,confidence:Math.max(full.confidence,fields.confidence)};
         }else{
@@ -392,5 +463,5 @@
     const status=warnings.length?'warning':'ok';next.documentChecks[result.type]={fileName:result.fileName||'',confidence:Math.round(result.confidence||0),checkedAt:result.checkedAt||new Date().toISOString(),status,messages:warnings,changes,expiry:result.type==='passport'?result.fields?.passportExpiry:result.type==='seamanBook'?result.fields?.seamanBookExpiry:''};
     return {person:next,changes,conflicts,warnings,status};
   }
-  window.HarborFlowDocumentImport={read,createBatchReader,extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,documentSignal,mergeCombinedResults,combinedIdentityRegions,combinedPassportRegions,reconcileCombinedPassportFields,setFlightCodeData,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
+  window.HarborFlowDocumentImport={read,createBatchReader,extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,documentSignal,reconcilePassportSources,mergeCombinedResults,combinedIdentityRegions,combinedPassportRegions,reconcileCombinedPassportFields,setFlightCodeData,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
 })();

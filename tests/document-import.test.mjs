@@ -9,6 +9,82 @@ vm.createContext(context);
 vm.runInContext(source,context);
 const reader=context.window.HarborFlowDocumentImport;
 
+test('multilingual Croatian labels are not treated as names or passport values',()=>{
+  const result=reader.extractFromText('passport',[
+    'REPUBLIC OF CROATIA',
+    'Country code / Passport No. / Passeport N',
+    'PASSPORT P HRV 012345678',
+    'Prezime/Sumame/Nom',
+    'HORVAT',
+    'Ime/Given name/Prénom',
+    'MARKO',
+    'Drzavljanstvo/Nationality/Nationalité',
+    'HRVATSKO',
+    'Date of birth/Date de naissance',
+    '12.04.1990.',
+    'Spol/Sex/Sexe Mjesto/Place of birth',
+    'M SPLIT',
+    'Date of expiry/Date d expiration',
+    '11.04.2032.'
+  ].join('\n'),90);
+  assert.equal(result.fields.name,'MR. MARKO HORVAT');
+  assert.equal(result.fields.passport,'012345678');
+  assert.equal(result.fields.nationality,'CROATIAN');
+  assert.equal(result.fields.dob,'1990-04-12');
+  assert.equal(result.fields.passportExpiry,'2032-04-11');
+});
+
+test('a previous passport label cannot supply the current document number',()=>{
+  const result=reader.extractFromText('passport','Surname\nKHAN\nGiven Names\nALI\nSex\nM\nPrevious Passport Number\nAB1234567');
+  assert.equal(result.fields.name,'MR. ALI KHAN');
+  assert.equal(result.fields.passport,'');
+});
+
+test('passport document number cannot be an alphabetic surname',()=>{
+  const result=reader.extractFromText('passport','PASSPORT\nP\nSurname\nMORGAN\nGiven Names\nALEX\nSex\nM');
+  assert.equal(result.fields.passport,'');
+});
+
+test('machine-readable birth dates repair OCR O only when the check digit agrees',()=>{
+  const result=reader.extractFromText('passport',[
+    'P<HRVHORVAT<<MARKO<<<<<<<<<<<<<<<<<<<<<<<<<',
+    'L898902C36HRV74O8122M3211142<<<<<<<<<<<<<<08'
+  ].join('\n'));
+  assert.equal(result.fields.dob,'1974-08-12');
+  assert.equal(result.machineChecks[1],true);
+});
+
+test('reconciles printed names across crops instead of accepting a truncated labelled value',()=>{
+  const mrz='P<HRVHORVAT<<MARKO<<<<<<<<<<<<<<<<<<<<<<<<<\nL898902C36HRV74O8122M3211142<<<<<<<<<<<<<<08';
+  const source=reader.reconcilePassportSources([
+    {text:`22 ~ MARKO 3 XY\nHORVAT\n${mrz}`,confidence:65},
+    {text:`Surname\nHORVAT\nGiven Names\nARKO\n${mrz}`,confidence:75}
+  ]);
+  const result=reader.extractFromText('passport',source.text,source.confidence);
+  assert.equal(result.fields.name,'MR. MARKO HORVAT');
+});
+
+test('repairs a filler misread between MRZ surname and given names using the printed values',()=>{
+  const source=reader.reconcilePassportSources([
+    {text:'Given Names\nMARKO\nHORVAT\nP<HRVHORVAT<K<MARKO<LLLLLLLLLLLLLLLLLLLLLLKL\nL898902C36HRV74O8122M3211142<<<<<<<<<<<<<<08',confidence:65}
+  ]);
+  const result=reader.extractFromText('passport',source.text,source.confidence);
+  assert.equal(result.fields.name,'MR. MARKO HORVAT');
+});
+
+test('reconciliation never borrows names from a different passport number',()=>{
+  const source=reader.reconcilePassportSources([
+    {text:'Surname\nHORVAT\nGiven Names\nMARKO\nP<HRVHORVAT<<MARKO<<<<<<<<<<<<<<<<<<<<<<<<<\nL898902C36HRV74O8122M3211142<<<<<<<<<<<<<<08',confidence:95},
+    {text:'Surname\nNOVAK\nGiven Names\nIVAN\nP<HRVNOVAK<<IVAN<<<<<<<<<<<<<<<<<<<<<<<<<<\nAB12345670HRV9001011M3012315<<<<<<<<<<<<<<',confidence:20}
+  ]);
+  assert.equal(reader.extractFromText('passport',source.text).fields.name,'MR. MARKO HORVAT');
+});
+
+test('invalid calendar dates cannot silently roll over to a different month',()=>{
+  assert.equal(reader.parseDate('31/02/2030'),'');
+  assert.equal(reader.parseDate('01/00/2030'),'');
+});
+
 test('reuses one OCR worker for multiple reads within a document and releases it',async()=>{
   const calls={created:0,recognized:0,terminated:0,modes:[]};
   const session={window:{Tesseract:{async createWorker(){
