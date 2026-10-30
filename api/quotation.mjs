@@ -6,7 +6,7 @@ import { ensureQuotationSchema } from '../lib/quotation-schema.mjs';
 
 const fail=(message,status=400)=>json({error:message},status);
 const loginPattern=/^[a-z0-9-]{1,39}$/;
-const fields=['number','date','customer','vessel','jobNo','port','category','currency','exchangeRate','exchangeDate','notes'];
+const fields=['number','date','customer','vessel','jobNo','port','category','currency','exchangeRate','exchangeDate','notes','template','issuer','issuerAddress','customerAddress','validUntil','terms'];
 const lineFields=['id','description','unit','saleQuantity','salePrice','vatMode','vatRate','customerNote'];
 const costFields=['costUnit','costQuantity','costVatMode','costVatRate','costNote','rateId','rateVersion','rateDateConfirmed','markupType','markup','markupBase','billingType','costBaseUnit','minimumHours','hoursPerTrip','additionalHourlyRate'];
 const pick=(object,keys)=>Object.fromEntries(keys.filter(key=>Object.hasOwn(object||{},key)).map(key=>[key,object[key]]));
@@ -18,6 +18,7 @@ const safeRate=rate=>rate&&typeof rate==='object'&&validText(rate.port,150)&&val
 function validate(data) {
   if (!data || typeof data!=='object' || !CURRENCIES.includes(data.currency) || !validDate(data.date||'') || !validDate(data.exchangeDate||'') || (data.exchangeRate!==''&&data.exchangeRate!=null&&(!numeric(data.exchangeRate)||Number(data.exchangeRate)<=0))) return 'Invalid quotation details';
   if(fields.filter(k=>!['currency','exchangeRate','date','exchangeDate'].includes(k)).some(k=>!validText(data[k]??'',k==='notes'?3000:500)))return 'Invalid quotation text';
+  if(data.template&&!['harbor','classic'].includes(data.template)||!validDate(data.validUntil||''))return 'Invalid document settings';
   if(!Array.isArray(data.lines)||data.lines.length>200)return 'Invalid quotation lines';
   const seen=new Set();
   for(const line of data.lines){

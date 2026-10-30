@@ -33,6 +33,18 @@ function fixture({role='editor',commercial={quote_view:true,quote_edit:true,cost
 }
 const get=()=>new Request('https://example.test/api/quotation?action=state');
 const post=payload=>new Request('https://example.test/api/quotation',{method:'POST',headers:{origin:'https://example.test'},body:JSON.stringify(payload)});
+test('document settings round-trip through save and customer projection',async()=>{
+  const f=fixture(),edited={...customerProjection(data),template:'classic',issuer:'Agency',issuerAddress:'Bangkok',customerAddress:'Example address',validUntil:'2026-11-30',terms:'Valid for 30 days'};
+  const response=await f.route(post({action:'save',login:'alice',id:quotationId,version:1,jobId:null,data:edited}));
+  assert.equal(response.status,200);const saved=(await response.json()).quotation.data;
+  for(const key of ['template','issuer','issuerAddress','customerAddress','validUntil','terms'])assert.equal(saved[key],edited[key]);
+});
+test('document settings reject unsupported templates and invalid validity dates',async()=>{
+  for(const settings of [{template:'unknown'},{validUntil:'2026-02-30'}]){
+    const f=fixture();const response=await f.route(post({action:'save',login:'alice',id:quotationId,version:1,jobId:null,data:{...customerProjection(data),...settings}}));
+    assert.equal(response.status,400);assert.equal(f.saved,null);
+  }
+});
 test('API hides cost from a quote editor and does not load cost rates',async()=>{
   const f=fixture(),r=await f.route(get());assert.equal(r.status,200);const body=await r.json();
   assert.equal(body.quotations.length,1);assert.doesNotMatch(JSON.stringify(body),/PRIVATE COST NOTE|costUnit|costQuantity|rateId|markup/);
