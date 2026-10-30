@@ -76,15 +76,80 @@ export const InvoiceItems = memo(function InvoiceItems({
 
   return (
     <>
+      <div className="mb-3 flex items-center justify-between gap-3"><h3 className="font-medium">Invoice Items</h3>
+      <CustomTooltip
+        trigger={
+          <Button
+            onClick={() => {
+              append({
+                invoiceItemNumberIsVisible: true,
+                name: "",
+                nameFieldIsVisible: true,
+                amount: 1,
+                amountFieldIsVisible: true,
+                unit: "",
+                unitFieldIsVisible: true,
+                netPrice: 0,
+                netPriceFieldIsVisible: true,
+                vat: "NP",
+                vatFieldIsVisible: true,
+                netAmount: 0,
+                netAmountFieldIsVisible: true,
+                vatAmount: 0,
+                vatAmountFieldIsVisible: true,
+                preTaxAmount: 0,
+                preTaxAmountFieldIsVisible: true,
+                typeOfGTU: "",
+                typeOfGTUFieldIsVisible: true,
+              });
+
+              umamiTrackEvent("add_invoice_item");
+            }}
+            variant="default"
+            disabled={hasReachedItemLimit}
+            className="gap-2"
+          >
+            <Plus className="size-4" />
+            Add Item
+          </Button>
+        }
+        content={
+          hasReachedItemLimit
+            ? `Invoices support at most ${MAX_INVOICE_ITEMS} line items`
+            : "Add a new line item with name, quantity, price and tax details"
+        }
+        side="bottom"
+        showArrow
+      />
+
+      </div>
+      <div className="mb-4 overflow-x-auto rounded-lg border">
+        <table className="w-full min-w-[760px] border-collapse text-sm">
+          <thead><tr className="border-b text-left text-muted-foreground">
+            <th className="p-2 font-medium">Description</th><th className="p-2 font-medium">Quantity</th>
+            <th className="p-2 font-medium">Unit</th><th className="p-2 font-medium">Unit cost</th>
+            <th className="p-2 text-right font-medium">Line total</th><th className="p-2"><span className="sr-only">Actions</span></th>
+          </tr></thead>
+          <tbody>{fields.map((item, index) => (
+            <tr key={item.id} className="border-b last:border-0 align-top">
+              <td className="min-w-[200px] p-2"><Controller control={control} name={`items.${index}.name`} render={({field}) => <Input {...field} aria-label={`Description ${index + 1}`} placeholder="Description" className={inputErrorClassName(!!errors.items?.[index]?.name)} />} />{errors.items?.[index]?.name && <ErrorMessage>{errors.items[index]?.name?.message}</ErrorMessage>}</td>
+              <td className="w-24 p-2"><Controller control={control} name={`items.${index}.amount`} render={({field}) => <Input {...field} aria-label={`Quantity ${index + 1}`} type="number" min="0" step="0.01" className={inputErrorClassName(!!errors.items?.[index]?.amount)} />} />{errors.items?.[index]?.amount && <ErrorMessage>{errors.items[index]?.amount?.message}</ErrorMessage>}</td>
+              <td className="w-32 p-2"><Controller control={control} name={`items.${index}.unit`} render={({field}) => <Input {...field} aria-label={`Unit ${index + 1}`} placeholder="Unit" className={inputErrorClassName(!!errors.items?.[index]?.unit)} />} />{errors.items?.[index]?.unit && <ErrorMessage>{errors.items[index]?.unit?.message}</ErrorMessage>}</td>
+              <td className="w-40 p-2"><Controller control={control} name={`items.${index}.netPrice`} render={({field}) => <MoneyInput {...field} aria-label={`Unit cost ${index + 1}`} currency={currency} type="number" min="0" step="0.01" className={inputErrorClassName(!!errors.items?.[index]?.netPrice)} />} />{errors.items?.[index]?.netPrice && <ErrorMessage>{errors.items[index]?.netPrice?.message}</ErrorMessage>}</td>
+              <td className="whitespace-nowrap p-2 pt-4 text-right font-medium">{(Number(invoiceData.items?.[index]?.netAmount) || 0).toLocaleString("en-US", {style: "currency", currency})}</td>
+              <td className="p-2">{index > 0 && <Button type="button" variant="ghost" size="icon" aria-label={`Delete item ${index + 1}`} onClick={() => setDeleteItemIndex(index)}><Trash2 className="size-4" /></Button>}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
       {fields.map((field, index) => {
         const isNotFirstItem = index > 0;
         const isFirstItem = index === 0;
 
         return (
-          <fieldset
-            key={field.id}
-            className="relative mb-4 rounded-lg border p-4 shadow"
-          >
+          <details key={field.id} className="mb-3 rounded-lg border">
+            <summary className="cursor-pointer p-3 font-medium">Item {index + 1} settings · PDF and tax</summary>
+          <fieldset className="relative p-4">
             {/* Delete invoice item button */}
             {isNotFirstItem ? (
               <div className="absolute -right-3 -top-10">
@@ -808,53 +873,9 @@ export const InvoiceItems = memo(function InvoiceItems({
               </div>
             </div>
           </fieldset>
+          </details>
         );
       })}
-
-      <CustomTooltip
-        trigger={
-          <Button
-            onClick={() => {
-              append({
-                invoiceItemNumberIsVisible: true,
-                name: "",
-                nameFieldIsVisible: true,
-                amount: 1,
-                amountFieldIsVisible: true,
-                unit: "",
-                unitFieldIsVisible: true,
-                netPrice: 0,
-                netPriceFieldIsVisible: true,
-                vat: "NP",
-                vatFieldIsVisible: true,
-                netAmount: 0,
-                netAmountFieldIsVisible: true,
-                vatAmount: 0,
-                vatAmountFieldIsVisible: true,
-                preTaxAmount: 0,
-                preTaxAmountFieldIsVisible: true,
-                typeOfGTU: "",
-                typeOfGTUFieldIsVisible: true,
-              });
-
-              umamiTrackEvent("add_invoice_item");
-            }}
-            variant="default"
-            disabled={hasReachedItemLimit}
-            className="w-full gap-2"
-          >
-            <Plus className="size-4" />
-            Add invoice item
-          </Button>
-        }
-        content={
-          hasReachedItemLimit
-            ? `Invoices support at most ${MAX_INVOICE_ITEMS} line items`
-            : "Add a new line item with name, quantity, price and tax details"
-        }
-        side="bottom"
-        showArrow
-      />
 
       {/** we only want to show "Show Number Column" and "Show Tax Table Summary" settings for default template */}
       {template === "default" ? (
