@@ -7,4 +7,4 @@ The Job quotation editor follows EasyInvoicePDF's document-editing workflow: con
 - Copyright (C) 2024-present ULADZISLAU SAZONAU
 - Upstream license: GNU Affero General Public License v3.0, preserved in `docs/licenses/EasyInvoicePDF-AGPL-3.0.txt`.
 
-HarborFlow's integration is implemented in its existing JavaScript and canvas/PDF stack. No upstream React templates, server endpoints, telemetry, profile storage, or runtime dependencies are bundled. The reviewed upstream checkout is retained separately during development; this notice does not relicense unrelated HarborFlow code.
+The independent Job editor now bundles the original React form and Default/Stripe vector PDF templates, with source and integration changes under `job-quotation-source/`, licensed under AGPL-3.0. The runtime links to that corresponding source. Browser persistence is replaced by Job-scoped server saving, and telemetry is disabled. The Commercial quotation editor is unchanged. See `job-quotation-source/README.md` for build requirements, dependency pins, fontkit patch and the precise modifications.

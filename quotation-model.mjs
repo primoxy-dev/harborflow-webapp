@@ -34,7 +34,7 @@ export function quoteTotals(data) {
 
 // Whitelist the customer projection so internal costs cannot leak into downloads or API responses.
 export function customerProjection(data) {
-  const fields = ['number','date','customer','vessel','jobNo','port','category','currency','exchangeRate','exchangeDate','notes','template','issuer','issuerAddress','customerAddress','validUntil','terms'];
+  const fields = ['number','date','customer','vessel','jobNo','port','category','currency','exchangeRate','exchangeDate','notes'];
   const lineFields = ['id','description','unit','saleQuantity','salePrice','vatMode','vatRate','customerNote'];
   const out = Object.fromEntries(fields.map(key => [key, data?.[key] ?? '']));
   out.lines = (Array.isArray(data?.lines) ? data.lines : []).map(line => Object.fromEntries(lineFields.map(key => [key,line?.[key] ?? ''])));
