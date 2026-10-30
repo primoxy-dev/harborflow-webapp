@@ -105,3 +105,15 @@ harborflow-webapp/
 
 
 
+
+## Job quotation editor (EasyInvoicePDF)
+
+Open a vessel Job and select **Create Quotation** below Services. The original EasyInvoicePDF form and Default/Stripe PDF templates open inside that Job; **Back to Job** returns to the same vessel. This is independent of Commercial → Quotation / PDA / FDA, its grants and its quotation records. Job viewers can read/download; owners and editors assigned to the Job can save.
+
+The original document features are retained: template, currency/language/date format, logo, seller/buyer profiles, custom labels and visibility toggles, items, tax, payment details, QR code and multi-page vector PDF. Seller/buyer profiles are private to this Job and are persisted when **Save quotation** is selected. **Copy Job link** copies an authenticated reference to the saved Job document; it does not expose private invoice contents in a public URL.
+
+PDF text and lines are vector objects, remaining sharp beyond 2K; the preview renders each page at 2048 pixels wide. Uploaded logos retain their source resolution. No raster screenshot is used for PDF export.
+
+Storage uses separate Neon tables `job_quotation_documents` and `job_quotation_history`, initialized by the API, with version conflicts rejected and revision history recorded atomically. No new credentials or environment variables are required beyond the existing Operations setup. Test table creation and OAuth access in an isolated Preview database before rollout. No Job document, profile or quotation data is kept in browser localStorage or sent to telemetry.
+
+The bundled editor is AGPL-3.0; see [source and rebuild instructions](job-quotation-source/README.md) and [third-party notices](THIRD_PARTY_NOTICES.md). The checked-in static build is served without installing the editor dependencies in Production. Run `node --test tests/job-quotation.test.mjs tests/quotation*.test.mjs` for affected API tests.
