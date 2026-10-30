@@ -2021,3 +2021,10 @@ video {
 }.\[\&_svg\]\:shrink-0 svg {
   flex-shrink: 0;
 }
+
+@media (min-width: 851px){.jq-workspace{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.jq-preview canvas{max-width:816px}}
+
+.jq-form{min-width:0}@media(max-width:850px){.jq-workspace{grid-template-columns:minmax(0,1fr)}}
+
+.jq-form fieldset{min-width:0}
+
