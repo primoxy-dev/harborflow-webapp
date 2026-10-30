@@ -2038,7 +2038,7 @@ video {
 .jq-form table[class*="min-w-[760px]"] td:nth-child(4) span:last-child{padding-inline:4px}
 .jq-form table[class*="min-w-[760px]"] td:nth-child(6){white-space:normal;overflow-wrap:anywhere}
 .jq-form form,.jq-form form>div{min-width:0}
-@container (max-width:700px){
+@container (max-width:520px){
  .jq-form table[class*="min-w-[760px]"],.jq-form table[class*="min-w-[760px]"] tbody{display:block;width:100%}
  .jq-form table[class*="min-w-[760px]"] thead{display:none}
  .jq-form table[class*="min-w-[760px]"] tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;padding:6px}
@@ -2046,5 +2046,20 @@ video {
  .jq-form table[class*="min-w-[760px]"] td:first-child{grid-column:1 / -1}
  .jq-form table[class*="min-w-[760px]"] td::before{display:block;font-size:12px;color:#64748b;margin-bottom:4px}
  .jq-form table[class*="min-w-[760px]"] td:nth-child(1)::before{content:"Description"}.jq-form table[class*="min-w-[760px]"] td:nth-child(2)::before{content:"Quantity"}.jq-form table[class*="min-w-[760px]"] td:nth-child(3)::before{content:"Unit"}.jq-form table[class*="min-w-[760px]"] td:nth-child(4)::before{content:"Unit cost"}.jq-form table[class*="min-w-[760px]"] td:nth-child(5)::before{content:"Tax"}.jq-form table[class*="min-w-[760px]"] td:nth-child(6)::before{content:"Line total"}
+}
+
+
+
+/* Compact rows like the reference while retaining Unit and Tax. */
+@media (min-width:851px){.jq-workspace{grid-template-columns:minmax(0,58fr) minmax(0,42fr)}}
+.jq-form .overflow-x-auto:has(> table[class*="min-w-[760px]"]){border:0}
+.jq-form table[class*="min-w-[760px]"] th{color:#737373;font-weight:500}
+.jq-form table[class*="min-w-[760px]"] th,.jq-form table[class*="min-w-[760px]"] td{padding:4px}
+.jq-form table[class*="min-w-[760px]"] th:nth-child(1){width:24%}.jq-form table[class*="min-w-[760px]"] th:nth-child(2){width:9%}.jq-form table[class*="min-w-[760px]"] th:nth-child(3){width:12%}.jq-form table[class*="min-w-[760px]"] th:nth-child(4){width:19%}.jq-form table[class*="min-w-[760px]"] th:nth-child(5){width:9%}.jq-form table[class*="min-w-[760px]"] th:nth-child(6){width:21%}.jq-form table[class*="min-w-[760px]"] th:nth-child(7){width:6%}
+@container (min-width:521px) and (max-width:700px){
+ .jq-form table[class*="min-w-[760px]"]{font-size:12px}
+ .jq-form table[class*="min-w-[760px]"] :is(th,td){padding:3px}
+ .jq-form table[class*="min-w-[760px]"] input{font-size:12px;padding-right:4px}
+ .jq-form table[class*="min-w-[760px]"] td:nth-child(4) span:last-child{font-size:11px;padding-inline:2px}
 }
 
