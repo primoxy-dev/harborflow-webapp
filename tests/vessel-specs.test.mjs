@@ -1,0 +1,3 @@
+import test from 'node:test'; import assert from 'node:assert/strict'; import { vesselSpecs } from '../api/vessel.mjs';
+const claim=(amount,unit='1',rank='normal')=>({rank,mainsnak:{datavalue:{value:{amount,unit}}}});
+test('converts metres to feet and rejects conflicting or unsupported values',()=>{const specs=vesselSpecs({P2043:[claim('+100','http://www.wikidata.org/entity/Q11573')],P2262:[claim('+10','http://www.wikidata.org/entity/Q11573'),claim('+11','http://www.wikidata.org/entity/Q11573')],P1093:[claim('+1000')],P2790:[claim('+500')],P2067:[claim('+9000')]});assert.deepEqual(specs,{loa:'328.08',draft:'',grt:'1000',nrt:'500'});});

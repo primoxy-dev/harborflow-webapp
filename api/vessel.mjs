@@ -19,16 +19,37 @@ async function wikidata(params) {
   if (body.error) throw Error('Wikidata unavailable');
   return body;
 }
+export function vesselSpecs(claims) {
+  const quantity = (prop, units) => {
+    const values = (claims?.[prop] || []).filter(c => c.rank !== 'deprecated').map(c => c.mainsnak?.datavalue?.value).filter(v => v && typeof v.amount === 'string').map(v => {
+      const n = Number(v.amount); const factor = units[v.unit];
+      return Number.isFinite(n) && n > 0 && factor !== undefined ? n * factor : null;
+    }).filter(v => v !== null);
+    const unique = [...new Set(values.map(v => Number(v.toFixed(2))))];
+    return unique.length === 1 ? String(unique[0]) : '';
+  };
+  const lengthUnits = {'http://www.wikidata.org/entity/Q11573':3.280839895, 'http://www.wikidata.org/entity/Q3710':1};
+  return {loa:quantity('P2043',lengthUnits),draft:quantity('P2262',lengthUnits),grt:quantity('P1093',{'1':1,'http://www.wikidata.org/entity/Q752079':1}),nrt:quantity('P2790',{'1':1})};
+}
 async function route(request) {
   if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
   if (!sessionLogin(request)) return json({ error: 'Sign in required' }, 401);
-  const name = (new URL(request.url).searchParams.get('name') || '').trim();
+  const params = new URL(request.url).searchParams;
+  const name = (params.get('name') || '').trim();
+  const specs = params.get('mode') === 'specs';
+  const requestedImo = (params.get('imo') || '').trim();
+  if (specs && !validImo(requestedImo)) return json({ error: 'A valid IMO is required for vessel specifications' }, 400);
   if (name.length < 3 || name.length > 80) return json({ error: 'Enter at least 3 letters of the vessel name' }, 400);
   try {
     const search = await wikidata({ action: 'wbsearchentities', search: name, language: 'en', type: 'item', limit: '20' });
     const candidates = (search.search || []).filter(item => /^Q\d+$/.test(item.id));
     if (!candidates.length) return json({ matches: [], source: 'Wikidata' });
     const details = await wikidata({ action: 'wbgetentities', ids: candidates.map(item => item.id).join('|'), props: 'claims' });
+    if (specs) {
+      const exact = candidates.filter(item => (details.entities?.[item.id]?.claims?.P458 || []).some(c => String(c.mainsnak?.datavalue?.value || '') === requestedImo));
+      if (exact.length !== 1) return json({ specs:{}, source:'Wikidata', matched:false });
+      return json({ specs:vesselSpecs(details.entities[exact[0].id].claims), source:'Wikidata', matched:true, url:'https://www.wikidata.org/wiki/'+exact[0].id });
+    }
     const matches = candidates.flatMap(item => {
       const claims = details.entities?.[item.id]?.claims?.P458 || [];
       const imo = claims.map(claim => String(claim.mainsnak?.datavalue?.value || '')).find(validImo);

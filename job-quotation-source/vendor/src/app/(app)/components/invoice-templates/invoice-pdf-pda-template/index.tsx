@@ -1,5 +1,6 @@
 import { Document, Page, Text, View, Image, StyleSheet } from "@react-pdf/renderer/lib/react-pdf.browser";
 import type { InvoiceData } from "@/app/schema";
+import { formatPdaDate } from "@/app/(app)/utils/format-pda-date";
 
 const S = StyleSheet.create({
   page:{paddingTop:30,paddingBottom:35,paddingHorizontal:30,fontFamily:"Helvetica",fontSize:8,color:"#173967"},
@@ -23,8 +24,8 @@ export function PdaInvoicePdfTemplate({invoiceData:d}:{invoiceData:InvoiceData})
   const rows: [string,string,string,string,string,string][] = [
     ["Company",d.buyer.name,"Charterer",p.charterer || "","Port",p.port || ""],
     ["Vessel",p.vessel || "","", "","Job No.",p.jobNo || ""],
-    ["ETA",p.eta || "","Purpose of call",p.purpose || "","Rate",hasRate ? `${number(rate)} ${local} / ${currency}` : ""],
-    ["ETD",p.etd || "","Local agent",p.localAgent || "","DWT",p.dwt || ""],
+    ["ETA",formatPdaDate(p.eta),"Purpose of call",p.purpose || "","Rate",hasRate ? `${number(rate)} ${local} / ${currency}` : ""],
+    ["ETD",formatPdaDate(p.etd),"Local agent",p.localAgent || "","DWT",p.dwt || ""],
     ["LOA (FT)",p.loa || "","GRT",p.grt || "","NRT",p.nrt || ""],
     ["DRAFT (FT)",p.draft || "","D/A Date",d.dateOfIssue || "","Currency",currency]
   ];
@@ -32,8 +33,8 @@ export function PdaInvoicePdfTemplate({invoiceData:d}:{invoiceData:InvoiceData})
     <View style={S.header}><View style={S.seller}>{d.logo ? <Image src={d.logo} style={S.logo} /> : <Image src="/job-quotation/gac-letterhead.png" style={S.letterhead} />}</View></View>
     <Text style={S.band}>Estimated Proforma D/A</Text>
     <View style={S.grid}>{rows.map((r,i)=><View key={i} style={[S.gridRow,i===rows.length-1?{borderBottomWidth:0}:{}]}>{r.map((value,j)=><Text key={j} style={[j%2===0?S.cellLabel:S.cellValue,j===5?{borderRightWidth:0}:{}]}>{value}</Text>)}</View>)}</View>
-    <View style={S.tableHeader} wrap={false}><Text style={[S.expense,S.heading]}>HUSBANDRY EXPENSES</Text><Text style={[S.local,S.heading]}>D/A {local}{"\n"}TOTAL</Text><Text style={[S.quoted,S.heading]}>D/A {currency}{"\n"}PER UNIT</Text></View>
-    {d.items.map((item,index)=>{const group=(item.pdaGroup || "").trim();const show=Boolean(group)&&group!==previousGroup;previousGroup=group;return <View key={index} wrap={false}>{show?<Text style={S.group}>{group.toUpperCase()}</Text>:null}<View style={S.row}><Text style={S.expense}>{item.name}{`  ·  Qty: ${item.amount}${d.items[0].unitFieldIsVisible && item.unit ? ` ${item.unit}` : ""}`}{Number(item.vatAmount) > 0 ? `  ·  Tax: ${item.vat}` : ""}</Text><Text style={S.local}>{showLocal?number(Number(item.preTaxAmount)*rate):"—"}</Text><Text style={S.quoted}>{number(Number(item.netPrice))}</Text></View></View>})}
+    <View style={S.tableHeader} wrap={false}><Text style={[S.expense,S.heading]}>HUSBANDRY EXPENSES</Text><Text style={[S.local,S.heading]}>QUANTITY</Text><Text style={[S.quoted,S.heading]}>LINE TOTAL{"\n"}{currency}</Text></View>
+    {d.items.map((item,index)=>{const group=(item.pdaGroup || "").trim();const show=Boolean(group)&&group!==previousGroup;previousGroup=group;return <View key={index} wrap={false}>{show?<Text style={S.group}>{group.toUpperCase()}</Text>:null}<View style={S.row}><Text style={S.expense}>{item.name}{`  ·  ${currency} ${number(Number(item.netPrice))}${d.items[0].unitFieldIsVisible && item.unit ? `  ·  ${item.unit}` : ""}`}{Number(item.vatAmount) > 0 ? `  ·  Tax: ${item.vat}` : ""}</Text><Text style={S.local}>{item.amount}</Text><Text style={S.quoted}>{number(Number(item.preTaxAmount))}</Text></View></View>})}
     <View style={S.total} wrap={false}><Text>Total Disbursement Account</Text><Text>{showLocal?`${local} ${number(localTotal)}  ·  `:""}{currency} {number(Number(d.total))}</Text></View>
     {d.notesFieldIsVisible && d.notes ? <View><Text style={S.sectionTitle}>Notes:</Text><Text style={S.text}>{d.notes}</Text></View>:null}
     {p.bankDetails ? <View><Text style={S.sectionTitle}>Bank Details:</Text><Text style={S.text}>{p.bankDetails}</Text></View>:null}
