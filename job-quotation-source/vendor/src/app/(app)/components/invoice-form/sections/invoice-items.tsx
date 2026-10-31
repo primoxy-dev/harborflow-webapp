@@ -41,6 +41,7 @@ interface InvoiceItemsSettingsProps {
   control: Control<InvoiceData>;
   fields: FieldArrayWithId<InvoiceData, "items">[];
   handleRemoveInvoiceItem: (index: number) => void;
+  handleRemoveSelected: (indices: number[]) => void;
   handleMoveInvoiceItem: (from: number, to: number) => void;
   append: UseFieldArrayAppend<InvoiceData, "items">;
   errors: FieldErrors<InvoiceData>;
@@ -55,6 +56,7 @@ export const InvoiceItems = memo(function InvoiceItems({
   control,
   fields,
   handleRemoveInvoiceItem,
+  handleRemoveSelected,
   handleMoveInvoiceItem,
   errors,
   currency,
@@ -65,6 +67,9 @@ export const InvoiceItems = memo(function InvoiceItems({
 }: InvoiceItemsSettingsProps) {
   const [deleteItemIndex, setDeleteItemIndex] = useState<number | null>(null);
   const dragIndex = useRef<number | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [confirmBulk, setConfirmBulk] = useState(false);
+  const selectedIndices = fields.flatMap((field,index) => selected.includes(field.id) ? [index] : []);
   const hasReachedItemLimit = fields.length >= MAX_INVOICE_ITEMS;
 
   return (
@@ -129,6 +134,7 @@ export const InvoiceItems = memo(function InvoiceItems({
         <Label htmlFor="itemTaxFieldIsVisible0">Show Tax in PDF</Label>
       </div>}
       {template === "pda" && invoiceData.items.some(item => Number(item.vatAmount) > 0) && <p role="status" className="mb-3 text-sm text-amber-800">Existing tax is included in the total. Switch to another invoice template to review or edit tax.</p>}
+      {template === "pda" && <div className="mb-3 flex items-center gap-3"><Button type="button" variant="outline" disabled={selectedIndices.length === 0 || selectedIndices.length >= fields.length} onClick={() => setConfirmBulk(true)}>Delete selected ({selectedIndices.length})</Button>{selectedIndices.length >= fields.length && <span className="text-sm">Keep at least one item.</span>}</div>}
       <div className="mb-4 overflow-x-auto rounded-lg border">
         <table className={`w-full min-w-[760px] border-collapse text-sm ${template === "pda" ? "pda-items" : ""}`}>
           <thead><tr className="border-b text-left text-muted-foreground">
@@ -144,7 +150,7 @@ export const InvoiceItems = memo(function InvoiceItems({
               <td className="w-40 p-2"><Controller control={control} name={`items.${index}.netPrice`} render={({field}) => <MoneyInput {...field} aria-label={`Unit cost ${index + 1}`} currency={currency} type="number" min="0" step="0.01" className={inputErrorClassName(!!errors.items?.[index]?.netPrice)} />} />{errors.items?.[index]?.netPrice && <ErrorMessage>{errors.items[index]?.netPrice?.message}</ErrorMessage>}</td>
               {template === "pda" ? <td className="w-40 p-2"><Controller control={control} name={`items.${index}.pdaGroup`} render={({field}) => <Input {...field} value={field.value ?? ""} aria-label={`Category ${index + 1}`} placeholder="Category" />} /></td> : <td className="w-24 p-2"><Controller control={control} name={`items.${index}.vat`} render={({field}) => <Input {...field} aria-label={`Tax ${index + 1}`} placeholder="Tax" className={inputErrorClassName(!!errors.items?.[index]?.vat)} />} />{errors.items?.[index]?.vat && <ErrorMessage>{errors.items[index]?.vat?.message}</ErrorMessage>}</td>}
               <td className="whitespace-nowrap p-2 pt-4 text-right font-medium">{(Number(invoiceData.items?.[index]?.netAmount) || 0).toLocaleString("en-US", {style: "currency", currency})}</td>
-              <td className="p-2">{index > 0 && <Button type="button" variant="ghost" size="icon" aria-label={`Delete item ${index + 1}`} onClick={() => setDeleteItemIndex(index)}><Trash2 className="size-4" /></Button>}</td>
+              <td className="p-2">{template === "pda" && <input type="checkbox" aria-label={`Select item ${index + 1} for deletion`} checked={selected.includes(item.id)} onChange={e => setSelected(current => e.target.checked ? [...current,item.id] : current.filter(id => id !== item.id))} />} {index > 0 && <Button type="button" variant="ghost" size="icon" aria-label={`Delete item ${index + 1}`} onClick={() => setDeleteItemIndex(index)}><Trash2 className="size-4" /></Button>}</td>
             </tr>
           ))}</tbody>
         </table>
@@ -206,6 +212,7 @@ export const InvoiceItems = memo(function InvoiceItems({
         </div>
       ) : null}
 
+      <AlertDialog open={confirmBulk} onOpenChange={setConfirmBulk}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete selected items?</AlertDialogTitle><AlertDialogDescription>{selectedIndices.length} selected items will be removed from this quotation.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { handleRemoveSelected(selectedIndices); setSelected([]); setConfirmBulk(false); }}>Delete</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <DeleteInvoiceItemConfirmationDialog
         deleteItemIndex={deleteItemIndex}
         setDeleteItemIndex={setDeleteItemIndex}

@@ -581,6 +581,7 @@ export const InvoiceForm = memo(function InvoiceForm({
               control={control}
               fields={fields}
               handleRemoveInvoiceItem={handleRemoveInvoiceItem}
+              handleRemoveSelected={(indices) => { const selected = new Set(indices); const keep = getValues("items").filter((_, index) => !selected.has(index)); if (keep.length) replace(keep); }}
               handleMoveInvoiceItem={handleMoveInvoiceItem}
               errors={errors}
               currency={currency}
