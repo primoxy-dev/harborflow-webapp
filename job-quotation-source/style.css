@@ -60,5 +60,9 @@
 
 .jq-form table.pda-items th:nth-child(1){width:21%}.jq-form table.pda-items th:nth-child(6){width:9%}.jq-form table.pda-items th:nth-child(7){width:7%}.pda-items td:last-child input[type=checkbox]{width:16px;height:16px;vertical-align:middle}
 
-/* CREW PDA: user-entered form values at 6 pt. */
-.jq-form form:has(table.pda-items) :is(input:not([type=checkbox]):not([type=range]),textarea,select){font-size:6pt !important}
+/* CREW PDA: user-entered form values at 7 pt. */
+.jq-form form:has(table.pda-items) :is(input:not([type=checkbox]):not([type=range]),textarea,select){font-size:7pt !important}
+
+.invoice-item-actions{display:flex;align-items:center;justify-content:center;gap:2px;white-space:nowrap}.invoice-item-actions button{width:24px;height:30px;flex:none;padding:0}.invoice-item-actions input[type=checkbox]{flex:none;margin:0;width:14px;height:14px}
+@media(min-width:851px){.jq-workspace:has(table.pda-items){grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.jq-form table.pda-items th:nth-child(1){width:21%}.jq-form table.pda-items th:nth-child(2){width:8%}.jq-form table.pda-items th:nth-child(3){width:18%}.jq-form table.pda-items th:nth-child(4){width:17%}.jq-form table.pda-items th:nth-child(5){width:18%}.jq-form table.pda-items th:nth-child(6){width:10%}.jq-form table.pda-items th:nth-child(7){width:8%}
