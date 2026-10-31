@@ -4,7 +4,7 @@ import type { InvoiceData } from "@/app/schema";
 const S = StyleSheet.create({
   page:{paddingTop:30,paddingBottom:35,paddingHorizontal:30,fontFamily:"Helvetica",fontSize:8,color:"#173967"},
   header:{flexDirection:"row",justifyContent:"space-between",minHeight:62},
-  seller:{flexGrow:1}, sellerName:{fontSize:10,fontWeight:"bold"}, logo:{width:58,maxHeight:42,objectFit:"contain",marginBottom:4},
+  seller:{flexGrow:1}, letterhead:{width:"100%",height:70,objectFit:"contain",objectPosition:"left",marginBottom:4}, sellerName:{fontSize:10,fontWeight:"bold"}, logo:{width:58,maxHeight:42,objectFit:"contain",marginBottom:4},
   band:{backgroundColor:"#8fb7a7",color:"#fff",paddingVertical:11,textAlign:"center",fontSize:16,fontWeight:"bold",marginTop:5,marginBottom:7},
   grid:{borderWidth:0.7,borderColor:"#202020"}, gridRow:{flexDirection:"row",borderBottomWidth:0.5,borderColor:"#202020",minHeight:16},
   cellLabel:{width:"13%",padding:3,borderRightWidth:0.5,borderColor:"#202020"}, cellValue:{width:"20.33%",padding:3,borderRightWidth:0.5,borderColor:"#202020"},
@@ -29,7 +29,7 @@ export function PdaInvoicePdfTemplate({invoiceData:d}:{invoiceData:InvoiceData})
     ["DRAFT (FT)",p.draft || "","D/A Date",d.dateOfIssue || "","Currency",currency]
   ];
   return <Document title="Estimated Proforma D/A"><Page size="A4" style={S.page} wrap>
-    <View style={S.header}><View style={S.seller}>{d.logo ? <Image src={d.logo} style={S.logo} /> : null}<Text style={S.sellerName}>{d.seller.name}</Text><Text style={S.text}>{d.seller.address}</Text></View></View>
+    <View style={S.header}><View style={S.seller}>{d.logo ? <Image src={d.logo} style={S.logo} /> : <Image src="/job-quotation/gac-letterhead.png" style={S.letterhead} />}<Text style={S.sellerName}>{d.seller.name}</Text><Text style={S.text}>{d.seller.address}</Text></View></View>
     <Text style={S.band}>Estimated Proforma D/A</Text>
     <View style={S.grid}>{rows.map((r,i)=><View key={i} style={[S.gridRow,i===rows.length-1?{borderBottomWidth:0}:{}]}>{r.map((value,j)=><Text key={j} style={[j%2===0?S.cellLabel:S.cellValue,j===5?{borderRightWidth:0}:{}]}>{value}</Text>)}</View>)}</View>
     <View style={S.tableHeader} wrap={false}><Text style={[S.expense,S.heading]}>HUSBANDRY EXPENSES</Text><Text style={[S.local,S.heading]}>D/A {local}{"\n"}TOTAL</Text><Text style={[S.quoted,S.heading]}>D/A {currency}{"\n"}PER UNIT</Text><Text style={[S.comment,S.heading]}>COMMENTS</Text></View>
