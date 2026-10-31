@@ -17,6 +17,7 @@ import {
   ACCORDION_STATE_LOCAL_STORAGE_KEY,
   accordionSchema,
   invoiceSchema,
+  MAX_INVOICE_ITEMS,
   PDF_DATA_LOCAL_STORAGE_KEY,
   type AccordionState,
   type InvoiceData,
@@ -147,10 +148,42 @@ export const InvoiceForm = memo(function InvoiceForm({
     language,
   });
 
-  const { fields, append, move } = useFieldArray({
+  const [crewLoading, setCrewLoading] = useState(false);
+  const [crewMessage, setCrewMessage] = useState("");
+  const { fields, append, move, replace } = useFieldArray({
     control,
     name: "items",
   });
+
+  async function loadCrewServices() {
+    if (crewLoading) return;
+    setCrewLoading(true); setCrewMessage("");
+    try {
+      const jobId = new URLSearchParams(location.search).get("jobId") || "";
+      const response = await fetch("/api/job-quotation?jobId=" + encodeURIComponent(jobId) + "&mode=crew-catalog", { credentials: "same-origin", cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load CREW services.");
+      const current = getValues("items");
+      const isPlaceholder = current.length === 1 && ["", "Item name"].includes(current[0].name.trim()) && Number(current[0].netPrice) === 0;
+      if (!isPlaceholder && getValues("currency") !== data.currency) throw new Error("Select USD before adding these services; existing amounts will not be converted.");
+      const existing = isPlaceholder ? [] : current;
+      const keys = new Set(existing.map(item => (item.pdaGroup || "").trim().toUpperCase() + "\n" + item.name.trim().toUpperCase()));
+      const added = data.items.filter((item: {category:string; name:string}) => !keys.has(item.category.trim().toUpperCase() + "\n" + item.name.trim().toUpperCase()));
+      if (existing.length + added.length > MAX_INVOICE_ITEMS) throw new Error("There is not enough room for the CREW service template.");
+      if (!added.length) { setCrewMessage("The CREW services are already in this quotation."); return; }
+      const newItems: InvoiceItemData[] = added.map((item: {category:string; name:string; price:number}) => ({
+        invoiceItemNumberIsVisible:true, name:item.name, nameFieldIsVisible:true, amount:0, amountFieldIsVisible:true,
+        unit:"", unitFieldIsVisible:true, netPrice:item.price, netPriceFieldIsVisible:true,
+        vat:"NP", vatFieldIsVisible:true, netAmount:0, netAmountFieldIsVisible:true, vatAmount:0,
+        vatAmountFieldIsVisible:true, preTaxAmount:0, preTaxAmountFieldIsVisible:true,
+        typeOfGTU:"", typeOfGTUFieldIsVisible:true, pdaGroup:item.category,
+      }));
+      if (isPlaceholder) setValue("currency", data.currency, { shouldDirty:true, shouldValidate:true });
+      replace([...existing, ...newItems]);
+      setCrewMessage("CREW services added in USD. Quantities start at zero; enter the services you need.");
+    } catch (error) { setCrewMessage(error instanceof Error ? error.message : "Could not load CREW services."); }
+    finally { setCrewLoading(false); }
+  }
 
   const handleMoveInvoiceItem = useCallback((from: number, to: number) => {
     if (from === to || from < 0 || to < 0 || from >= fields.length || to >= fields.length) return;
@@ -534,7 +567,7 @@ export const InvoiceForm = memo(function InvoiceForm({
             <Legend>Items and pricing</Legend>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
-            {template === "pda" ? <PdaFields control={control} /> : null}
+            {template === "pda" ? <><PdaFields control={control} /><div className="my-3"><button type="button" className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => void loadCrewServices()} disabled={crewLoading}>{crewLoading ? "Loading…" : "Add CREW service template"}</button>{crewMessage && <p role="status" className="mt-2 text-sm">{crewMessage}</p>}</div></> : null}
             <InvoiceItems
               control={control}
               fields={fields}
