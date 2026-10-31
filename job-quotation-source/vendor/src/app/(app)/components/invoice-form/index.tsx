@@ -80,6 +80,7 @@ type AccordionKeys = Array<(typeof DEFAULT_ACCORDION_VALUES)[number]>;
 
 interface InvoiceFormProps {
   invoiceData: InvoiceData;
+  vesselLookup?: {vessel?:string; imo?:string};
   handleInvoiceDataChange: (updatedData: InvoiceData) => void;
   isMobile?: boolean;
   /**
@@ -97,6 +98,7 @@ interface InvoiceFormProps {
 
 export const InvoiceForm = memo(function InvoiceForm({
   invoiceData,
+  vesselLookup,
   handleInvoiceDataChange,
   isMobile = false,
   currentInvoiceFormDataRef,
@@ -573,7 +575,7 @@ export const InvoiceForm = memo(function InvoiceForm({
             <Legend>Items and pricing</Legend>
           </AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
-            {template === "pda" ? <><PdaFields control={control} /><div className="my-3"><button type="button" className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => void loadCrewServices()} disabled={crewLoading}>{crewLoading ? "Loading…" : "Add CREW service template"}</button>{crewMessage && <p role="status" className="mt-2 text-sm">{crewMessage}</p>}</div></> : null}
+            {template === "pda" ? <><PdaFields control={control} getValues={getValues} setValue={setValue} vesselLookup={vesselLookup} /><div className="my-3"><button type="button" className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => void loadCrewServices()} disabled={crewLoading}>{crewLoading ? "Loading…" : "Add CREW service template"}</button>{crewMessage && <p role="status" className="mt-2 text-sm">{crewMessage}</p>}</div></> : null}
             <InvoiceItems
               control={control}
               fields={fields}
