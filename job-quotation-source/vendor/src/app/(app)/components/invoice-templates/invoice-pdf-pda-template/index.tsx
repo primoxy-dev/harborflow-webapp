@@ -7,14 +7,14 @@ const S = StyleSheet.create({
   header:{flexDirection:"row",justifyContent:"space-between",minHeight:62},
   seller:{flexGrow:1}, letterhead:{width:"100%",height:70,objectFit:"fill",objectPosition:"left",marginBottom:4}, sellerName:{fontSize:10,fontWeight:"bold"}, logo:{width:58,maxHeight:42,objectFit:"contain",marginBottom:4},
   band:{backgroundColor:"#8fb7a7",color:"#fff",paddingVertical:11,textAlign:"center",fontSize:10,fontWeight:"bold",marginTop:5,marginBottom:7},
-  grid:{borderWidth:0.7,borderColor:"#202020"}, gridRow:{flexDirection:"row",borderBottomWidth:0.5,borderColor:"#202020",minHeight:16},
-  cellLabel:{width:"15%",padding:3,borderRightWidth:0.5,borderColor:"#202020"}, cellValue:{width:"18.33%",padding:3,borderRightWidth:0.5,borderColor:"#202020"},
+  grid:{borderWidth:0.7,borderColor:"#202020"}, gridRow:{flexDirection:"row",borderBottomWidth:0.7,borderColor:"#202020",minHeight:16},
+  cellLabel:{width:"15%",padding:3,borderRightWidth:0.7,borderColor:"#202020"}, cellValue:{width:"18.33%",padding:3,borderRightWidth:0.7,borderColor:"#202020"},
   tableHeader:{flexDirection:"row",borderWidth:0.7,borderColor:"#202020",marginTop:8,minHeight:31},
-  expense:{width:"39%",padding:4}, unitCost:{width:"13%",padding:4,borderLeftWidth:0.5,borderColor:"#202020",textAlign:"right"}, unit:{width:"23%",padding:4,borderLeftWidth:0.5,borderColor:"#202020"}, local:{width:"9%",padding:4,borderLeftWidth:0.5,borderColor:"#202020",textAlign:"right"},
-  quoted:{width:"16%",padding:4,borderLeftWidth:0.5,borderColor:"#202020",textAlign:"right"}, comment:{width:"29%",padding:4,borderLeftWidth:0.5,borderColor:"#202020"},
-  heading:{fontWeight:"bold",textAlign:"center"}, row:{flexDirection:"row",borderLeftWidth:0.7,borderRightWidth:0.7,borderBottomWidth:0.5,borderColor:"#202020",minHeight:20},
-  group:{backgroundColor:"#fff100",color:"#173967",fontWeight:"bold",padding:4,borderLeftWidth:0.7,borderRightWidth:0.7,borderBottomWidth:0.5,borderColor:"#202020"},
-  total:{flexDirection:"row",borderWidth:0.7,borderColor:"#202020",padding:5,justifyContent:"space-between",fontWeight:"bold"},
+  expense:{width:"39%",padding:4}, unitCost:{width:"13%",padding:4,borderLeftWidth:0.7,borderColor:"#202020",textAlign:"right"}, unit:{width:"23%",padding:4,borderLeftWidth:0.7,borderColor:"#202020"}, local:{width:"9%",padding:4,borderLeftWidth:0.7,borderColor:"#202020",textAlign:"right"},
+  quoted:{width:"16%",padding:4,borderLeftWidth:0.7,borderColor:"#202020",textAlign:"right"}, comment:{width:"29%",padding:4,borderLeftWidth:0.7,borderColor:"#202020"},
+  heading:{fontWeight:"bold",textAlign:"center"}, row:{flexDirection:"row",borderLeftWidth:0.7,borderRightWidth:0.7,borderBottomWidth:0.7,borderColor:"#202020",minHeight:20},
+  group:{backgroundColor:"#fff100",color:"#173967",fontWeight:"bold",padding:4,borderLeftWidth:0.7,borderRightWidth:0.7,borderBottomWidth:0.7,borderColor:"#202020"},
+  total:{flexDirection:"row",borderWidth:0.7,borderTopWidth:0,borderColor:"#202020",padding:5,justifyContent:"space-between",fontWeight:"bold"},
   sectionTitle:{fontWeight:"bold",marginTop:9,marginBottom:3}, text:{lineHeight:1.35}, footer:{position:"absolute",bottom:15,left:30,right:30,textAlign:"right",fontSize:10,color:"#737373"}
 });
 function formatIssueDate(value:string | undefined) { const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(value || ""); const months=["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"]; return m && months[Number(m[2])-1] ? m[3]+"-"+months[Number(m[2])-1]+"-"+m[1] : (value || ""); }

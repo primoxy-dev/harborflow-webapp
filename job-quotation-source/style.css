@@ -57,3 +57,5 @@
 .pda-items tr[data-pda-category="CREW DISEMBARKATION"] input{background-color:#fff7ed}
 .pda-items tr[data-pda-category="VISITOR"] input{background-color:#f0fdf4}
 .pda-items tr[data-pda-category="HUSBANDRY SERVICES FEE"] input{background-color:#faf5ff}
+
+.jq-form table.pda-items th:nth-child(1){width:21%}.jq-form table.pda-items th:nth-child(6){width:9%}.jq-form table.pda-items th:nth-child(7){width:7%}.pda-items td:last-child input[type=checkbox]{width:16px;height:16px;vertical-align:middle}
