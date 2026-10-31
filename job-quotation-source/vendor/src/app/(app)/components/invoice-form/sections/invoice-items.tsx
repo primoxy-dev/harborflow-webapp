@@ -122,17 +122,18 @@ export const InvoiceItems = memo(function InvoiceItems({
         )} />
         <Label htmlFor="itemUnitFieldIsVisible0">Show Unit in PDF</Label>
       </div>
-      <div className="mb-3 flex items-center gap-2">
+      {template !== "pda" && <div className="mb-3 flex items-center gap-2">
         <Controller name="items.0.vatFieldIsVisible" control={control} render={({field: {value, onChange, ...field}}) => (
           <Switch {...field} id="itemTaxFieldIsVisible0" checked={value} onCheckedChange={onChange} aria-label="Show Tax in PDF" />
         )} />
         <Label htmlFor="itemTaxFieldIsVisible0">Show Tax in PDF</Label>
-      </div>
+      </div>}
+      {template === "pda" && invoiceData.items.some(item => Number(item.vatAmount) > 0) && <p role="status" className="mb-3 text-sm text-amber-800">Existing tax is included in the total. Switch to another invoice template to review or edit tax.</p>}
       <div className="mb-4 overflow-x-auto rounded-lg border">
         <table className="w-full min-w-[760px] border-collapse text-sm">
           <thead><tr className="border-b text-left text-muted-foreground">
             <th className="p-2 font-medium">Description</th><th className="p-2 font-medium">Quantity</th>
-            <th className="p-2 font-medium">Unit</th><th className="p-2 font-medium">Unit cost</th><th className="p-2 font-medium">Tax</th>
+            <th className="p-2 font-medium">Unit</th><th className="p-2 font-medium">Unit cost</th><th className="p-2 font-medium">{template === "pda" ? "Category" : "Tax"}</th>
             <th className="p-2 text-right font-medium">Line total</th><th className="p-2"><span className="sr-only">Actions</span></th>
           </tr></thead>
           <tbody>{fields.map((item, index) => (
@@ -141,20 +142,13 @@ export const InvoiceItems = memo(function InvoiceItems({
               <td className="w-24 p-2"><Controller control={control} name={`items.${index}.amount`} render={({field}) => <Input {...field} aria-label={`Quantity ${index + 1}`} type="number" min="0" step="0.01" className={inputErrorClassName(!!errors.items?.[index]?.amount)} />} />{errors.items?.[index]?.amount && <ErrorMessage>{errors.items[index]?.amount?.message}</ErrorMessage>}</td>
               <td className="w-32 p-2"><Controller control={control} name={`items.${index}.unit`} render={({field}) => <Input {...field} aria-label={`Unit ${index + 1}`} placeholder="Unit" className={inputErrorClassName(!!errors.items?.[index]?.unit)} />} />{errors.items?.[index]?.unit && <ErrorMessage>{errors.items[index]?.unit?.message}</ErrorMessage>}</td>
               <td className="w-40 p-2"><Controller control={control} name={`items.${index}.netPrice`} render={({field}) => <MoneyInput {...field} aria-label={`Unit cost ${index + 1}`} currency={currency} type="number" min="0" step="0.01" className={inputErrorClassName(!!errors.items?.[index]?.netPrice)} />} />{errors.items?.[index]?.netPrice && <ErrorMessage>{errors.items[index]?.netPrice?.message}</ErrorMessage>}</td>
-              <td className="w-24 p-2"><Controller control={control} name={`items.${index}.vat`} render={({field}) => <Input {...field} aria-label={`Tax ${index + 1}`} placeholder="Tax" className={inputErrorClassName(!!errors.items?.[index]?.vat)} />} />{errors.items?.[index]?.vat && <ErrorMessage>{errors.items[index]?.vat?.message}</ErrorMessage>}</td>
+              {template === "pda" ? <td className="w-40 p-2"><Controller control={control} name={`items.${index}.pdaGroup`} render={({field}) => <Input {...field} value={field.value ?? ""} aria-label={`Category ${index + 1}`} placeholder="Category" />} /></td> : <td className="w-24 p-2"><Controller control={control} name={`items.${index}.vat`} render={({field}) => <Input {...field} aria-label={`Tax ${index + 1}`} placeholder="Tax" className={inputErrorClassName(!!errors.items?.[index]?.vat)} />} />{errors.items?.[index]?.vat && <ErrorMessage>{errors.items[index]?.vat?.message}</ErrorMessage>}</td>}
               <td className="whitespace-nowrap p-2 pt-4 text-right font-medium">{(Number(invoiceData.items?.[index]?.netAmount) || 0).toLocaleString("en-US", {style: "currency", currency})}</td>
               <td className="p-2">{index > 0 && <Button type="button" variant="ghost" size="icon" aria-label={`Delete item ${index + 1}`} onClick={() => setDeleteItemIndex(index)}><Trash2 className="size-4" /></Button>}</td>
             </tr>
           ))}</tbody>
         </table>
       </div>
-      {template === "pda" ? <div className="mb-4 space-y-3">
-        <h4 className="font-medium">PDA item categories and comments</h4>
-        {fields.map((item, index) => <div key={item.id} className="grid grid-cols-1 gap-2 rounded-md border p-3 sm:grid-cols-2">
-          <label className="text-sm">Category · Item {index + 1}<Controller control={control} name={`items.${index}.pdaGroup`} render={({field}) => <Input {...field} value={field.value ?? ""} aria-label={`PDA category ${index + 1}`} placeholder="e.g. CREW EMBARKATION" />} /></label>
-          <label className="text-sm">Comment · Item {index + 1}<Controller control={control} name={`items.${index}.pdaComment`} render={({field}) => <Input {...field} value={field.value ?? ""} aria-label={`PDA comment ${index + 1}`} placeholder="Optional comment" />} /></label>
-        </div>)}
-      </div> : null}
       {/** we only want to show "Show Number Column" and "Show Tax Table Summary" settings for default template */}
       {template === "default" ? (
         <div className="mt-6 space-y-4 rounded-md border p-4">
