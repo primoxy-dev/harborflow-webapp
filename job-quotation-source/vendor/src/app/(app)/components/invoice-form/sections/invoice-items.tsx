@@ -148,6 +148,13 @@ export const InvoiceItems = memo(function InvoiceItems({
           ))}</tbody>
         </table>
       </div>
+      {template === "pda" ? <div className="mb-4 space-y-3">
+        <h4 className="font-medium">PDA item categories and comments</h4>
+        {fields.map((item, index) => <div key={item.id} className="grid grid-cols-1 gap-2 rounded-md border p-3 sm:grid-cols-2">
+          <label className="text-sm">Category · Item {index + 1}<Controller control={control} name={`items.${index}.pdaGroup`} render={({field}) => <Input {...field} value={field.value ?? ""} aria-label={`PDA category ${index + 1}`} placeholder="e.g. CREW EMBARKATION" />} /></label>
+          <label className="text-sm">Comment · Item {index + 1}<Controller control={control} name={`items.${index}.pdaComment`} render={({field}) => <Input {...field} value={field.value ?? ""} aria-label={`PDA comment ${index + 1}`} placeholder="Optional comment" />} /></label>
+        </div>)}
+      </div> : null}
       {/** we only want to show "Show Number Column" and "Show Tax Table Summary" settings for default template */}
       {template === "default" ? (
         <div className="mt-6 space-y-4 rounded-md border p-4">

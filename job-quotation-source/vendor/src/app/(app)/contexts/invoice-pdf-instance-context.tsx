@@ -6,6 +6,7 @@ import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 
 import { InvoicePdfTemplate } from "@/app/(app)/components/invoice-templates/invoice-pdf-default-template";
 import { StripeInvoicePdfTemplate } from "@/app/(app)/components/invoice-templates/invoice-pdf-stripe-template";
+import { PdaInvoicePdfTemplate } from "@/app/(app)/components/invoice-templates/invoice-pdf-pda-template";
 import type { InvoiceData } from "@/app/schema";
 import { ErrorGeneratingPdfToast } from "@/components/ui/toasts/error-generating-pdf-toast";
 import { umamiTrackEvent } from "@/lib/umami-analytics-track-event";
@@ -28,6 +29,8 @@ const InvoicePdfInstanceContext = createContext<InvoicePdfInstance | undefined>(
 // Render the appropriate template based on the selected template
 const renderTemplate = (invoiceData: InvoiceData, qrCodeDataUrl: string) => {
   switch (invoiceData.template) {
+    case "pda":
+      return <PdaInvoicePdfTemplate invoiceData={invoiceData} />;
     case "stripe":
       return (
         <StripeInvoicePdfTemplate

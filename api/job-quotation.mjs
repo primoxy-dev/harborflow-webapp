@@ -19,7 +19,7 @@ export function createJobQuotationRoute(deps={}){return async request=>{
  const canEdit=canEditJob(grant,login,job);
  if(request.method==='POST'&&(!canEdit||input.login!==login))return fail('Job edit permission required',403);
  await (deps.ensureSchema||ensureJobQuotationSchema)(sql);
- if(request.method==='GET'){const [record]=await sql.query('SELECT * FROM job_quotation_documents WHERE job_id=$1',[job.id]);return json({login,job:{id:job.id,data:{vessel:job.data.vessel,jobNo:job.data.jobNo,port:job.data.port,principal:job.data.principal}},canEdit,record:record||null});}
+ if(request.method==='GET'){const [record]=await sql.query('SELECT * FROM job_quotation_documents WHERE job_id=$1',[job.id]);return json({login,job:{id:job.id,data:{vessel:job.data.vessel,jobNo:job.data.jobNo,port:job.data.port,principal:job.data.principal,eta:job.data.eta,etd:job.data.etd}},canEdit,record:record||null});}
  if(!Number.isInteger(input.version)||input.version<0)return fail('Current version required');
  const parsed=invoiceSchema.safeParse(input.document);if(!parsed.success)return fail('Invalid document: '+parsed.error.issues[0]?.message);
  const document=parsed.data;if(document.items.length>200)return fail('Maximum 200 line items');
