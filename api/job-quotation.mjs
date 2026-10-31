@@ -28,7 +28,7 @@ export function createJobQuotationRoute(deps={}){return async request=>{
  if(request.method==='GET'){const [record]=await sql.query('SELECT * FROM job_quotation_documents WHERE job_id=$1',[job.id]);return json({login,job:{id:job.id,data:{vessel:job.data.vessel,jobNo:job.data.jobNo,port:job.data.port,principal:job.data.principal,eta:job.data.eta,etd:job.data.etd}},canEdit,record:record||null});}
  if(!Number.isInteger(input.version)||input.version<0)return fail('Current version required');
  const parsed=invoiceSchema.safeParse(input.document);if(!parsed.success)return fail('Invalid document: '+parsed.error.issues[0]?.message);
- const document=parsed.data;if(document.items.length>200)return fail('Maximum 200 line items');
+ const document=parsed.data;if(document.template==='pda'&&document.items.some(item=>!Number.isInteger(Number(item.amount))))return fail('CREW quantities must be whole numbers');if(document.items.length>200)return fail('Maximum 200 line items');
  const computed=document.items.map(calculateItemTotals);
  if(computed.some((item,index)=>['netAmount','vatAmount','preTaxAmount'].some(key=>item[key]!==document.items[index][key]))||calculateInvoiceTotal(computed)!==document.total)return fail('Document totals changed. Wait for the preview to update and save again.');
  if(document.logo&&!/^data:image\/(png|jpeg|jpg|webp);base64,[a-z0-9+/=\r\n]+$/i.test(document.logo))return fail('Logo must be an uploaded PNG, JPEG or WebP');
