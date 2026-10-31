@@ -1,3 +1,0 @@
-Open Sans Regular/Bold: Digitized data copyright © 2010-2011, Google Corporation. Licensed under Apache License 2.0 (as recorded in these TTF name tables).
-Inter Regular/Medium/SemiBold: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter). SIL Open Font License 1.1.
-The font binaries are unmodified copies of the upstream EasyInvoicePDF font assets.

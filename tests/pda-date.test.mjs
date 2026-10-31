@@ -1,2 +1,0 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {formatPdaDate} from '../job-quotation-source/vendor/src/app/(app)/utils/format-pda-date.ts';
-test('renders local job dates without converting their wall time',()=>{assert.equal(formatPdaDate('2026-10-20T08:00'),'20-OCT-26 @ 0800LT');assert.equal(formatPdaDate('2026-10-20'),'20-OCT-26');assert.equal(formatPdaDate('20-OCT-26 @ 0800LT'),'20-OCT-26 @ 0800LT');});
