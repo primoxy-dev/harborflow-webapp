@@ -46,7 +46,7 @@ import { AlertIcon, ErrorMessage } from "./common";
 import { BuyerInformation } from "./sections/buyer-information";
 import { GeneralInformation } from "./sections/general-information";
 import { InvoiceItems } from "./sections/invoice-items";
-import { PdaFields } from "./sections/pda-fields";
+import { PdaFields, PdaLayout } from "./sections/pda-fields";
 import { SellerInformation } from "./sections/seller-information";
 import { calculateInvoiceTotal } from "./utils/calculate-invoice-total";
 import { calculateItemTotals } from "./utils/calculate-item-totals";
@@ -518,6 +518,7 @@ export const InvoiceForm = memo(function InvoiceForm({
               dateOfIssue={dateOfIssue}
               isMobile={isMobile}
             />
+            {template === "pda" && <div className="mt-4"><PdaLayout control={control} /></div>}
           </AccordionContent>
         </AccordionItem>
 
