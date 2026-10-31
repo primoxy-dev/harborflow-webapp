@@ -1,0 +1,2 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {invoiceSchema,getInitialInvoiceData} from '../lib/job-quotation-schema.mjs';
+test('PDA layout settings persist with defaults for untouched sliders',()=>{const d=structuredClone(getInitialInvoiceData());d.pda={pdfFontSize:10,pdfWidths:{description:45}};const result=invoiceSchema.parse(d);assert.equal(result.pda.pdfFontSize,10);assert.equal(result.pda.pdfWidths.description,45);assert.equal(result.pda.pdfWidths.cost,13);});

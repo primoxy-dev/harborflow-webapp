@@ -19,7 +19,7 @@ const S = StyleSheet.create({
 });
 const number = (n: number) => Number.isFinite(n) ? n.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—";
 export function PdaInvoicePdfTemplate({invoiceData:d}:{invoiceData:InvoiceData}) {
-  const p=d.pda || {}; const rate=Number(p.exchangeRate); const hasRate=Boolean(p.exchangeRate) && Number.isFinite(rate) && rate>0;
+  const p=d.pda || {}; const widths={description:39,cost:13,unit:23,quantity:9,total:16,...p.pdfWidths}; const widthSum=Object.values(widths).reduce((a,b)=>a+b,0); const col=(v:number)=>({width:(100*v/widthSum)+"%"} as const); const rate=Number(p.exchangeRate); const hasRate=Boolean(p.exchangeRate) && Number.isFinite(rate) && rate>0;
   const local=p.localCurrency?.trim() || "Local"; const currency=d.currency; const showLocal=hasRate && Boolean(p.localCurrency?.trim()); const localTotal=d.items.reduce((sum,item)=>sum+Math.round((Number(item.preTaxAmount)*rate+Number.EPSILON)*100),0)/100; let previousGroup="";
   const rows: [string,string,string,string,string,string][] = [
     ["Company",d.buyer.name,"Charterer",p.charterer || "","Port",p.port || ""],
@@ -29,12 +29,12 @@ export function PdaInvoicePdfTemplate({invoiceData:d}:{invoiceData:InvoiceData})
     ["LOA (FT)",p.loa || "","GRT",p.grt || "","NRT",p.nrt || ""],
     ["DRAFT (FT)",p.draft || "","D/A Date",d.dateOfIssue || "","Currency",currency]
   ];
-  return <Document title="Estimated Proforma D/A"><Page size="A4" style={S.page} wrap>
+  return <Document title="Estimated Proforma D/A"><Page size="A4" style={[S.page,{fontSize:p.pdfFontSize || 8}]} wrap>
     <View style={S.header}><View style={S.seller}>{d.logo ? <Image src={d.logo} style={S.logo} /> : <Image src="/job-quotation/gac-letterhead.png" style={S.letterhead} />}</View></View>
     <Text style={S.band}>Estimated Proforma D/A</Text>
     <View style={S.grid}>{rows.map((r,i)=><View key={i} style={[S.gridRow,i===rows.length-1?{borderBottomWidth:0}:{}]}>{r.map((value,j)=><Text key={j} style={[j%2===0?S.cellLabel:S.cellValue,j===5?{borderRightWidth:0}:{}]}>{value}</Text>)}</View>)}</View>
-    <View style={S.tableHeader} wrap={false}><Text style={[S.expense,S.heading]}>HUSBANDRY EXPENSES</Text><Text style={[S.unitCost,S.heading]}>UNIT COST</Text><Text style={[S.unit,S.heading]}>UNIT</Text><Text style={[S.local,S.heading]}>QTY</Text><Text style={[S.quoted,S.heading]}>{`LINE TOTAL ${currency}`}</Text></View>
-    {d.items.map((item,index)=>{const group=(item.pdaGroup || "").trim();const show=Boolean(group)&&group!==previousGroup;previousGroup=group;return <View key={index} wrap={false}>{show?<Text style={S.group}>{group.toUpperCase()}</Text>:null}<View style={S.row}><Text style={S.expense}>{item.name}{Number(item.vatAmount) > 0 ? `  ·  Tax: ${item.vat}` : ""}</Text><Text style={S.unitCost}>{number(Number(item.netPrice))}</Text><Text style={S.unit}>{d.items[0].unitFieldIsVisible ? item.unit : ""}</Text><Text style={S.local}>{item.amount}</Text><Text style={S.quoted}>{number(Number(item.preTaxAmount))}</Text></View></View>})}
+    <View style={S.tableHeader} wrap={false}><Text style={[S.expense,col(widths.description),S.heading]}>HUSBANDRY EXPENSES</Text><Text style={[S.unitCost,col(widths.cost),S.heading]}>COST</Text><Text style={[S.unit,col(widths.unit),S.heading]}>UNIT</Text><Text style={[S.local,col(widths.quantity),S.heading]}>QTY</Text><Text style={[S.quoted,col(widths.total),S.heading]}>LINE TOTAL</Text></View>
+    {d.items.map((item,index)=>{const group=(item.pdaGroup || "").trim();const show=Boolean(group)&&group!==previousGroup;previousGroup=group;return <View key={index} wrap={false}>{show?<Text style={S.group}>{group.toUpperCase()}</Text>:null}<View style={S.row}><Text style={[S.expense,col(widths.description)]}>{item.name}{Number(item.vatAmount) > 0 ? `  ·  Tax: ${item.vat}` : ""}</Text><Text style={[S.unitCost,col(widths.cost)]}>{number(Number(item.netPrice))}</Text><Text style={[S.unit,col(widths.unit)]}>{d.items[0].unitFieldIsVisible ? item.unit : ""}</Text><Text style={[S.local,col(widths.quantity)]}>{item.amount}</Text><Text style={[S.quoted,col(widths.total)]}>{number(Number(item.preTaxAmount))}</Text></View></View>})}
     <View style={S.total} wrap={false}><Text>Total Disbursement Account</Text><Text>{showLocal?`${local} ${number(localTotal)}  ·  `:""}{currency} {number(Number(d.total))}</Text></View>
     {d.notesFieldIsVisible && d.notes ? <View><Text style={S.sectionTitle}>Notes:</Text><Text style={S.text}>{d.notes}</Text></View>:null}
     {p.bankDetails ? <View><Text style={S.sectionTitle}>Bank Details:</Text><Text style={S.text}>{p.bankDetails}</Text></View>:null}
