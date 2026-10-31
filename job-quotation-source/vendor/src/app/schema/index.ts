@@ -650,13 +650,14 @@ export const CURRENCY_COMBOBOX_GROUPS = CURRENCY_GROUPS.map((group) => {
   };
 }) satisfies CurrencyComboboxGroup[];
 
-export const SUPPORTED_TEMPLATES = ["default", "stripe"] as const;
+export const SUPPORTED_TEMPLATES = ["default", "stripe", "pda"] as const;
 
 export type SupportedTemplates = (typeof SUPPORTED_TEMPLATES)[number];
 
 export const TEMPLATE_TO_LABEL = {
   default: "Default Template",
   stripe: "Stripe Template",
+  pda: "Estimated Proforma D/A (CREW)",
 } as const satisfies Record<SupportedTemplates, string>;
 
 export type TemplateLabels =
@@ -801,6 +802,8 @@ export const invoiceItemSchema = z.object({
   amountFieldIsVisible: z.boolean().default(true),
 
   unit: z.string().trim().optional(),
+  pdaGroup: z.string().max(120).optional(),
+  pdaComment: z.string().max(500).optional(),
   unitFieldIsVisible: z.boolean().default(true),
 
   netPrice: z
@@ -1050,6 +1053,17 @@ export const invoiceObjectSchema = z.object({
   dateFormat: z.enum(SUPPORTED_DATE_FORMATS).default("YYYY-MM-DD"),
   currency: z.enum(SUPPORTED_CURRENCIES).default("EUR"),
   template: z.enum(SUPPORTED_TEMPLATES).default("default"),
+  pda: z.object({
+    vessel: z.string().max(160).optional(), jobNo: z.string().max(120).optional(),
+    port: z.string().max(160).optional(), eta: z.string().max(80).optional(),
+    etd: z.string().max(80).optional(), charterer: z.string().max(160).optional(),
+    purpose: z.string().max(120).optional(), localAgent: z.string().max(160).optional(),
+    loa: z.string().max(80).optional(), draft: z.string().max(80).optional(),
+    grt: z.string().max(80).optional(), dwt: z.string().max(80).optional(),
+    nrt: z.string().max(80).optional(), localCurrency: z.string().max(12).optional(),
+    exchangeRate: z.string().max(24).regex(/^(?:\d+(?:\.\d{0,6})?)?$/, "Enter a valid exchange rate").optional(),
+    bankDetails: z.string().max(2000).optional(),
+  }).optional(),
 
   /**
    * Logo field for Stripe template

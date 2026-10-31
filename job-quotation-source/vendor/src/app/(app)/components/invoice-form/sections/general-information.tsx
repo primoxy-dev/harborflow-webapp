@@ -222,8 +222,7 @@ export const GeneralInformation = memo(function GeneralInformation({
                     inputErrorClassName(!!errors.template),
                   )}
                   onChange={(e) => {
-                    const newTemplate =
-                      e.target.value === "stripe" ? "stripe" : "default";
+                    const newTemplate = e.target.value === "stripe" ? "stripe" : e.target.value === "pda" ? "pda" : "default";
 
                     field.onChange(e);
 
@@ -976,7 +975,7 @@ export const GeneralInformation = memo(function GeneralInformation({
         </div>
 
         {/* Pay Online URL - Only for Stripe template */}
-        {template === "stripe" ? (
+          {template === "stripe" ? (
           <div className="">
             <Label htmlFor={`stripePayOnlineUrl`} className="">
               Payment Link URL
