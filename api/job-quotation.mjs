@@ -21,7 +21,7 @@ export function createJobQuotationRoute(deps={}){return async request=>{
  if(request.method==='GET'&&input.mode==='crew-catalog'){
   if(!canEdit)return fail('Job edit permission required',403);
   const file=await (deps.readJson||readJson)('Templates/crew-pda-services.json');
-  const data=file?.data;if(!data||data.version!==1||data.currency!=='USD'||!Array.isArray(data.items)||data.items.length>200||data.items.some(item=>typeof item.name!=='string'||!item.name||item.name.length>500||typeof item.category!=='string'||item.category.length>200||typeof item.price!=='number'||!Number.isFinite(item.price)||item.price<0))return fail('CREW service template is unavailable',503);
+  const data=file?.data;if(!data||data.version!==1||data.currency!=='USD'||!Array.isArray(data.items)||data.items.length>200||data.items.some(item=>typeof item.name!=='string'||!item.name||item.name.length>500||typeof item.category!=='string'||item.category.length>200||typeof item.price!=='number'||!Number.isFinite(item.price)||item.price<0||typeof item.unit!=='string'||item.unit.length>500))return fail('CREW service template is unavailable',503);
   return json({currency:data.currency,items:data.items});
  }
  await (deps.ensureSchema||ensureJobQuotationSchema)(sql);

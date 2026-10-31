@@ -166,21 +166,27 @@ export const InvoiceForm = memo(function InvoiceForm({
       const current = getValues("items");
       const isPlaceholder = current.length === 1 && ["", "Item name"].includes(current[0].name.trim()) && Number(current[0].netPrice) === 0;
       if (!isPlaceholder && getValues("currency") !== data.currency) throw new Error("Select USD before adding these services; existing amounts will not be converted.");
-      const existing = isPlaceholder ? [] : current;
+      const sourceByKey = new Map<string, {unit:string}>(data.items.map((item: {category:string; name:string; unit:string}) => [item.category.trim().toUpperCase() + "\n" + item.name.trim().toUpperCase(), item]));
+      let filled = 0;
+      const existing = (isPlaceholder ? [] : current).map(item => {
+        const source = sourceByKey.get((item.pdaGroup || "").trim().toUpperCase() + "\n" + item.name.trim().toUpperCase());
+        if (source?.unit && !item.unit?.trim()) { filled++; return {...item, unit:source.unit}; }
+        return item;
+      });
       const keys = new Set(existing.map(item => (item.pdaGroup || "").trim().toUpperCase() + "\n" + item.name.trim().toUpperCase()));
       const added = data.items.filter((item: {category:string; name:string}) => !keys.has(item.category.trim().toUpperCase() + "\n" + item.name.trim().toUpperCase()));
       if (existing.length + added.length > MAX_INVOICE_ITEMS) throw new Error("There is not enough room for the CREW service template.");
-      if (!added.length) { setCrewMessage("The CREW services are already in this quotation."); return; }
-      const newItems: InvoiceItemData[] = added.map((item: {category:string; name:string; price:number}) => ({
+      if (!added.length && !filled) { setCrewMessage("The CREW services are already in this quotation."); return; }
+      const newItems: InvoiceItemData[] = added.map((item: {category:string; name:string; price:number; unit:string}) => ({
         invoiceItemNumberIsVisible:true, name:item.name, nameFieldIsVisible:true, amount:0, amountFieldIsVisible:true,
-        unit:"", unitFieldIsVisible:true, netPrice:item.price, netPriceFieldIsVisible:true,
+        unit:item.unit, unitFieldIsVisible:true, netPrice:item.price, netPriceFieldIsVisible:true,
         vat:"NP", vatFieldIsVisible:true, netAmount:0, netAmountFieldIsVisible:true, vatAmount:0,
         vatAmountFieldIsVisible:true, preTaxAmount:0, preTaxAmountFieldIsVisible:true,
         typeOfGTU:"", typeOfGTUFieldIsVisible:true, pdaGroup:item.category,
       }));
       if (isPlaceholder) setValue("currency", data.currency, { shouldDirty:true, shouldValidate:true });
       replace([...existing, ...newItems]);
-      setCrewMessage("CREW services added in USD. Quantities start at zero; enter the services you need.");
+      setCrewMessage("CREW services updated in USD. New quantities start at zero; review prices and enter the services you need.");
     } catch (error) { setCrewMessage(error instanceof Error ? error.message : "Could not load CREW services."); }
     finally { setCrewLoading(false); }
   }
