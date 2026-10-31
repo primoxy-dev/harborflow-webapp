@@ -1,4 +1,4 @@
-import {nodeHandler,json,sameOrigin,sessionLogin} from '../lib/harborflow.mjs';
+import {nodeHandler,json,sameOrigin,sessionLogin,readJson} from '../lib/harborflow.mjs';
 import {db,permission,uuid,canEditJob} from '../lib/operations.mjs';
 import {invoiceSchema,sellerSchema,buyerSchema,calculateItemTotals,calculateInvoiceTotal} from '../lib/job-quotation-schema.mjs';
 const fail=(error,status=400)=>json({error},status);
@@ -18,6 +18,12 @@ export function createJobQuotationRoute(deps={}){return async request=>{
  if(!job||grant.role==='editor'&&job.data.pic!==login)return fail('Job not found',404);
  const canEdit=canEditJob(grant,login,job);
  if(request.method==='POST'&&(!canEdit||input.login!==login))return fail('Job edit permission required',403);
+ if(request.method==='GET'&&input.mode==='crew-catalog'){
+  if(!canEdit)return fail('Job edit permission required',403);
+  const file=await (deps.readJson||readJson)('Templates/crew-pda-services.json');
+  const data=file?.data;if(!data||data.version!==1||data.currency!=='USD'||!Array.isArray(data.items)||data.items.length>200||data.items.some(item=>typeof item.name!=='string'||!item.name||item.name.length>500||typeof item.category!=='string'||item.category.length>200||typeof item.price!=='number'||!Number.isFinite(item.price)||item.price<0))return fail('CREW service template is unavailable',503);
+  return json({currency:data.currency,items:data.items});
+ }
  await (deps.ensureSchema||ensureJobQuotationSchema)(sql);
  if(request.method==='GET'){const [record]=await sql.query('SELECT * FROM job_quotation_documents WHERE job_id=$1',[job.id]);return json({login,job:{id:job.id,data:{vessel:job.data.vessel,jobNo:job.data.jobNo,port:job.data.port,principal:job.data.principal,eta:job.data.eta,etd:job.data.etd}},canEdit,record:record||null});}
  if(!Number.isInteger(input.version)||input.version<0)return fail('Current version required');
