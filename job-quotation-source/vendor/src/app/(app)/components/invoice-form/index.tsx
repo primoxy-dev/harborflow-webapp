@@ -109,6 +109,7 @@ export const InvoiceForm = memo(function InvoiceForm({
   const {
     control,
     setValue,
+    getValues,
     formState: { errors },
     watch,
     trigger,
@@ -145,10 +146,19 @@ export const InvoiceForm = memo(function InvoiceForm({
     language,
   });
 
-  const { fields, append } = useFieldArray({
+  const { fields, append, move } = useFieldArray({
     control,
     name: "items",
   });
+
+  const handleMoveInvoiceItem = useCallback((from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= fields.length || to >= fields.length) return;
+    const first = getValues("items.0");
+    const visibilityKeys = ["invoiceItemNumberIsVisible", "nameFieldIsVisible", "typeOfGTUFieldIsVisible", "amountFieldIsVisible", "unitFieldIsVisible", "netPriceFieldIsVisible", "vatFieldIsVisible", "netAmountFieldIsVisible", "vatAmountFieldIsVisible", "preTaxAmountFieldIsVisible"] as const;
+    const visibility = visibilityKeys.map(key => [key, first[key]] as const);
+    move(from, to);
+    visibility.forEach(([key, value]) => setValue(`items.0.${key}`, value, { shouldDirty: true }));
+  }, [fields.length, getValues, move, setValue]);
 
   // calculate totals and other values when invoice items change
   useEffect(() => {
@@ -527,6 +537,7 @@ export const InvoiceForm = memo(function InvoiceForm({
               control={control}
               fields={fields}
               handleRemoveInvoiceItem={handleRemoveInvoiceItem}
+              handleMoveInvoiceItem={handleMoveInvoiceItem}
               errors={errors}
               currency={currency}
               language={language}

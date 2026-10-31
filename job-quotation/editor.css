@@ -1558,7 +1558,50 @@ video {
 .\[transition-timing-function\:cubic-bezier\(0\.16\2c 1\2c 0\.3\2c 1\)\] {
   transition-timing-function: cubic-bezier(0.16,1,0.3,1);
 }
-:root{--radius:.5rem;--background:#fff;--foreground:#18181b}body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#18181b;margin:0}button,input,select,textarea{font:inherit}textarea{field-sizing:content}.jq-top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 24px;border-bottom:1px solid #e4e4e7;background:#fff;position:sticky;top:0;z-index:20}.jq-top h1{font-size:20px;font-weight:700}.jq-top small{color:#71717a}.jq-actions{display:flex;gap:8px;flex-wrap:wrap}.jq-btn{padding:9px 14px;border:1px solid #d4d4d8;border-radius:8px;background:#fff;font-size:13px}.jq-btn.primary{background:#18181b;color:white;border-color:#18181b}.jq-btn:disabled{opacity:.45;cursor:wait}.jq-workspace{display:grid;grid-template-columns:minmax(340px,4fr) minmax(0,8fr);gap:24px;padding:24px;align-items:start;max-width:1800px;margin:auto}.jq-form{max-height:calc(100vh - 145px);overflow:auto;padding:4px 16px 20px 2px}.jq-preview{position:sticky;top:106px;background:#f1f1f1;border:1px solid #e4e4e7;border-radius:8px;padding:16px;min-width:0;max-height:calc(100vh - 140px);overflow:auto}.jq-preview canvas{width:100%;height:auto;display:block;margin:12px auto;box-shadow:0 2px 12px #0002;background:#fff}.jq-status{padding:8px 24px;background:#fafafa;font-size:12px;color:#52525b}.jq-error{padding:20px;color:#b91c1c}.jq-footer{padding:14px 24px;border-top:1px solid #e4e4e7;color:#71717a;font-size:12px}.jq-footer a{text-decoration:underline}.jq-mobile-tabs{display:none}.jq-readonly .jq-form{pointer-events:none;opacity:.75}@media(max-width:850px){.jq-top{align-items:flex-start;padding:12px;position:static}.jq-workspace{grid-template-columns:1fr;padding:12px}.jq-form{max-height:none;overflow:visible}.jq-preview{position:static;max-height:none}.jq-mobile-tabs{display:flex;gap:8px;padding:10px 12px;background:#fafafa}.jq-mobile-tabs button{flex:1}.jq-workspace[data-tab="edit"] .jq-preview{display:none}.jq-workspace[data-tab="preview"] .jq-form{display:none}}.file\:me-3::file-selector-button {
+:root{--radius:.5rem;--background:#fff;--foreground:#18181b}body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#18181b;margin:0}button,input,select,textarea{font:inherit}textarea{field-sizing:content}.jq-top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:18px 24px;border-bottom:1px solid #e4e4e7;background:#fff;position:sticky;top:0;z-index:20}.jq-top h1{font-size:20px;font-weight:700}.jq-top small{color:#71717a}.jq-actions{display:flex;gap:8px;flex-wrap:wrap}.jq-btn{padding:9px 14px;border:1px solid #d4d4d8;border-radius:8px;background:#fff;font-size:13px}.jq-btn.primary{background:#18181b;color:white;border-color:#18181b}.jq-btn:disabled{opacity:.45;cursor:wait}.jq-workspace{display:grid;grid-template-columns:minmax(340px,4fr) minmax(0,8fr);gap:24px;padding:24px;align-items:start;max-width:1800px;margin:auto}.jq-form{max-height:calc(100vh - 145px);overflow:auto;padding:4px 16px 20px 2px}.jq-preview{position:sticky;top:106px;background:#f1f1f1;border:1px solid #e4e4e7;border-radius:8px;padding:16px;min-width:0;max-height:calc(100vh - 140px);overflow:auto}.jq-preview canvas{width:100%;height:auto;display:block;margin:12px auto;box-shadow:0 2px 12px #0002;background:#fff}.jq-status{padding:8px 24px;background:#fafafa;font-size:12px;color:#52525b}.jq-error{padding:20px;color:#b91c1c}.jq-footer{padding:14px 24px;border-top:1px solid #e4e4e7;color:#71717a;font-size:12px}.jq-footer a{text-decoration:underline}.jq-mobile-tabs{display:none}.jq-readonly .jq-form{pointer-events:none;opacity:.75}@media(max-width:850px){.jq-top{align-items:flex-start;padding:12px;position:static}.jq-workspace{grid-template-columns:1fr;padding:12px}.jq-form{max-height:none;overflow:visible}.jq-preview{position:static;max-height:none}.jq-mobile-tabs{display:flex;gap:8px;padding:10px 12px;background:#fafafa}.jq-mobile-tabs button{flex:1}.jq-workspace[data-tab="edit"] .jq-preview{display:none}.jq-workspace[data-tab="preview"] .jq-form{display:none}}
+@media (min-width: 851px){.jq-workspace{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.jq-preview canvas{max-width:816px}}
+
+.jq-form{min-width:0}@media(max-width:850px){.jq-workspace{grid-template-columns:minmax(0,1fr)}}
+
+.jq-form fieldset{min-width:0}
+
+
+/* Keep the quotation item editor within the available form width. */
+.jq-form .overflow-x-auto:has(> table[class*="min-w-[760px]"]){container-type:inline-size;overflow-x:hidden;min-width:0}
+.jq-form table[class*="min-w-[760px]"]{min-width:0;width:100%;table-layout:fixed}
+.jq-form table[class*="min-w-[760px]"] th,.jq-form table[class*="min-w-[760px]"] td{min-width:0;width:auto;padding:6px}
+.jq-form table[class*="min-w-[760px]"] :is(input,td div){min-width:0;max-width:100%}
+.jq-form table[class*="min-w-[760px]"] th:nth-child(1){width:25%}.jq-form table[class*="min-w-[760px]"] th:nth-child(2){width:10%}.jq-form table[class*="min-w-[760px]"] th:nth-child(3){width:12%}.jq-form table[class*="min-w-[760px]"] th:nth-child(4){width:20%}.jq-form table[class*="min-w-[760px]"] th:nth-child(5){width:10%}.jq-form table[class*="min-w-[760px]"] th:nth-child(6){width:17%}.jq-form table[class*="min-w-[760px]"] th:nth-child(7){width:6%}
+.jq-form table[class*="min-w-[760px]"] td:nth-child(4) span:last-child{padding-inline:4px}
+.jq-form table[class*="min-w-[760px]"] td:nth-child(6){white-space:normal;overflow-wrap:anywhere}
+.jq-form form,.jq-form form>div{min-width:0}
+@container (max-width:520px){
+ .jq-form table[class*="min-w-[760px]"],.jq-form table[class*="min-w-[760px]"] tbody{display:block;width:100%}
+ .jq-form table[class*="min-w-[760px]"] thead{display:none}
+ .jq-form table[class*="min-w-[760px]"] tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;padding:6px}
+ .jq-form table[class*="min-w-[760px]"] td{display:block;min-width:0;width:auto!important;text-align:left}
+ .jq-form table[class*="min-w-[760px]"] td:first-child{grid-column:1 / -1}
+ .jq-form table[class*="min-w-[760px]"] td::before{display:block;font-size:12px;color:#64748b;margin-bottom:4px}
+ .jq-form table[class*="min-w-[760px]"] td:nth-child(1)::before{content:"Description"}.jq-form table[class*="min-w-[760px]"] td:nth-child(2)::before{content:"Quantity"}.jq-form table[class*="min-w-[760px]"] td:nth-child(3)::before{content:"Unit"}.jq-form table[class*="min-w-[760px]"] td:nth-child(4)::before{content:"Unit cost"}.jq-form table[class*="min-w-[760px]"] td:nth-child(5)::before{content:"Tax"}.jq-form table[class*="min-w-[760px]"] td:nth-child(6)::before{content:"Line total"}
+}
+
+
+
+/* Compact rows like the reference while retaining Unit and Tax. */
+@media (min-width:851px){.jq-workspace{grid-template-columns:minmax(0,58fr) minmax(0,42fr)}}
+.jq-form .overflow-x-auto:has(> table[class*="min-w-[760px]"]){border:0}
+.jq-form table[class*="min-w-[760px]"] th{color:#737373;font-weight:500}
+.jq-form table[class*="min-w-[760px]"] th,.jq-form table[class*="min-w-[760px]"] td{padding:4px}
+.jq-form table[class*="min-w-[760px]"] th:nth-child(1){width:24%}.jq-form table[class*="min-w-[760px]"] th:nth-child(2){width:9%}.jq-form table[class*="min-w-[760px]"] th:nth-child(3){width:12%}.jq-form table[class*="min-w-[760px]"] th:nth-child(4){width:19%}.jq-form table[class*="min-w-[760px]"] th:nth-child(5){width:9%}.jq-form table[class*="min-w-[760px]"] th:nth-child(6){width:21%}.jq-form table[class*="min-w-[760px]"] th:nth-child(7){width:6%}
+@container (min-width:521px) and (max-width:700px){
+ .jq-form table[class*="min-w-[760px]"]{font-size:12px}
+ .jq-form table[class*="min-w-[760px]"] :is(th,td){padding:3px}
+ .jq-form table[class*="min-w-[760px]"] input{font-size:12px;padding-right:4px}
+ .jq-form table[class*="min-w-[760px]"] td:nth-child(4) span:last-child{font-size:11px;padding-inline:2px}
+}
+
+
+.invoice-item-name{display:flex;align-items:center;gap:4px;min-width:0}.invoice-item-name input{min-width:0;flex:1}.invoice-item-grip{display:flex;align-items:center;justify-content:center;flex:0 0 22px;min-height:38px;cursor:grab;touch-action:none;color:#737373;border:0;background:transparent}.invoice-item-grip:active{cursor:grabbing}.invoice-item-grip:focus-visible{outline:2px solid #2563eb;outline-offset:2px}.file\:me-3::file-selector-button {
   margin-inline-end: 0.75rem;
 }.file\:h-full::file-selector-button {
   height: 100%;
@@ -2021,45 +2064,3 @@ video {
 }.\[\&_svg\]\:shrink-0 svg {
   flex-shrink: 0;
 }
-
-@media (min-width: 851px){.jq-workspace{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.jq-preview canvas{max-width:816px}}
-
-.jq-form{min-width:0}@media(max-width:850px){.jq-workspace{grid-template-columns:minmax(0,1fr)}}
-
-.jq-form fieldset{min-width:0}
-
-
-/* Keep the quotation item editor within the available form width. */
-.jq-form .overflow-x-auto:has(> table[class*="min-w-[760px]"]){container-type:inline-size;overflow-x:hidden;min-width:0}
-.jq-form table[class*="min-w-[760px]"]{min-width:0;width:100%;table-layout:fixed}
-.jq-form table[class*="min-w-[760px]"] th,.jq-form table[class*="min-w-[760px]"] td{min-width:0;width:auto;padding:6px}
-.jq-form table[class*="min-w-[760px]"] :is(input,td div){min-width:0;max-width:100%}
-.jq-form table[class*="min-w-[760px]"] th:nth-child(1){width:25%}.jq-form table[class*="min-w-[760px]"] th:nth-child(2){width:10%}.jq-form table[class*="min-w-[760px]"] th:nth-child(3){width:12%}.jq-form table[class*="min-w-[760px]"] th:nth-child(4){width:20%}.jq-form table[class*="min-w-[760px]"] th:nth-child(5){width:10%}.jq-form table[class*="min-w-[760px]"] th:nth-child(6){width:17%}.jq-form table[class*="min-w-[760px]"] th:nth-child(7){width:6%}
-.jq-form table[class*="min-w-[760px]"] td:nth-child(4) span:last-child{padding-inline:4px}
-.jq-form table[class*="min-w-[760px]"] td:nth-child(6){white-space:normal;overflow-wrap:anywhere}
-.jq-form form,.jq-form form>div{min-width:0}
-@container (max-width:520px){
- .jq-form table[class*="min-w-[760px]"],.jq-form table[class*="min-w-[760px]"] tbody{display:block;width:100%}
- .jq-form table[class*="min-w-[760px]"] thead{display:none}
- .jq-form table[class*="min-w-[760px]"] tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0;padding:6px}
- .jq-form table[class*="min-w-[760px]"] td{display:block;min-width:0;width:auto!important;text-align:left}
- .jq-form table[class*="min-w-[760px]"] td:first-child{grid-column:1 / -1}
- .jq-form table[class*="min-w-[760px]"] td::before{display:block;font-size:12px;color:#64748b;margin-bottom:4px}
- .jq-form table[class*="min-w-[760px]"] td:nth-child(1)::before{content:"Description"}.jq-form table[class*="min-w-[760px]"] td:nth-child(2)::before{content:"Quantity"}.jq-form table[class*="min-w-[760px]"] td:nth-child(3)::before{content:"Unit"}.jq-form table[class*="min-w-[760px]"] td:nth-child(4)::before{content:"Unit cost"}.jq-form table[class*="min-w-[760px]"] td:nth-child(5)::before{content:"Tax"}.jq-form table[class*="min-w-[760px]"] td:nth-child(6)::before{content:"Line total"}
-}
-
-
-
-/* Compact rows like the reference while retaining Unit and Tax. */
-@media (min-width:851px){.jq-workspace{grid-template-columns:minmax(0,58fr) minmax(0,42fr)}}
-.jq-form .overflow-x-auto:has(> table[class*="min-w-[760px]"]){border:0}
-.jq-form table[class*="min-w-[760px]"] th{color:#737373;font-weight:500}
-.jq-form table[class*="min-w-[760px]"] th,.jq-form table[class*="min-w-[760px]"] td{padding:4px}
-.jq-form table[class*="min-w-[760px]"] th:nth-child(1){width:24%}.jq-form table[class*="min-w-[760px]"] th:nth-child(2){width:9%}.jq-form table[class*="min-w-[760px]"] th:nth-child(3){width:12%}.jq-form table[class*="min-w-[760px]"] th:nth-child(4){width:19%}.jq-form table[class*="min-w-[760px]"] th:nth-child(5){width:9%}.jq-form table[class*="min-w-[760px]"] th:nth-child(6){width:21%}.jq-form table[class*="min-w-[760px]"] th:nth-child(7){width:6%}
-@container (min-width:521px) and (max-width:700px){
- .jq-form table[class*="min-w-[760px]"]{font-size:12px}
- .jq-form table[class*="min-w-[760px]"] :is(th,td){padding:3px}
- .jq-form table[class*="min-w-[760px]"] input{font-size:12px;padding-right:4px}
- .jq-form table[class*="min-w-[760px]"] td:nth-child(4) span:last-child{font-size:11px;padding-inline:2px}
-}
-

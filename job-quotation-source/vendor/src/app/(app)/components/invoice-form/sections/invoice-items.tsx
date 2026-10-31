@@ -1,5 +1,5 @@
-import { Plus, Trash2 } from "lucide-react";
-import { memo, useState } from "react";
+import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { memo, useRef, useState } from "react";
 import {
   type Control,
   Controller,
@@ -41,6 +41,7 @@ interface InvoiceItemsSettingsProps {
   control: Control<InvoiceData>;
   fields: FieldArrayWithId<InvoiceData, "items">[];
   handleRemoveInvoiceItem: (index: number) => void;
+  handleMoveInvoiceItem: (from: number, to: number) => void;
   append: UseFieldArrayAppend<InvoiceData, "items">;
   errors: FieldErrors<InvoiceData>;
   currency: SupportedCurrencies;
@@ -54,6 +55,7 @@ export const InvoiceItems = memo(function InvoiceItems({
   control,
   fields,
   handleRemoveInvoiceItem,
+  handleMoveInvoiceItem,
   errors,
   currency,
   append,
@@ -62,6 +64,7 @@ export const InvoiceItems = memo(function InvoiceItems({
   invoiceData,
 }: InvoiceItemsSettingsProps) {
   const [deleteItemIndex, setDeleteItemIndex] = useState<number | null>(null);
+  const dragIndex = useRef<number | null>(null);
   const hasReachedItemLimit = fields.length >= MAX_INVOICE_ITEMS;
 
   return (
@@ -119,6 +122,12 @@ export const InvoiceItems = memo(function InvoiceItems({
         )} />
         <Label htmlFor="itemUnitFieldIsVisible0">Show Unit in PDF</Label>
       </div>
+      <div className="mb-3 flex items-center gap-2">
+        <Controller name="items.0.vatFieldIsVisible" control={control} render={({field: {value, onChange, ...field}}) => (
+          <Switch {...field} id="itemTaxFieldIsVisible0" checked={value} onCheckedChange={onChange} aria-label="Show Tax in PDF" />
+        )} />
+        <Label htmlFor="itemTaxFieldIsVisible0">Show Tax in PDF</Label>
+      </div>
       <div className="mb-4 overflow-x-auto rounded-lg border">
         <table className="w-full min-w-[760px] border-collapse text-sm">
           <thead><tr className="border-b text-left text-muted-foreground">
@@ -127,8 +136,8 @@ export const InvoiceItems = memo(function InvoiceItems({
             <th className="p-2 text-right font-medium">Line total</th><th className="p-2"><span className="sr-only">Actions</span></th>
           </tr></thead>
           <tbody>{fields.map((item, index) => (
-            <tr key={item.id} className="border-b last:border-0 align-top">
-              <td className="min-w-[200px] p-2"><Controller control={control} name={`items.${index}.name`} render={({field}) => <Input {...field} aria-label={`Description ${index + 1}`} placeholder="Description" className={inputErrorClassName(!!errors.items?.[index]?.name)} />} />{errors.items?.[index]?.name && <ErrorMessage>{errors.items[index]?.name?.message}</ErrorMessage>}</td>
+            <tr key={item.id} data-invoice-item-index={index} className="border-b last:border-0 align-top">
+              <td className="min-w-[200px] p-2"><div className="invoice-item-name"><button type="button" className="invoice-item-grip" aria-label={`Move item ${index + 1}: drag or use arrow keys`} title="Drag to reorder; use arrow keys for keyboard" onPointerDown={event => { if (event.button !== 0) return; dragIndex.current = index; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={event => { const from = dragIndex.current; dragIndex.current = null; const row = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-invoice-item-index]'); const to = Number(row?.getAttribute('data-invoice-item-index')); if (from !== null && row && Number.isInteger(to)) handleMoveInvoiceItem(from, to); }} onPointerCancel={() => { dragIndex.current = null; }} onKeyDown={event => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') { event.preventDefault(); handleMoveInvoiceItem(index, index + (event.key === 'ArrowUp' ? -1 : 1)); } }}><GripVertical size={18} aria-hidden="true" /></button><Controller control={control} name={`items.${index}.name`} render={({field}) => <Input {...field} aria-label={`Description ${index + 1}`} placeholder="Description" className={inputErrorClassName(!!errors.items?.[index]?.name)} />} /></div>{errors.items?.[index]?.name && <ErrorMessage>{errors.items[index]?.name?.message}</ErrorMessage>}</td>
               <td className="w-24 p-2"><Controller control={control} name={`items.${index}.amount`} render={({field}) => <Input {...field} aria-label={`Quantity ${index + 1}`} type="number" min="0" step="0.01" className={inputErrorClassName(!!errors.items?.[index]?.amount)} />} />{errors.items?.[index]?.amount && <ErrorMessage>{errors.items[index]?.amount?.message}</ErrorMessage>}</td>
               <td className="w-32 p-2"><Controller control={control} name={`items.${index}.unit`} render={({field}) => <Input {...field} aria-label={`Unit ${index + 1}`} placeholder="Unit" className={inputErrorClassName(!!errors.items?.[index]?.unit)} />} />{errors.items?.[index]?.unit && <ErrorMessage>{errors.items[index]?.unit?.message}</ErrorMessage>}</td>
               <td className="w-40 p-2"><Controller control={control} name={`items.${index}.netPrice`} render={({field}) => <MoneyInput {...field} aria-label={`Unit cost ${index + 1}`} currency={currency} type="number" min="0" step="0.01" className={inputErrorClassName(!!errors.items?.[index]?.netPrice)} />} />{errors.items?.[index]?.netPrice && <ErrorMessage>{errors.items[index]?.netPrice?.message}</ErrorMessage>}</td>

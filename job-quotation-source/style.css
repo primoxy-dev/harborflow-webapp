@@ -43,3 +43,5 @@
  .jq-form table[class*="min-w-[760px]"] td:nth-child(4) span:last-child{font-size:11px;padding-inline:2px}
 }
 
+
+.invoice-item-name{display:flex;align-items:center;gap:4px;min-width:0}.invoice-item-name input{min-width:0;flex:1}.invoice-item-grip{display:flex;align-items:center;justify-content:center;flex:0 0 22px;min-height:38px;cursor:grab;touch-action:none;color:#737373;border:0;background:transparent}.invoice-item-grip:active{cursor:grabbing}.invoice-item-grip:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
