@@ -80,7 +80,7 @@ type AccordionKeys = Array<(typeof DEFAULT_ACCORDION_VALUES)[number]>;
 
 interface InvoiceFormProps {
   invoiceData: InvoiceData;
-  vesselLookup?: {vessel?:string; imo?:string};
+  vesselLookup?: {vessel?:string; imo?:string; jobNo?:string; port?:string};
   handleInvoiceDataChange: (updatedData: InvoiceData) => void;
   isMobile?: boolean;
   /**
