@@ -45,3 +45,7 @@
 
 
 .invoice-item-name{display:flex;align-items:center;gap:4px;min-width:0}.invoice-item-name input{min-width:0;flex:1}.invoice-item-grip{display:flex;align-items:center;justify-content:center;flex:0 0 22px;min-height:38px;cursor:grab;touch-action:none;color:#737373;border:0;background:transparent}.invoice-item-grip:active{cursor:grabbing}.invoice-item-grip:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+
+/* CREW PDA: give unit and category terms more room while fitting the editor. */
+.jq-form table.pda-items th:nth-child(1){width:22%}.jq-form table.pda-items th:nth-child(2){width:8%}.jq-form table.pda-items th:nth-child(3){width:19%}.jq-form table.pda-items th:nth-child(4){width:17%}.jq-form table.pda-items th:nth-child(5){width:19%}.jq-form table.pda-items th:nth-child(6){width:10%}.jq-form table.pda-items th:nth-child(7){width:5%}
+@container (max-width: 620px){.jq-form table.pda-items td:nth-child(5)::before{content:"Category"}}
