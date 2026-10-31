@@ -51,3 +51,9 @@
 @container (max-width: 620px){.jq-form table.pda-items td:nth-child(5)::before{content:"Category"}}
 
 .jq-form table.pda-items input{font-size:13px}
+
+/* Subtle category tint on CREW PDA item inputs. */
+.pda-items tr[data-pda-category="CREW EMBARKATION"] input{background-color:#eff6ff}
+.pda-items tr[data-pda-category="CREW DISEMBARKATION"] input{background-color:#fff7ed}
+.pda-items tr[data-pda-category="VISITOR"] input{background-color:#f0fdf4}
+.pda-items tr[data-pda-category="HUSBANDRY SERVICES FEE"] input{background-color:#faf5ff}
