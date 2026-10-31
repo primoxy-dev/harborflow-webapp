@@ -3,10 +3,10 @@ import type { InvoiceData } from "@/app/schema";
 import { formatPdaDate } from "@/app/(app)/utils/format-pda-date";
 
 const S = StyleSheet.create({
-  page:{paddingTop:30,paddingBottom:35,paddingHorizontal:30,fontFamily:"Helvetica",fontSize:8,color:"#173967"},
+  page:{paddingTop:30,paddingBottom:35,paddingHorizontal:30,fontFamily:"Helvetica",fontSize:10,color:"#173967"},
   header:{flexDirection:"row",justifyContent:"space-between",minHeight:62},
   seller:{flexGrow:1}, letterhead:{width:"100%",height:70,objectFit:"contain",objectPosition:"left",marginBottom:4}, sellerName:{fontSize:10,fontWeight:"bold"}, logo:{width:58,maxHeight:42,objectFit:"contain",marginBottom:4},
-  band:{backgroundColor:"#8fb7a7",color:"#fff",paddingVertical:11,textAlign:"center",fontSize:16,fontWeight:"bold",marginTop:5,marginBottom:7},
+  band:{backgroundColor:"#8fb7a7",color:"#fff",paddingVertical:11,textAlign:"center",fontSize:10,fontWeight:"bold",marginTop:5,marginBottom:7},
   grid:{borderWidth:0.7,borderColor:"#202020"}, gridRow:{flexDirection:"row",borderBottomWidth:0.5,borderColor:"#202020",minHeight:16},
   cellLabel:{width:"13%",padding:3,borderRightWidth:0.5,borderColor:"#202020"}, cellValue:{width:"20.33%",padding:3,borderRightWidth:0.5,borderColor:"#202020"},
   tableHeader:{flexDirection:"row",borderWidth:0.7,borderColor:"#202020",marginTop:8,minHeight:31},
@@ -15,7 +15,7 @@ const S = StyleSheet.create({
   heading:{fontWeight:"bold",textAlign:"center"}, row:{flexDirection:"row",borderLeftWidth:0.7,borderRightWidth:0.7,borderBottomWidth:0.5,borderColor:"#202020",minHeight:20},
   group:{backgroundColor:"#fff100",color:"#173967",fontWeight:"bold",padding:4,borderLeftWidth:0.7,borderRightWidth:0.7,borderBottomWidth:0.5,borderColor:"#202020"},
   total:{flexDirection:"row",borderWidth:0.7,borderColor:"#202020",padding:5,justifyContent:"space-between",fontWeight:"bold"},
-  sectionTitle:{fontWeight:"bold",marginTop:9,marginBottom:3}, text:{lineHeight:1.35}, footer:{position:"absolute",bottom:15,left:30,right:30,textAlign:"right",fontSize:7,color:"#737373"}
+  sectionTitle:{fontWeight:"bold",marginTop:9,marginBottom:3}, text:{lineHeight:1.35}, footer:{position:"absolute",bottom:15,left:30,right:30,textAlign:"right",fontSize:10,color:"#737373"}
 });
 const number = (n: number) => Number.isFinite(n) ? n.toLocaleString("en-US", {minimumFractionDigits:2,maximumFractionDigits:2}) : "—";
 export function PdaInvoicePdfTemplate({invoiceData:d}:{invoiceData:InvoiceData}) {
