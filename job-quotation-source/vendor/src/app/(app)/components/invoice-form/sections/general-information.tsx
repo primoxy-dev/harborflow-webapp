@@ -447,7 +447,7 @@ export const GeneralInformation = memo(function GeneralInformation({
         </div>
 
         {/* Invoice Number */}
-        <fieldset className="rounded-md border p-4">
+        {template !== "pda" && <fieldset className="rounded-md border p-4">
           <legend className="px-1 text-lg font-semibold text-gray-900">
             Invoice Number
           </legend>
@@ -535,7 +535,7 @@ export const GeneralInformation = memo(function GeneralInformation({
               ) : null}
             </div>
           </div>
-        </fieldset>
+        </fieldset>}
 
         {/* Date of Issue */}
         <div>
@@ -598,7 +598,7 @@ export const GeneralInformation = memo(function GeneralInformation({
           ) : null}
         </div>
 
-        <fieldset className="rounded-md border p-4">
+        {template !== "pda" && <fieldset className="rounded-md border p-4">
           <legend className="px-1 text-lg font-semibold text-gray-900">
             Service period
           </legend>
@@ -842,10 +842,10 @@ export const GeneralInformation = memo(function GeneralInformation({
               </div>
             </div>
           ) : null}
-        </fieldset>
+        </fieldset>}
 
         {/* Out of Date Dates Helper */}
-        {canShowStaleDatesBanner ? (
+        {template !== "pda" && canShowStaleDatesBanner ? (
           <StaleDatesBanner
             dateOfIssue={dateOfIssue}
             dateOfService={dateOfService}
@@ -860,7 +860,7 @@ export const GeneralInformation = memo(function GeneralInformation({
         ) : null}
 
         {/* Header Notes - Purpose is to add a custom text to the header of the invoice */}
-        <div>
+        {template !== "pda" && <div>
           <div className="relative mb-2 flex items-center justify-between">
             <Label htmlFor={`invoiceType`} className="">
               Header Notes
@@ -913,7 +913,7 @@ export const GeneralInformation = memo(function GeneralInformation({
           {errors.invoiceType ? (
             <ErrorMessage>{errors.invoiceType.message}</ErrorMessage>
           ) : null}
-        </div>
+        </div>}
         {/* Logo Upload */}
         <div className="">
           <Label htmlFor="logoUpload" className="mb-2">
