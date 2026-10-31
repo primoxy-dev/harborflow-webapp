@@ -49,3 +49,5 @@
 /* CREW PDA: give unit and category terms more room while fitting the editor. */
 .jq-form table.pda-items th:nth-child(1){width:22%}.jq-form table.pda-items th:nth-child(2){width:8%}.jq-form table.pda-items th:nth-child(3){width:19%}.jq-form table.pda-items th:nth-child(4){width:17%}.jq-form table.pda-items th:nth-child(5){width:19%}.jq-form table.pda-items th:nth-child(6){width:10%}.jq-form table.pda-items th:nth-child(7){width:5%}
 @container (max-width: 620px){.jq-form table.pda-items td:nth-child(5)::before{content:"Category"}}
+
+.jq-form table.pda-items input{font-size:13px}

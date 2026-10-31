@@ -3,15 +3,15 @@ import type { InvoiceData } from "@/app/schema";
 import { formatPdaDate } from "@/app/(app)/utils/format-pda-date";
 
 const S = StyleSheet.create({
-  page:{paddingTop:30,paddingBottom:35,paddingHorizontal:30,fontFamily:"Helvetica",fontSize:10,color:"#173967"},
+  page:{paddingTop:30,paddingBottom:35,paddingHorizontal:30,fontFamily:"Helvetica",fontSize:8,color:"#173967"},
   header:{flexDirection:"row",justifyContent:"space-between",minHeight:62},
   seller:{flexGrow:1}, letterhead:{width:"100%",height:70,objectFit:"contain",objectPosition:"left",marginBottom:4}, sellerName:{fontSize:10,fontWeight:"bold"}, logo:{width:58,maxHeight:42,objectFit:"contain",marginBottom:4},
   band:{backgroundColor:"#8fb7a7",color:"#fff",paddingVertical:11,textAlign:"center",fontSize:10,fontWeight:"bold",marginTop:5,marginBottom:7},
   grid:{borderWidth:0.7,borderColor:"#202020"}, gridRow:{flexDirection:"row",borderBottomWidth:0.5,borderColor:"#202020",minHeight:16},
-  cellLabel:{width:"13%",padding:3,borderRightWidth:0.5,borderColor:"#202020"}, cellValue:{width:"20.33%",padding:3,borderRightWidth:0.5,borderColor:"#202020"},
+  cellLabel:{width:"15%",padding:3,borderRightWidth:0.5,borderColor:"#202020"}, cellValue:{width:"18.33%",padding:3,borderRightWidth:0.5,borderColor:"#202020"},
   tableHeader:{flexDirection:"row",borderWidth:0.7,borderColor:"#202020",marginTop:8,minHeight:31},
-  expense:{width:"60%",padding:4}, local:{width:"20%",padding:4,borderLeftWidth:0.5,borderColor:"#202020",textAlign:"right"},
-  quoted:{width:"20%",padding:4,borderLeftWidth:0.5,borderColor:"#202020",textAlign:"right"}, comment:{width:"29%",padding:4,borderLeftWidth:0.5,borderColor:"#202020"},
+  expense:{width:"39%",padding:4}, unitCost:{width:"13%",padding:4,borderLeftWidth:0.5,borderColor:"#202020",textAlign:"right"}, unit:{width:"23%",padding:4,borderLeftWidth:0.5,borderColor:"#202020"}, local:{width:"9%",padding:4,borderLeftWidth:0.5,borderColor:"#202020",textAlign:"right"},
+  quoted:{width:"16%",padding:4,borderLeftWidth:0.5,borderColor:"#202020",textAlign:"right"}, comment:{width:"29%",padding:4,borderLeftWidth:0.5,borderColor:"#202020"},
   heading:{fontWeight:"bold",textAlign:"center"}, row:{flexDirection:"row",borderLeftWidth:0.7,borderRightWidth:0.7,borderBottomWidth:0.5,borderColor:"#202020",minHeight:20},
   group:{backgroundColor:"#fff100",color:"#173967",fontWeight:"bold",padding:4,borderLeftWidth:0.7,borderRightWidth:0.7,borderBottomWidth:0.5,borderColor:"#202020"},
   total:{flexDirection:"row",borderWidth:0.7,borderColor:"#202020",padding:5,justifyContent:"space-between",fontWeight:"bold"},
@@ -33,8 +33,8 @@ export function PdaInvoicePdfTemplate({invoiceData:d}:{invoiceData:InvoiceData})
     <View style={S.header}><View style={S.seller}>{d.logo ? <Image src={d.logo} style={S.logo} /> : <Image src="/job-quotation/gac-letterhead.png" style={S.letterhead} />}</View></View>
     <Text style={S.band}>Estimated Proforma D/A</Text>
     <View style={S.grid}>{rows.map((r,i)=><View key={i} style={[S.gridRow,i===rows.length-1?{borderBottomWidth:0}:{}]}>{r.map((value,j)=><Text key={j} style={[j%2===0?S.cellLabel:S.cellValue,j===5?{borderRightWidth:0}:{}]}>{value}</Text>)}</View>)}</View>
-    <View style={S.tableHeader} wrap={false}><Text style={[S.expense,S.heading]}>HUSBANDRY EXPENSES</Text><Text style={[S.local,S.heading]}>QUANTITY</Text><Text style={[S.quoted,S.heading]}>LINE TOTAL{"\n"}{currency}</Text></View>
-    {d.items.map((item,index)=>{const group=(item.pdaGroup || "").trim();const show=Boolean(group)&&group!==previousGroup;previousGroup=group;return <View key={index} wrap={false}>{show?<Text style={S.group}>{group.toUpperCase()}</Text>:null}<View style={S.row}><Text style={S.expense}>{item.name}{`  ·  ${currency} ${number(Number(item.netPrice))}${d.items[0].unitFieldIsVisible && item.unit ? `  ·  ${item.unit}` : ""}`}{Number(item.vatAmount) > 0 ? `  ·  Tax: ${item.vat}` : ""}</Text><Text style={S.local}>{item.amount}</Text><Text style={S.quoted}>{number(Number(item.preTaxAmount))}</Text></View></View>})}
+    <View style={S.tableHeader} wrap={false}><Text style={[S.expense,S.heading]}>HUSBANDRY EXPENSES</Text><Text style={[S.unitCost,S.heading]}>UNIT COST</Text><Text style={[S.unit,S.heading]}>UNIT</Text><Text style={[S.local,S.heading]}>QTY</Text><Text style={[S.quoted,S.heading]}>{`LINE TOTAL ${currency}`}</Text></View>
+    {d.items.map((item,index)=>{const group=(item.pdaGroup || "").trim();const show=Boolean(group)&&group!==previousGroup;previousGroup=group;return <View key={index} wrap={false}>{show?<Text style={S.group}>{group.toUpperCase()}</Text>:null}<View style={S.row}><Text style={S.expense}>{item.name}{Number(item.vatAmount) > 0 ? `  ·  Tax: ${item.vat}` : ""}</Text><Text style={S.unitCost}>{number(Number(item.netPrice))}</Text><Text style={S.unit}>{d.items[0].unitFieldIsVisible ? item.unit : ""}</Text><Text style={S.local}>{item.amount}</Text><Text style={S.quoted}>{number(Number(item.preTaxAmount))}</Text></View></View>})}
     <View style={S.total} wrap={false}><Text>Total Disbursement Account</Text><Text>{showLocal?`${local} ${number(localTotal)}  ·  `:""}{currency} {number(Number(d.total))}</Text></View>
     {d.notesFieldIsVisible && d.notes ? <View><Text style={S.sectionTitle}>Notes:</Text><Text style={S.text}>{d.notes}</Text></View>:null}
     {p.bankDetails ? <View><Text style={S.sectionTitle}>Bank Details:</Text><Text style={S.text}>{p.bankDetails}</Text></View>:null}
