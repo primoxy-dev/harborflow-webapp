@@ -1063,7 +1063,7 @@ export const invoiceObjectSchema = z.object({
     nrt: z.string().max(80).optional(), localCurrency: z.string().max(12).optional(),
     exchangeRate: z.string().max(24).regex(/^(?:\d+(?:\.\d{0,6})?)?$/, "Enter a valid exchange rate").optional(),
     bankDetails: z.string().max(2000).optional(),
-    pdfFontSize: z.coerce.number().int().min(7).max(12).optional(),
+    pdfFontSize: z.coerce.number().int().min(6).max(12).optional(),
     pdfWidths: z.object({description:z.coerce.number().min(5).max(60).default(39), cost:z.coerce.number().min(5).max(60).default(13), unit:z.coerce.number().min(5).max(60).default(23), quantity:z.coerce.number().min(5).max(60).default(9), total:z.coerce.number().min(5).max(60).default(16)}).optional(),
   }).optional(),
 
