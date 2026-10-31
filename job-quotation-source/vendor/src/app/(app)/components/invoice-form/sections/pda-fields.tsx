@@ -3,7 +3,6 @@ import { Controller, type Control, type UseFormGetValues, type UseFormSetValue }
 import type { InvoiceData } from "@/app/schema";
 import { Input } from "@/components/ui/input";
 import { formatPdaDate } from "@/app/(app)/utils/format-pda-date";
-import { Textarea } from "@/components/ui/textarea";
 
 const fields = [
   ["vessel", "Vessel"], ["jobNo", "Job No."], ["port", "Port"],
@@ -51,7 +50,8 @@ export function PdaFields({ control, getValues, setValue, vesselLookup }: { cont
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{fields.map(([key,label]) =>
       <label key={key} className="text-sm">{label}<Controller control={control} name={`pda.${key}`} render={({field}) => <Input {...field} value={field.value ?? ""} aria-label={label} placeholder={key === "eta" || key === "etd" ? "20-OCT-26 @ 0800LT" : undefined} onBlur={() => { if (key === "eta" || key === "etd") field.onChange(formatPdaDate(field.value)); field.onBlur(); }} inputMode={key === "exchangeRate" ? "decimal" : undefined} />} /></label>
     )}</div>
-    <fieldset className="rounded-md border p-3 space-y-2"><legend className="font-medium">PDF Live layout</legend><label className="block text-sm">Font size <Controller control={control} name="pda.pdfFontSize" render={({field}) => <select {...field} value={field.value ?? 8} onChange={e => field.onChange(Number(e.target.value))} className="ml-2 rounded border p-1" aria-label="PDF font size">{[7,8,9,10,11,12].map(size=><option key={size} value={size}>{size} pt</option>)}</select>} /></label><p className="text-xs text-slate-600">Adjust the relative width of each PDF column.</p>{([['description','Description',39],['cost','Cost',13],['unit','Unit',23],['quantity','Quantity',9],['total','Line Total',16]] as const).map(([key,label,initial])=><label className="flex items-center gap-2 text-sm" key={key}><span className="w-24">{label}</span><Controller control={control} name={('pda.pdfWidths.'+key) as 'pda.pdfWidths.description'} render={({field})=><input type="range" min="5" max="60" value={field.value ?? initial} onChange={e=>field.onChange(Number(e.target.value))} aria-label={label+' PDF width'} />} /></label>)}</fieldset>
-    <label className="block text-sm">Bank details (optional)<Controller control={control} name="pda.bankDetails" render={({field}) => <Textarea {...field} value={field.value ?? ""} aria-label="Bank details" rows={3} />} /></label>
+
   </section>;
 }
+
+export function PdaLayout({control}:{control:Control<InvoiceData>}) { return <fieldset className="rounded-md border p-3 space-y-2"><legend className="font-medium">PDF Live layout</legend><label className="block text-sm">Font size <Controller control={control} name="pda.pdfFontSize" render={({field}) => <select {...field} value={field.value ?? 8} onChange={e => field.onChange(Number(e.target.value))} className="ml-2 rounded border p-1" aria-label="PDF font size">{[7,8,9,10,11,12].map(size=><option key={size} value={size}>{size} pt</option>)}</select>} /></label><p className="text-xs text-slate-600">Adjust the relative width of each PDF column.</p>{([['description','Description',39],['cost','Cost',13],['unit','Unit',23],['quantity','Quantity',9],['total','Line Total',16]] as const).map(([key,label,initial])=><label className="flex items-center gap-2 text-sm" key={key}><span className="w-24">{label}</span><Controller control={control} name={('pda.pdfWidths.'+key) as 'pda.pdfWidths.description'} render={({field})=><input type="range" min="5" max="60" value={field.value ?? initial} onChange={e=>field.onChange(Number(e.target.value))} aria-label={label+' PDF width'} />} /></label>)}</fieldset>; }
