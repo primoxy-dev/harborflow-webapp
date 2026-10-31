@@ -14,7 +14,7 @@ const fields = [
   ["exchangeRate", "Local currency per 1 quoted currency unit"]
 ] as const;
 
-export function PdaFields({ control, getValues, setValue, vesselLookup }: { control: Control<InvoiceData>; getValues: UseFormGetValues<InvoiceData>; setValue: UseFormSetValue<InvoiceData>; vesselLookup?: {vessel?:string; imo?:string} }) {
+export function PdaFields({ control, getValues, setValue, vesselLookup }: { control: Control<InvoiceData>; getValues: UseFormGetValues<InvoiceData>; setValue: UseFormSetValue<InvoiceData>; vesselLookup?: {vessel?:string; imo?:string; jobNo?:string; port?:string} }) {
   const [source, setSource] = useState("");
   useEffect(() => {
     const vessel = vesselLookup?.vessel, imo = vesselLookup?.imo;
@@ -31,6 +31,19 @@ export function PdaFields({ control, getValues, setValue, vesselLookup }: { cont
       }).catch(() => {});
     return () => { active = false; };
   }, [vesselLookup?.vessel, vesselLookup?.imo, getValues, setValue]);
+  useEffect(() => {
+    let active=true;
+    const jobId=new URLSearchParams(location.search).get('jobId') || '';
+    const originalNotes = 'Vessel: '+(vesselLookup?.vessel || '')+'\nJob No.: '+(vesselLookup?.jobNo || '')+'\nPort: '+(vesselLookup?.port || '');
+    const currentNotes=getValues('notes') || '';
+    if (currentNotes.trim() && currentNotes !== originalNotes) return;
+    void fetch('/api/job-quotation?jobId='+encodeURIComponent(jobId)+'&mode=crew-catalog',{credentials:'same-origin',cache:'no-store'}).then(r=>r.ok?r.json():null).then(result=>{
+      if(!active || !result?.defaultNotes)return;
+      const latest=getValues('notes') || '';
+      if(!latest.trim() || latest===originalNotes){setValue('notes',result.defaultNotes,{shouldDirty:true,shouldValidate:true});setValue('notesFieldIsVisible',true,{shouldDirty:true});}
+    }).catch(()=>{});
+    return ()=>{active=false;};
+  }, [getValues,setValue,vesselLookup?.vessel,vesselLookup?.jobNo,vesselLookup?.port]);
   return <section className="rounded-lg border p-4 space-y-3" aria-label="Proforma D/A details">
     <h3 className="font-medium">Proforma D/A details</h3>
     <p className="text-sm text-slate-600">Vessel specifications are looked up using the Job IMO when available. Verify reference draft and any missing values. {source && <a href={source} target="_blank" rel="noreferrer">Wikidata source</a>}</p>

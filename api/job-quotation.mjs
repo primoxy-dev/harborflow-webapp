@@ -22,7 +22,7 @@ export function createJobQuotationRoute(deps={}){return async request=>{
   if(!canEdit)return fail('Job edit permission required',403);
   const file=await (deps.readJson||readJson)('Templates/crew-pda-services.json');
   const data=file?.data;if(!data||data.version!==1||data.currency!=='USD'||!Array.isArray(data.items)||data.items.length>200||data.items.some(item=>typeof item.name!=='string'||!item.name||item.name.length>500||typeof item.category!=='string'||item.category.length>200||typeof item.price!=='number'||!Number.isFinite(item.price)||item.price<0||typeof item.unit!=='string'||item.unit.length>500))return fail('CREW service template is unavailable',503);
-  return json({currency:data.currency,items:data.items});
+  return json({currency:data.currency,items:data.items,defaultNotes:typeof data.defaultNotes === "string" && data.defaultNotes.length <= 5000 ? data.defaultNotes : ""});
  }
  await (deps.ensureSchema||ensureJobQuotationSchema)(sql);
  if(request.method==='GET'){const [record]=await sql.query('SELECT * FROM job_quotation_documents WHERE job_id=$1',[job.id]);return json({login,job:{id:job.id,data:{vessel:job.data.vessel,jobNo:job.data.jobNo,imo:job.data.imo,port:job.data.port,principal:job.data.principal,eta:job.data.eta,etd:job.data.etd}},canEdit,record:record||null});}
