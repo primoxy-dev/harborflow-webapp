@@ -481,7 +481,7 @@ export const InvoiceForm = memo(function InvoiceForm({
         </AccordionItem>
 
         {/* Seller Information */}
-        <AccordionItem
+        {template !== "pda" && <AccordionItem
           value={ACCORDION_SELLER}
           className="rounded-lg border shadow"
           data-testid={`seller-information-section`}
@@ -500,10 +500,10 @@ export const InvoiceForm = memo(function InvoiceForm({
               isMobile={isMobile}
             />
           </div>
-        </AccordionItem>
+        </AccordionItem>}
 
         {/* Buyer Information */}
-        <AccordionItem
+        {template !== "pda" && <AccordionItem
           value={ACCORDION_BUYER}
           className="rounded-lg border shadow"
           data-testid={`buyer-information-section`}
@@ -522,7 +522,7 @@ export const InvoiceForm = memo(function InvoiceForm({
               isMobile={isMobile}
             />
           </div>
-        </AccordionItem>
+        </AccordionItem>}
 
         {/* Items and pricing */}
         <AccordionItem
@@ -773,7 +773,7 @@ export const InvoiceForm = memo(function InvoiceForm({
         </div>
 
         {/* QR Code */}
-        <fieldset className="rounded-md border px-4 pb-4">
+        {template !== "pda" && <fieldset className="rounded-md border px-4 pb-4">
           <legend className="text-base font-semibold lg:text-lg">
             QR Code
           </legend>
@@ -863,7 +863,7 @@ export const InvoiceForm = memo(function InvoiceForm({
               ) : null}
             </div>
           </div>
-        </fieldset>
+        </fieldset>}
 
         {/*
             Stripe template doesn't have these fields

@@ -402,7 +402,7 @@ export const GeneralInformation = memo(function GeneralInformation({
         </div>
 
         {/* Date Format */}
-        <div>
+        {template !== "pda" && <div>
           <Label htmlFor={`dateFormat`} className="mb-1">
             Date Format
           </Label>
@@ -444,7 +444,7 @@ export const GeneralInformation = memo(function GeneralInformation({
               Select the date format of the invoice
             </InputHelperMessage>
           )}
-        </div>
+        </div>}
 
         {/* Invoice Number */}
         {template !== "pda" && <fieldset className="rounded-md border p-4">
@@ -538,7 +538,7 @@ export const GeneralInformation = memo(function GeneralInformation({
         </fieldset>}
 
         {/* Date of Issue */}
-        <div>
+        {template !== "pda" && <div>
           <Label htmlFor={`dateOfIssue`} className="mb-1">
             Date of Issue
           </Label>
@@ -596,7 +596,7 @@ export const GeneralInformation = memo(function GeneralInformation({
               </ButtonHelper>
             </InputHelperMessage>
           ) : null}
-        </div>
+        </div>}
 
         {template !== "pda" && <fieldset className="rounded-md border p-4">
           <legend className="px-1 text-lg font-semibold text-gray-900">
@@ -915,7 +915,7 @@ export const GeneralInformation = memo(function GeneralInformation({
           ) : null}
         </div>}
         {/* Logo Upload */}
-        <div className="">
+        {template !== "pda" && <div className="">
           <Label htmlFor="logoUpload" className="mb-2">
             Company Logo
           </Label>
@@ -972,7 +972,7 @@ export const GeneralInformation = memo(function GeneralInformation({
           {errors.logo ? (
             <ErrorMessage>{errors.logo.message}</ErrorMessage>
           ) : null}
-        </div>
+        </div>}
 
         {/* Pay Online URL - Only for Stripe template */}
           {template === "stripe" ? (
