@@ -3,7 +3,7 @@
   const sidebar = document.getElementById('primaryNav');
   if (!sidebar) return;
   const groups = [
-    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','Summary report','☷'],['alerts','Smart Alerts','⚑'],['outlook','Outlook','✉']]],
+    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','Summary report','☷'],['alerts','Smart Alerts','⚑'],['email','Email','✉'],['outlook','Outlook','↗']]],
     ['Quotation & Payments', [['commercial','Quotation / PDA / FDA','◫'],['pv','Payment Voucher','▧'],['price','Price Master','¤'],['approvals','Approvals','✓']]]
   ];
   const title = document.getElementById('title');
@@ -15,7 +15,8 @@
     pv: empty('Payment Voucher','สาธารณะเห็นเฉพาะตัวอย่างที่เจ้าของเลือกเผยแพร่ · ผู้รับเงิน บัญชีธนาคาร ต้นทุน และหลักฐานจ่ายไม่เปิดสาธารณะ · ดาวน์โหลด PV ต้องลงชื่อเข้าใช้'),
     price: empty('Published selling rates','เผยแพร่เฉพาะราคาขายที่เจ้าของตรวจ · ต้นทุน Supplier, Margin และกฎส่วนลดไม่เปิดสาธารณะ'),
     approvals: empty('Approvals','ข้อมูลการอนุมัติภายในต้องลงชื่อเข้าใช้ · ช่วงทดลองให้เจ้าของอนุมัติเท่านั้น'),
-    allservices: '<div class="panel" role="status">กำลังโหลด Summary report…</div>'
+    allservices: '<div class="panel" role="status">กำลังโหลด Summary report…</div>',
+    email: '<div class="panel" role="status">กำลังโหลด Email…</div>'
   };
   for (const [id, html] of Object.entries(views)) {
     let section = document.getElementById(id);
@@ -38,6 +39,7 @@
         if(id!=='operations') document.getElementById('createJob').hidden=true;
         if(id==='allservices') loadReport();
         if(id==='commercial') window.HarborFlowQuotation?.open();
+        if(id==='email') window.HarborFlowEmail?.open(document.getElementById('email'));
         if(window.matchMedia('(max-width: 900px)').matches) document.getElementById('closeNav').click();
       });
       details.append(button);
@@ -46,6 +48,7 @@
   }
   // Insertion after the same anchor reverses order; put Operations first.
   anchor.after(sidebar.querySelectorAll('.workspace-group')[1]);
+  if(new URL(location.href).searchParams.get('workspace')==='email') { sidebar.querySelector('[data-view="email"]')?.click(); history.replaceState(null,'',location.pathname); }
   const offlineLink=document.createElement('a');offlineLink.className='nav';offlineLink.href='/offline/';offlineLink.textContent='▧ Documents · Online / Offline';offlineLink.title='แบบฟอร์มบนเครื่อง · ข้อมูลสมมติเท่านั้น';
   sidebar.querySelector('.workspace-group').append(offlineLink);
   const marketing=sidebar.querySelector('[data-view="marketing"]');
