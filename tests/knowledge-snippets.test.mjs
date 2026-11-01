@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createSnippetsRoute} from '../api/knowledge-snippets.mjs';
+import {createSnippetsRoute} from '../lib/knowledge-snippets.mjs';
 
 test('text library requires named access and restricts editing to Knowledge editors',async()=>{
  let login=null,grants={};let writes=0;

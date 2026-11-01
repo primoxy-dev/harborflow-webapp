@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { configReady, gh, json, knowledgeAccessPath, knowledgeContactsPath, knowledgeGrants, knowledgePath, knowledgeProposalsPath, nodeHandler, readJson, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
+import { createSnippetsRoute } from '../lib/knowledge-snippets.mjs';
+
+const snippetsRoute = createSnippetsRoute();
 
 const owner = 'primoxy-dev';
 const serviceKeys = new Set(['crew', 'supt', 'sire', 'class', 'engineer', 'spare', 'stores', 'medical', 'water', 'garbage', 'courier', 'offlandSmall', 'offlandHeavy']);
@@ -206,6 +209,7 @@ async function decideRoute(request, login) {
 }
 
 async function route(request) {
+  if (new URL(request.url).searchParams.get('mode') === 'text-library') return snippetsRoute(request);
   if (!configReady()) return json({ error: 'Shared storage is not configured' }, 503);
   const login = sessionLogin(request);
   try {
