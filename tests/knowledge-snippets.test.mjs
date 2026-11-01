@@ -18,3 +18,16 @@ test('text library prevents cross-origin writes and overwriting a newer revision
  assert.equal((await route(req('https://example.com','old'))).status,409);
  assert.equal(writes,0);
 });
+
+test('images are private, validated, and stored separately from the topic list',async()=>{
+ let login='editor',grants={restrictionEdit:true},storedPath='',storedBody;
+ const route=createSnippetsRoute({ready:()=>true,getLogin:()=>login,getGrants:async()=>grants,read:async()=>null,write:async(method,path,body)=>{if(method==='PUT'){storedPath=path;storedBody=body;return {};}return {content:storedBody.content};}});
+ const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+ const upload=(origin,image)=>new Request('https://example.com/api/knowledge?mode=text-library',{method:'POST',headers:{origin},body:JSON.stringify({image})});
+ assert.equal((await route(upload('https://evil.com','data:image/png;base64,'+png))).status,403);
+ assert.equal((await route(upload('https://example.com','data:image/png;base64,SGVsbG8gd29ybGQh'))).status,400);
+ const result=await route(upload('https://example.com','data:image/png;base64,'+png));assert.equal(result.status,200);const {id}=await result.json();assert.match(storedPath,/^Knowledge\/text-images\//);
+ const image=()=>new Request('https://example.com/api/knowledge?mode=text-library&image='+id);
+ assert.equal((await route(image())).headers.get('content-type'),'image/png');login=null;assert.equal((await route(image())).status,401);
+ login='viewer';grants={contactView:true};assert.equal((await route(image())).status,200);assert.equal((await route(upload('https://example.com','data:image/png;base64,'+png))).status,403);
+});
