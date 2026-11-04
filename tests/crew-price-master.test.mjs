@@ -14,15 +14,16 @@ function fixture(role='owner'){
 }
 test('owner can save unit cost and margin while preserving catalog and notes',async()=>{
  const f=fixture(),get=await f.route(new Request(url)),data=await get.json();assert.equal(data.items[0].margin,0);
- const r=await f.route(post({login:'alice',sha:data.sha,items:[{...data.items[0],price:110,margin:12.5}]}));
- assert.equal(r.status,200);assert.equal(f.file.data.items[0].margin,12.5);assert.equal(f.file.data.items[0].extra,'preserved');assert.equal(f.file.data.defaultNotes,'Private notes');
- assert.deepEqual(customerCatalog(f.file.data).items,[{name:'Sample service',category:'CREW',unit:'PER CREW',price:122.5}]);
+ const r=await f.route(post({login:'alice',sha:data.sha,items:[{...data.items[0],price:110,margin:12}]}));
+ assert.equal(r.status,200);assert.equal(f.file.data.items[0].margin,12);assert.equal(f.file.data.items[0].extra,'preserved');assert.equal(f.file.data.defaultNotes,'Private notes');
+ assert.deepEqual(customerCatalog(f.file.data).items,[{name:'Sample service',category:'CREW',unit:'PER CREW',price:122}]);
 });
 test('denies non-owners and rejects stale, invalid, and cross-account writes',async()=>{
  const notOwner=fixture('viewer');assert.equal((await notOwner.route(new Request(url))).status,403);
  const f=fixture();let response=await f.route(post({login:'alice',sha:'old',items:initial.items}));assert.equal(response.status,409);
  response=await f.route(post({login:'bob',sha:'v1',items:initial.items}));assert.equal(response.status,409);
  response=await f.route(post({login:'alice',sha:'v1',items:[{...initial.items[0],margin:-1}]}));assert.equal(response.status,400);assert.equal(f.writes,0);
+ response=await f.route(post({login:'alice',sha:'v1',items:[{...initial.items[0],margin:1.5}]}));assert.equal(response.status,400);assert.equal(f.writes,0);
  assert.throws(()=>updateCatalog(initial,[{...initial.items[0],name:'Changed',margin:0}]));
 });
 test('Price Master renders private catalog and saves edited margin',async()=>{
