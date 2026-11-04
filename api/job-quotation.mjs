@@ -1,12 +1,15 @@
 import {nodeHandler,json,sameOrigin,sessionLogin,readJson} from '../lib/harborflow.mjs';
 import {db,permission,uuid,canEditJob} from '../lib/operations.mjs';
 import {invoiceSchema,sellerSchema,buyerSchema,calculateItemTotals,calculateInvoiceTotal} from '../lib/job-quotation-schema.mjs';
+import {validCatalog,customerCatalog} from '../lib/crew-price-master.mjs';
+import {createPriceMasterRoute} from '../lib/price-master-route.mjs';
 const fail=(error,status=400)=>json({error},status);
 export async function ensureJobQuotationSchema(sql){
  await sql.query(`CREATE TABLE IF NOT EXISTS job_quotation_documents(job_id uuid PRIMARY KEY REFERENCES operation_jobs(id),document jsonb NOT NULL,profiles jsonb NOT NULL DEFAULT '{}',version integer NOT NULL DEFAULT 1,updated_by text NOT NULL,updated_at timestamptz NOT NULL DEFAULT now())`);
  await sql.query(`CREATE TABLE IF NOT EXISTS job_quotation_history(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,job_id uuid NOT NULL REFERENCES operation_jobs(id),version integer NOT NULL,document jsonb NOT NULL,profiles jsonb NOT NULL,actor text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(job_id,version))`);
 }
 export function createJobQuotationRoute(deps={}){return async request=>{
+ if(new URL(request.url).searchParams.get('mode')==='price-master')return createPriceMasterRoute(deps)(request);
  if(!['GET','POST'].includes(request.method))return fail('Unsupported method',405);
  if(request.method==='POST'&&!sameOrigin(request))return fail('Invalid origin',403);
  const login=(deps.sessionLogin||sessionLogin)(request);if(!login)return fail('Sign in required',401);
@@ -21,8 +24,8 @@ export function createJobQuotationRoute(deps={}){return async request=>{
  if(request.method==='GET'&&input.mode==='crew-catalog'){
   if(!canEdit)return fail('Job edit permission required',403);
   const file=await (deps.readJson||readJson)('Templates/crew-pda-services.json');
-  const data=file?.data;if(!data||data.version!==1||data.currency!=='USD'||!Array.isArray(data.items)||data.items.length>200||data.items.some(item=>typeof item.name!=='string'||!item.name||item.name.length>500||typeof item.category!=='string'||item.category.length>200||typeof item.price!=='number'||!Number.isFinite(item.price)||item.price<0||typeof item.unit!=='string'||item.unit.length>500))return fail('CREW service template is unavailable',503);
-  return json({currency:data.currency,items:data.items,defaultNotes:typeof data.defaultNotes === "string" && data.defaultNotes.length <= 5000 ? data.defaultNotes : ""});
+  const data=file?.data;if(!validCatalog(data))return fail('CREW service template is unavailable',503);
+  return json(customerCatalog(data));
  }
  await (deps.ensureSchema||ensureJobQuotationSchema)(sql);
  if(request.method==='GET'){const [record]=await sql.query('SELECT * FROM job_quotation_documents WHERE job_id=$1',[job.id]);return json({login,job:{id:job.id,data:{vessel:job.data.vessel,jobNo:job.data.jobNo,imo:job.data.imo,port:job.data.port,principal:job.data.principal,eta:job.data.eta,etd:job.data.etd}},canEdit,record:record||null});}
