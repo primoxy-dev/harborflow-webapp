@@ -1,7 +1,9 @@
+import {CURRENCIES,sellingPrice} from './lib/price-master-money.mjs';
 const root=document.getElementById('price');
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let catalog=null,dirty=false,busy=false,message='';
-const format=value=>Number(value).toLocaleString('en-US',{maximumFractionDigits:0});
+let catalog=null,dirty=false,busy=false,message='',view='folders';
+const format=value=>value===null?'—':Number(value).toLocaleString('en-US',{maximumFractionDigits:0});
+const currency=(index,key,value)=>`<select data-pm-index="${index}" data-pm-field="${key}" aria-label="${key} currency" ${busy?'disabled':''}>${CURRENCIES.map(c=>`<option ${value===c?'selected':''}>${c}</option>`).join('')}</select>`;
 async function request(method='GET',body){
  const response=await fetch('/api/job-quotation?mode=price-master',{method,credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
  const result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||'Could not load Price Master');return result;
@@ -9,35 +11,36 @@ async function request(method='GET',body){
 function render(){
  if(!root)return;
  if(!catalog){root.innerHTML=`<div class="panel"><h2>Price Master</h2><p role="status">${escape(message||'Loading…')}</p><button class="secondary" data-pm="reload">Try again</button></div>`;return;}
+ if(view==='folders'){root.innerHTML=`<section class="panel"><h2>Price Master</h2><p>Select a template folder.</p><button class="pm-folder" data-pm="folder">📁 Estimated Proforma D/A (CREW)<small>${catalog.items.length} services</small></button></section>`;return;}
  let previous='';
  const rows=catalog.items.map((item,i)=>{
   const header=item.category!==previous?`<tr><th colspan="5" class="pm-category">${escape(item.category)}</th></tr>`:'';previous=item.category;
-  return `${header}<tr><td>${escape(item.name)}</td><td>${escape(item.unit)}</td><td><input type="number" min="0" max="1000000000" step="1" inputmode="numeric" data-pm-index="${i}" data-pm-field="price" aria-label="Cost ${escape(item.name)}" value="${escape(item.price)}" ${busy?'disabled':''}></td><td><input type="number" min="0" max="1000000000" step="1" inputmode="numeric" data-pm-index="${i}" data-pm-field="margin" aria-label="Margin ${escape(item.name)}" value="${escape(item.margin)}" ${busy?'disabled':''}></td><td data-pm-total="${i}">${format(Number(item.price)+Number(item.margin))}</td></tr>`;
+  return `${header}<tr><td>${escape(item.name)}</td><td>${escape(item.unit)}</td><td><div class="pm-money"><input type="number" min="0" max="1000000000" step="1" inputmode="numeric" data-pm-index="${i}" data-pm-field="price" aria-label="Cost ${escape(item.name)}" value="${escape(item.price)}" ${busy?'disabled':''}>${currency(i,'costCurrency',item.costCurrency||'USD')}</div></td><td><div class="pm-money"><input type="number" min="0" max="1000000000" step="1" inputmode="numeric" data-pm-index="${i}" data-pm-field="margin" aria-label="Margin ${escape(item.name)}" value="${escape(item.margin)}" ${busy?'disabled':''}>${currency(i,'marginCurrency',item.marginCurrency||'USD')}</div></td><td><div class="pm-money"><span data-pm-total="${i}">${format(sellingPrice(item,item.sellingCurrency||'USD',catalog.roe))}</span>${currency(i,'sellingCurrency',item.sellingCurrency||'USD')}</div></td></tr>`;
  }).join('');
- root.innerHTML=`<section class="panel pm-panel"><div class="pm-head"><div><h2>Price Master</h2><p>Estimated Proforma D/A (CREW) · USD per unit</p><p>Selling price = Cost + Margin · Existing quotations remain unchanged</p></div><div><button class="secondary" data-pm="reload" ${busy?'disabled':''}>Reload</button> <button class="primary" data-pm="save" ${busy||!dirty?'disabled':''}>Save</button></div></div><p role="status" class="pm-status">${escape(message||(dirty?'Unsaved changes':''))}</p><div class="pm-table-wrap"><table class="pm-table"><thead><tr><th>Description</th><th>Unit</th><th>Cost (USD)</th><th>Margin (USD)</th><th>Selling Price (USD)</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+ root.innerHTML=`<section class="panel pm-panel"><div class="pm-head"><div><button class="secondary" data-pm="back">← Folders</button><h2>Estimated Proforma D/A (CREW)</h2><p>Selling price = Cost + Margin. Amounts are rounded to whole units.</p><p>When changing Cost or Margin currency, enter the amount in that currency. Existing numbers are not converted.</p><p>CREW quotations use USD; each selling price is converted to USD using the ROE below.</p></div><div><button class="secondary" data-pm="reload" ${busy?'disabled':''}>Reload</button> <button class="primary" data-pm="save" ${busy||!dirty?'disabled':''}>Save</button></div></div><div class="pm-roe"><b>Rate of Exchange (ROE)</b>${['THB','EUR'].map(c=>`<label>1 USD = <input type="number" min="0" step="any" data-pm-roe="${c}" value="${escape(catalog.roe?.[c]??'')}" placeholder="Enter rate" ${busy?'disabled':''}> ${c}</label>`).join('')}</div><p role="status" class="pm-status">${escape(message||(dirty?'Unsaved changes':''))}</p><div class="pm-table-wrap"><table class="pm-table"><thead><tr><th>Description</th><th>Unit</th><th>Cost</th><th>Margin</th><th>Selling Price</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
-async function open(){
- if(dirty){render();return;}
- catalog=null;message='Loading…';render();
- try{catalog=await request();message='';}catch(error){message=error.message;}render();
-}
-root?.addEventListener('input',event=>{
- const input=event.target,index=Number(input.dataset.pmIndex),key=input.dataset.pmField;
- if(!catalog||!Number.isInteger(index)||!['price','margin'].includes(key)||!catalog.items[index])return;
+async function open(){if(dirty){render();return;}catalog=null;message='Loading…';render();try{catalog=await request();catalog.roe??={};message='';}catch(error){message=error.message;}render();}
+function change(event){
+ const input=event.target;
+ if(input.dataset.pmRoe&&catalog){catalog.roe[input.dataset.pmRoe]=input.value;dirty=true;catalog.items.forEach((item,index)=>{const total=root.querySelector(`[data-pm-total="${index}"]`);if(total)total.textContent=format(sellingPrice(item,item.sellingCurrency||'USD',catalog.roe));});const button=root.querySelector('[data-pm="save"]');if(button)button.disabled=false;const status=root.querySelector('.pm-status');if(status)status.textContent='Unsaved changes';return;}
+ const index=Number(input.dataset.pmIndex),key=input.dataset.pmField;
+ if(!catalog||!Number.isInteger(index)||!['price','margin','costCurrency','marginCurrency','sellingCurrency'].includes(key)||!catalog.items[index])return;
  catalog.items[index][key]=input.value;dirty=true;message='';
  const item=catalog.items[index],total=root.querySelector(`[data-pm-total="${index}"]`);
- const valid=[item.price,item.margin].every(value=>value!==''&&Number.isFinite(Number(value))&&Number(value)>=0);
- if(total)total.textContent=valid?format(Number(item.price)+Number(item.margin)):'—';
- const button=root.querySelector('[data-pm="save"]');if(button)button.disabled=false;
- const status=root.querySelector('.pm-status');if(status)status.textContent='Unsaved changes';
-});
+ if(total)total.textContent=[item.price,item.margin].every(v=>v!==''&&Number.isFinite(Number(v))&&Number(v)>=0)?format(sellingPrice(item,item.sellingCurrency||'USD',catalog.roe)):'—';
+ const button=root.querySelector('[data-pm="save"]');if(button)button.disabled=false;const status=root.querySelector('.pm-status');if(status)status.textContent='Unsaved changes';
+}
+root?.addEventListener('input',event=>{if(event.target.tagName!=='SELECT')change(event);});
+root?.addEventListener('change',event=>{if(event.target.tagName==='SELECT')change(event);});
 root?.addEventListener('click',async event=>{
  const action=event.target.closest('[data-pm]')?.dataset.pm;if(!action||busy)return;
+ if(action==='folder'){view='template';render();return;}
+ if(action==='back'){view='folders';render();return;}
  if(action==='reload'){if(dirty&&!confirm('You have unsaved changes. Reload and discard them?'))return;dirty=false;await open();return;}
  if(action!=='save'||!catalog)return;
  const items=catalog.items.map(item=>({...item,price:item.price===''?NaN:Number(item.price),margin:item.margin===''?NaN:Number(item.margin)}));
- if(items.some(item=>[item.price,item.margin].some(value=>!Number.isInteger(value)||value<0||value>1e9))){message='Cost and Margin must be whole numbers of zero or more.';render();return;}
- busy=true;message='Saving…';render();
- try{await request('POST',{login:catalog.login,sha:catalog.sha,items});dirty=false;catalog=await request();message='Price Master saved';}catch(error){message=error.message;}finally{busy=false;render();}
+ const roe={};for(const c of ['THB','EUR']){const value=catalog.roe?.[c];if(value!==''&&value!==undefined&&value!==null)roe[c]=Number(value);}
+ if(items.some(item=>[item.price,item.margin].some(value=>!Number.isInteger(value)||value<0||value>1e9))||Object.values(roe).some(x=>!Number.isFinite(x)||x<=0)||items.some(item=>sellingPrice(item,'USD',roe)===null||sellingPrice(item,item.sellingCurrency||'USD',roe)===null)){message='Enter whole amounts and a positive ROE for each currency used.';render();return;}
+ busy=true;message='Saving…';render();try{await request('POST',{login:catalog.login,sha:catalog.sha,items,roe});dirty=false;catalog=await request();catalog.roe??={};message='Price Master saved';}catch(error){message=error.message;}finally{busy=false;render();}
 });
 window.HarborFlowPriceMaster={open};
