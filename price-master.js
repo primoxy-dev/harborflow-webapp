@@ -3,7 +3,7 @@ const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 let catalog=null,dirty=false,busy=false,message='';
 const format=value=>Number(value).toLocaleString('en-US',{maximumFractionDigits:0});
 async function request(method='GET',body){
- const response=await fetch('/api/price-master',{method,credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+ const response=await fetch('/api/job-quotation?mode=price-master',{method,credentials:'same-origin',cache:'no-store',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
  const result=await response.json().catch(()=>({}));if(!response.ok)throw Error(result.error||'Could not load Price Master');return result;
 }
 function render(){

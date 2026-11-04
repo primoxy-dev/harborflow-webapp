@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createPriceMasterRoute} from '../api/price-master.mjs';
+import {createPriceMasterRoute} from '../lib/price-master-route.mjs';
+import {createJobQuotationRoute} from '../api/job-quotation.mjs';
 import {customerCatalog,updateCatalog} from '../lib/crew-price-master.mjs';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
@@ -25,6 +26,11 @@ test('denies non-owners and rejects stale, invalid, and cross-account writes',as
  response=await f.route(post({login:'alice',sha:'v1',items:[{...initial.items[0],margin:-1}]}));assert.equal(response.status,400);assert.equal(f.writes,0);
  response=await f.route(post({login:'alice',sha:'v1',items:[{...initial.items[0],margin:1.5}]}));assert.equal(response.status,400);assert.equal(f.writes,0);
  assert.throws(()=>updateCatalog(initial,[{...initial.items[0],name:'Changed',margin:0}]));
+});
+test('job quotation endpoint dispatches Price Master requests without a Job ID',async()=>{
+ const route=createJobQuotationRoute({db:()=>({}),sessionLogin:()=> 'alice',permission:async()=>({role:'owner'}),readJson:async()=>({sha:'v1',data:initial})});
+ const r=await route(new Request('https://example.test/api/job-quotation?mode=price-master'));
+ assert.equal(r.status,200);assert.equal((await r.json()).items[0].name,'Sample service');
 });
 test('Price Master renders private catalog and saves edited margin',async()=>{
  const handlers={},requests=[];

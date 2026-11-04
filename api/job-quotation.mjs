@@ -2,12 +2,14 @@ import {nodeHandler,json,sameOrigin,sessionLogin,readJson} from '../lib/harborfl
 import {db,permission,uuid,canEditJob} from '../lib/operations.mjs';
 import {invoiceSchema,sellerSchema,buyerSchema,calculateItemTotals,calculateInvoiceTotal} from '../lib/job-quotation-schema.mjs';
 import {validCatalog,customerCatalog} from '../lib/crew-price-master.mjs';
+import {createPriceMasterRoute} from '../lib/price-master-route.mjs';
 const fail=(error,status=400)=>json({error},status);
 export async function ensureJobQuotationSchema(sql){
  await sql.query(`CREATE TABLE IF NOT EXISTS job_quotation_documents(job_id uuid PRIMARY KEY REFERENCES operation_jobs(id),document jsonb NOT NULL,profiles jsonb NOT NULL DEFAULT '{}',version integer NOT NULL DEFAULT 1,updated_by text NOT NULL,updated_at timestamptz NOT NULL DEFAULT now())`);
  await sql.query(`CREATE TABLE IF NOT EXISTS job_quotation_history(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,job_id uuid NOT NULL REFERENCES operation_jobs(id),version integer NOT NULL,document jsonb NOT NULL,profiles jsonb NOT NULL,actor text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(job_id,version))`);
 }
 export function createJobQuotationRoute(deps={}){return async request=>{
+ if(new URL(request.url).searchParams.get('mode')==='price-master')return createPriceMasterRoute(deps)(request);
  if(!['GET','POST'].includes(request.method))return fail('Unsupported method',405);
  if(request.method==='POST'&&!sameOrigin(request))return fail('Invalid origin',403);
  const login=(deps.sessionLogin||sessionLogin)(request);if(!login)return fail('Sign in required',401);
