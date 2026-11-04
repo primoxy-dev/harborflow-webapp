@@ -38,6 +38,7 @@
         if(id!=='operations') document.getElementById('createJob').hidden=true;
         if(id==='allservices') loadReport();
         if(id==='commercial') window.HarborFlowQuotation?.open();
+        if(id==='price') window.HarborFlowPriceMaster?.open();
         if(window.matchMedia('(max-width: 900px)').matches) document.getElementById('closeNav').click();
       });
       details.append(button);
