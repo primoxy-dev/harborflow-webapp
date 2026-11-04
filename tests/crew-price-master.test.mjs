@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createPriceMasterRoute} from '../lib/price-master-route.mjs';
 import {createJobQuotationRoute} from '../api/job-quotation.mjs';
 import {customerCatalog,updateCatalog} from '../lib/crew-price-master.mjs';
-import {CURRENCIES,sellingPrice} from '../lib/price-master-money.mjs';
+import {CURRENCIES,sellingPrice,convert} from '../lib/price-master-money.mjs';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 const initial={version:1,currency:'USD',defaultNotes:'Private notes',items:[{name:'Sample service',category:'CREW',unit:'PER CREW',price:100,extra:'preserved'}]};
@@ -19,6 +19,22 @@ test('owner can save unit cost and margin while preserving catalog and notes',as
  const r=await f.route(post({login:'alice',sha:data.sha,items:[{...data.items[0],price:110,margin:12}]}));
  assert.equal(r.status,200);assert.equal(f.file.data.items[0].margin,12);assert.equal(f.file.data.items[0].extra,'preserved');assert.equal(f.file.data.defaultNotes,'Private notes');
  assert.deepEqual(customerCatalog(f.file.data).items,[{name:'Sample service',category:'CREW',unit:'PER CREW',price:122}]);
+});
+test('column currencies convert all rows only with an ROE and preserve browser column order',async()=>{
+ const handlers={},requests=[],storage=new Map();
+ const root={innerHTML:'',addEventListener:(type,handler)=>handlers[type]=handler,querySelector:()=>null};
+ const data={login:'alice',sha:'v1',currency:'USD',roe:{THB:35},items:[{name:'A',category:'CREW',unit:'PER CREW',price:100,margin:10},{name:'B',category:'CREW',unit:'PER CREW',price:70,margin:5}]};
+ const context={document:{getElementById:()=>root},window:{},confirm:()=>true,CURRENCIES,sellingPrice,convert,localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},fetch:async(url,options)=>{requests.push(options);return {ok:true,json:async()=>options.method==='POST'?{ok:true}:structuredClone(data)};},console};
+ vm.createContext(context);vm.runInContext((await readFile(new URL('../price-master.js',import.meta.url),'utf8')).replace(/^import .*?;\r?\n/,''),context);
+ await context.window.HarborFlowPriceMaster.open();await handlers.click({target:{closest:selector=>selector==='[data-pm]'?{dataset:{pm:'folder'}}:null}});
+ handlers.change({target:{tagName:'SELECT',dataset:{pmColumnCurrency:'price'},value:'EUR'}});
+ assert.match(root.innerHTML,/Enter a positive ROE/);assert.match(root.innerHTML,/value="100"/);assert.match(root.innerHTML,/value="70"/);
+ handlers.change({target:{tagName:'SELECT',dataset:{pmColumnCurrency:'price'},value:'THB'}});
+ assert.match(root.innerHTML,/value="3500"/);assert.match(root.innerHTML,/value="2450"/);
+ await handlers.click({target:{closest:selector=>selector==='[data-pm-move]'?{dataset:{pmMove:'price',pmDirection:'right'}}:null}});
+ assert.deepEqual(JSON.parse(storage.get('harborflow.priceMaster.columnOrder')),['margin','price','selling']);
+ await handlers.click({target:{closest:selector=>selector==='[data-pm]'?{dataset:{pm:'save'}}:null}});
+ const sent=JSON.parse(requests.find(r=>r.method==='POST').body);assert.equal(sent.items[0].price,3500);assert.equal(sent.items[0].costCurrency,'THB');
 });
 test('denies non-owners and rejects stale, invalid, and cross-account writes',async()=>{
  const notOwner=fixture('viewer');assert.equal((await notOwner.route(new Request(url))).status,403);
@@ -41,10 +57,10 @@ test('Price Master renders private catalog and saves edited margin',async()=>{
  vm.createContext(context);vm.runInContext((await readFile(new URL('../price-master.js',import.meta.url),'utf8')).replace(/^import .*?;\r?\n/,''),context);
  await context.window.HarborFlowPriceMaster.open();
  assert.match(root.innerHTML,/template folder/);
- await handlers.click({target:{closest:()=>({dataset:{pm:'folder'}})}});
+ await handlers.click({target:{closest:selector=>selector==='[data-pm]'?{dataset:{pm:'folder'}}:null}});
  assert.match(root.innerHTML,/Sample service/);assert.match(root.innerHTML,/Margin/);
  handlers.input({target:{dataset:{pmIndex:'0',pmField:'margin'},value:'25'}});
- await handlers.click({target:{closest:()=>({dataset:{pm:'save'}})}});
+ await handlers.click({target:{closest:selector=>selector==='[data-pm]'?{dataset:{pm:'save'}}:null}});
  const sent=JSON.parse(requests.find(r=>r.method==='POST').body);
  assert.equal(sent.items[0].margin,25);assert.equal(sent.items[0].price,100);assert.equal(sent.sha,'v1');
 });
