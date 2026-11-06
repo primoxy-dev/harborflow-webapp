@@ -9,6 +9,15 @@ vm.createContext(context);
 vm.runInContext(source,context);
 const reader=context.window.HarborFlowDocumentImport;
 
+test('template values fill missing fields without overwriting existing values',()=>{
+ const result=reader.applyTemplateValues({fields:{passport:'Z1234567'}},{passport:'Z7654321',dob:'20 OCT 1990',nationality:'PHILIPPINES'});
+ assert.equal(result.fields.passport,'Z1234567');assert.equal(result.fields.dob,'1990-10-20');assert.equal(result.fields.nationality,'FILIPINO');assert.ok(result.extractionWarnings.length);
+});
+test('template rejects malformed document numbers and dates',()=>{
+ const result=reader.applyTemplateValues({fields:{}},{passport:'NOTNUMBER',dob:'31 FEB 2020'});
+ assert.equal(result.fields.passport,undefined);assert.equal(result.fields.dob,undefined);
+});
+
 test('multilingual Croatian labels are not treated as names or passport values',()=>{
   const result=reader.extractFromText('passport',[
     'REPUBLIC OF CROATIA',
