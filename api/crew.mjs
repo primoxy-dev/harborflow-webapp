@@ -1,5 +1,7 @@
 import { nodeHandler, authorized, categoryName, configReady, gh, jobPath, json, putFile, readJson, sameOrigin } from '../lib/harborflow.mjs';
 
+import { readerDatabaseRoute } from '../lib/reader-database-server.mjs';
+
 async function existing(base) {
   const listing = await gh('GET', base);
   if (!listing) return [];
@@ -17,6 +19,7 @@ function details(url, body) {
 async function route(request) {
   if (!configReady()) return json({ error: 'Private GitHub storage is not configured' }, 503);
   if (!authorized(request)) return json({ error: 'Sign in as primoxy-dev to access crew records' }, 401);
+  if (new URL(request.url).searchParams.get('action') === 'readerDatabase') return readerDatabaseRoute(request);
   try {
     if (request.method === 'GET') {
       const base = details(new URL(request.url));
