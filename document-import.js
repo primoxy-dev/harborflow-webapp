@@ -301,14 +301,14 @@
   async function templateValues(image,recognized,type,ocr){
     const database=window.HarborFlowReaderDatabase;if(!database||!image?.width||!recognized?.words?.length)return {};
     try{
-      const records=await database.listReaderExamples(),text=upper(recognized.text),nationality=extractPassport(text).fields.nationality||'',tokens=Object.keys(NATIONALITY_ALIASES).filter(key=>key.length>=4&&text.includes(key)).map(key=>NATIONALITY_ALIASES[key]);
+      const records=await database.listReaderExamples(),text=upper(recognized.text),nationality=extractPassport(recognized.text).fields.nationality||'',tokens=Object.keys(NATIONALITY_ALIASES).filter(key=>key.length>=4&&text.includes(key)).map(key=>NATIONALITY_ALIASES[key]);
       const countries=[...new Set([nationality,...tokens].filter(value=>Object.values(NATIONALITIES).includes(value)))];if(countries.length!==1)return {};
       const {locateTemplateValue}=await import('./reader-template.mjs');
       const candidates=records.filter(record=>record.type===type&&upper(record.nationality)===countries[0]).map(record=>({record,regions:(record.mappings||[]).map(mapping=>({mapping,region:locateTemplateValue(mapping,recognized.words,image.width,image.height)})).filter(item=>item.region)})).filter(candidate=>candidate.regions.length);
       if(candidates.length!==1)return {};
       const values={};for(const {mapping,region} of candidates[0].regions){const result=await recognize(cropCanvas(image,region),null,{tessedit_pageseg_mode:'7'},ocr);if(result.confidence>=80&&clean(result.text))values[mapping.field]=clean(result.text);}
       return values;
-    }catch(_){return {};}
+    }catch(error){console.warn('Local reader template unavailable:',error?.message||'unknown error');return {};}
   }
   function applyTemplateValues(result,values){
     const fields=result.fields||(result.fields={}),changes=[];
@@ -495,3 +495,5 @@
   }
   window.HarborFlowDocumentImport={read,createBatchReader,extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,documentSignal,reconcilePassportSources,mergeCombinedResults,combinedIdentityRegions,combinedPassportRegions,reconcileCombinedPassportFields,setFlightCodeData,applyTemplateValues,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
 })();
+
+
