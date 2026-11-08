@@ -37,6 +37,7 @@
     return account;
   }
   function remember(host, profile, patch) {
+    host._hfdShareFile=null;const shareButton=host.querySelector('[data-share-permit]');if(shareButton)shareButton.hidden=true;
     Object.assign(profile.values, patch);
     if (profile.localOnly) { message(host, 'แก้ร่างบนเครื่องแล้ว · กดบันทึกร่างเพื่อเก็บไว้ ไม่มีการส่งขึ้นเซิร์ฟเวอร์'); return; }
     if (!profile.loaded || !profile.canSave || profile.blocked) return;
@@ -422,9 +423,19 @@
         else table.rows=table.rows.filter(r=>r.id!==target.dataset.row);
         repaintPermitEditors(host,preview,ctx);refreshPermit(host,ctx);queueDocument(host,ctx,options);return;
       }
-      if(target.hasAttribute('data-download-permit')||target.hasAttribute('data-compose-permit')){
-        const composing=target.hasAttribute('data-compose-permit');let outlook=null,url='';
+      if(target.hasAttribute('data-share-permit')){
         try{
+          const ready=host._hfdShareFile;
+          if(account!==profile||!host.isConnected)throw Error('Document closed or account changed.');
+          if(!host._hfdPermitMail)throw Error('Email editor is not ready.');
+          await host._hfdPermitMail.share(ready);host._hfdPermitMail.status('Share menu opened. Select Outlook if available.');
+        }catch(error){if(error.name!=='AbortError')host._hfdPermitMail?.status(error.message||'Could not share the PDF.',true);}
+        return;
+      }
+      if(target.hasAttribute('data-download-permit')||target.hasAttribute('data-compose-permit')||target.hasAttribute('data-prepare-permit-share')){
+        const composing=target.hasAttribute('data-compose-permit'),preparing=target.hasAttribute('data-prepare-permit-share');let outlook=null,url='';
+        try{
+          if(preparing&&typeof navigator.share!=='function')throw Error('File sharing is unavailable on this device. Download the PDF and attach it in Outlook.');
           if(composing){
             if(!host._hfdPermitMail)throw Error('Email editor is not ready.');
             url=host._hfdPermitMail.composeUrl();
@@ -438,9 +449,16 @@
           }
           if(JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job)||JSON.stringify(fresh.preview.people)!==JSON.stringify(preview.people))throw Error('ข้อมูล Job หรือรายชื่อเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจตารางก่อนดาวน์โหลด');
           if(preview.scope?.visitorView){const current=await get({action:'permitDefaults'});if(current.login!==options.login||current.version!==ctx.permitDefaults.version)throw Error('ค่าเริ่มต้นเปลี่ยน กรุณาเปิดเอกสารใหม่และตรวจร่างก่อนดาวน์โหลด');}
-          await window.HarborFlowOktbPdf.downloadPermit({outputMode,preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF แล้ว');
+          const generated=await window.HarborFlowOktbPdf.downloadPermit({outputMode,preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),returnFile:preparing});
+          if(preparing){
+            const file=new File([generated.blob],generated.name,{type:'application/pdf'});
+            if(typeof navigator.canShare==='function'&&!navigator.canShare({files:[file]}))throw Error('This device cannot share PDF files. Download and attach the PDF in Outlook.');
+            host._hfdShareFile={file,createdAt:Date.now()};const button=host.querySelector('[data-share-permit]');if(button)button.hidden=false;
+            host._hfdPermitMail?.status('PDF ready. Tap Share PDF, then select Outlook if available.');return;
+          }
+          message(host,'ดาวน์โหลด PDF แล้ว');
           if(outlook){outlook.location.href=url;host._hfdPermitMail.status('PDF downloaded. Copy the table, paste it in Outlook and attach the PDF.');}
-        }catch(error){if(outlook)outlook.close();if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}else if(host._hfdPermitMail&&composing)host._hfdPermitMail.status(error.message||'Could not prepare email.',true);else if(host.querySelector('#hfdSaveStatus'))message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);else host.textContent=error.message;}finally{host.inert=false;}
+        }catch(error){if(outlook)outlook.close();if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}else if(host._hfdPermitMail&&(composing||preparing))host._hfdPermitMail.status(error.message||'Could not prepare PDF.',true);else if(host.querySelector('#hfdSaveStatus'))message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);else host.textContent=error.message;}finally{host.inert=false;}
         return;
       }
       if (target.dataset.selectCrew) {
@@ -482,6 +500,7 @@
   }
   async function mount(host, options) {
     if (!host) return;
+    host._hfdShareFile=null;
     if(host._hfdSaver){try{await host._hfdSaver.flush();}catch(e){message(host,e.message,true);return;}activeSavers.delete(host._hfdSaver);host._hfdSaver.dispose();host._hfdSaver=null;}
     const gen = generation;
     const profile = accountState(options.login);
@@ -591,7 +610,7 @@
     if(!host._hfdSaver||!formState)return;const sections=formState.encodeDocumentContext(ctx,options.type);
     for(const [section,data] of Object.entries(sections))if(host._hfdCanEdit?.[section]){
       const previous=host._hfdQueuedSections?.[section]||{},patch=Object.fromEntries(Object.entries(data).filter(([key,value])=>JSON.stringify(value)!==JSON.stringify(previous[key])));
-      if(Object.keys(patch).length)host._hfdSaver.change(section,patch);
+      if(Object.keys(patch).length){host._hfdSaver.change(section,patch);host._hfdShareFile=null;const button=host.querySelector('[data-share-permit]');if(button)button.hidden=true;}
     }
     host._hfdQueuedSections=structuredClone(sections);
   }

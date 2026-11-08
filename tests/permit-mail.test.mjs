@@ -1,11 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fillPermitMail,outlookComposeUrl,permitTablesPlainText} from '../permit-mail.mjs';
+import {fillPermitMail,outlookComposeUrl,permitTablesPlainText,sharePreparedPermit} from '../permit-mail.mjs';
 import {validatePermitMailTemplates,loadPermitMailTemplates,savePermitMailTemplates} from '../lib/permit-mail-templates.mjs';
 import {createDocumentsRoute} from '../api/documents.mjs';
 import {buildDocumentPreview} from '../lib/document-preview.mjs';
 
 const template={id:'demo',name:'Terminal A',terminals:['A','B'],to:['a@example.com'],cc:['b@example.com'],subject:'Permit {{vessel}}',body:'Job {{jobNo}}'};
+test('shares the prepared file only when supported and not expired',async()=>{
+ const file={name:'test.pdf'},ready={file,createdAt:1000};let sent;
+ const device={canShare:({files})=>files[0]===file,share:async value=>{sent=value;}};
+ await sharePreparedPermit(ready,device,2000);assert.equal(sent.files[0],file);
+ assert.throws(()=>sharePreparedPermit(ready,device,121001),/expired/);
+ assert.throws(()=>sharePreparedPermit(ready,{share(){},canShare:()=>false},2000),/unavailable/);
+});
 test('plain text keeps table borders, blank cells, and all rows',()=>{
  const rows=[['Name','Rank'],['TEST PERSON','MASTER'],['ANOTHER','']].map(cells=>({querySelectorAll:()=>cells.map(textContent=>({textContent}))}));
  const section={querySelector:s=>s==='table'?{querySelectorAll:()=>rows}:{textContent:'On-signers'}};

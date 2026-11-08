@@ -254,7 +254,7 @@
     const blob=pdfFromPages(pages),url=URL.createObjectURL(blob),link=document.createElement('a');
     link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
   }
-  async function downloadPermit({preview,ctx,profile,logo,outputMode='sample'}){
+  async function downloadPermit({preview,ctx,profile,logo,outputMode='sample',returnFile=false}){
     const permitScale=3.5;
     const draft=ctx.permitDraft;
     if(!draft?.tables?.length)throw Error('ไม่มีตารางในร่างเอกสาร');
@@ -338,7 +338,8 @@
     }
     const vessel=String(preview.job.vessel||'VESSEL').replace(/[\\/:*?"<>|\x00-\x1f]/g,' ').trim().slice(0,100);
     const name='TERMINAL PERMIT - '+vessel.toUpperCase()+'.PDF';
-    const url=URL.createObjectURL(pdfFromPages(pages)),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
+    const blob=pdfFromPages(pages);if(returnFile)return {blob,name};
+    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
   }
   window.HarborFlowOktbPdf={download,fileName,downloadLoi,downloadPermit,pdfFromPages};
 })();
