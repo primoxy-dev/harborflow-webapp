@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {fillPermitMail,outlookComposeUrl} from '../permit-mail.mjs';
 import {validatePermitMailTemplates,loadPermitMailTemplates,savePermitMailTemplates} from '../lib/permit-mail-templates.mjs';
 import {createDocumentsRoute} from '../api/documents.mjs';
+import {buildDocumentPreview} from '../lib/document-preview.mjs';
 
 const template={id:'demo',name:'Terminal A',terminals:['A','B'],to:['a@example.com'],cc:['b@example.com'],subject:'Permit {{vessel}}',body:'Job {{jobNo}}'};
 test('substitutes job values and builds an encoded Outlook compose URL',()=>{
@@ -10,6 +11,10 @@ test('substitutes job values and builds an encoded Outlook compose URL',()=>{
  const url=new URL(outlookComposeUrl({to:'a@example.com; b@example.com',cc:'c@example.com',subject:'A & B',body:'Line 1\nLine 2'}));
  assert.equal(url.hostname,'outlook.office.com');assert.equal(url.searchParams.get('to'),'a@example.com;b@example.com');assert.equal(url.searchParams.get('body'),'Line 1\nLine 2');
  assert.throws(()=>outlookComposeUrl({to:'bad address'}));
+});
+test('permit preview exposes ETD for email templates',()=>{
+ const preview=buildDocumentPreview('permit',{id:'demo',data:{vessel:'TEST',etd:'2026-11-09T12:00'}},[],[],{crewDetails:true});
+ assert.equal(preview.job.etd,'2026-11-09T12:00');
 });
 test('validates templates and rejects stale revisions',async()=>{
  assert.equal(validatePermitMailTemplates([template]),null);
