@@ -2,9 +2,9 @@
 (() => {
   const PAGE_W=595, PAGE_H=842, SCALE=2.1;
   // Replay the complete letter at a uniform scale on one A4 page.
-  function singlePageSurface(){
+  function singlePageSurface(scale=SCALE){
     const canvas=document.createElement('canvas');
-    canvas.width=Math.round(PAGE_W*SCALE);canvas.height=Math.round(PAGE_H*SCALE);
+    canvas.width=Math.round(PAGE_W*scale);canvas.height=Math.round(PAGE_H*scale);
     const context=canvas.getContext('2d'),commands=[];
     const pen=new Proxy(context,{
       get(target,key){const value=target[key];if(typeof value!=='function')return value;
@@ -15,9 +15,9 @@
       const fit=Math.min(1,(PAGE_H-72)/Math.max(PAGE_H-72,bottom-36));
       const result=document.createElement('canvas');result.width=canvas.width;result.height=canvas.height;
       const output=result.getContext('2d');output.fillStyle='#fff';output.fillRect(0,0,result.width,result.height);
-      output.translate(PAGE_W*(1-fit)/2*SCALE,36*(1-fit)*SCALE);output.scale(fit,fit);
+      output.translate(PAGE_W*(1-fit)/2*scale,36*(1-fit)*scale);output.scale(fit,fit);
       for(const [key,value,property] of commands){if(property)output[key]=value;else output[key](...value);}
-      output.setTransform(SCALE,0,0,SCALE,0,0);return result;
+      output.setTransform(scale,0,0,scale,0,0);return result;
     }};
   }
   const dateOnly=value=>/^\d{4}-\d{2}-\d{2}/.test(String(value||''))?String(value).slice(0,10):'';
@@ -255,6 +255,7 @@
     link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
   }
   async function downloadPermit({preview,ctx,profile,logo,outputMode='sample'}){
+    const permitScale=3.5;
     const draft=ctx.permitDraft;
     if(!draft?.tables?.length)throw Error('ไม่มีตารางในร่างเอกสาร');
     const logoImage=await image(logoSource(logo)),signature=profile.signature?await image(profile.signature):null;
@@ -281,8 +282,8 @@
       return out.length?out:[''];
     }
     function page(){
-      surface=singlePageSurface();canvas=surface.canvas;pen=surface.pen;
-      pen.scale(SCALE,SCALE);pen.fillStyle='white';pen.fillRect(0,0,PAGE_W,PAGE_H);pages.push(canvas);y=36;
+      surface=singlePageSurface(permitScale);canvas=surface.canvas;pen=surface.pen;
+      pen.scale(permitScale,permitScale);pen.fillStyle='white';pen.fillRect(0,0,PAGE_W,PAGE_H);pages.push(canvas);y=36;
     }
     function paragraph(value,size=8,gap=2,indent=0){
       const lines=wrap(value,PAGE_W-72-indent,size);
@@ -333,7 +334,7 @@
     page();drawDocument();
     pages.splice(0,pages.length,surface.finish(y));
     for(const [i,p] of (outputMode==='final'?[]:pages).entries()){
-      const c=p.getContext('2d');c.save();c.setTransform(SCALE,0,0,SCALE,0,0);c.fillStyle='rgba(160,0,0,.10)';c.font='bold 36px Arial';c.textAlign='center';c.translate(PAGE_W/2,PAGE_H/2);c.rotate(-.32);c.fillText('SAMPLE - NOT APPROVED',0,0);c.restore();c.save();c.setTransform(SCALE,0,0,SCALE,0,0);c.fillStyle='#555';c.font='8px Arial';c.textAlign='right';c.fillText('DRAFT - '+(i+1)+' / '+pages.length,PAGE_W-36,PAGE_H-22);c.restore();
+      const c=p.getContext('2d');c.save();c.setTransform(permitScale,0,0,permitScale,0,0);c.fillStyle='rgba(160,0,0,.10)';c.font='bold 36px Arial';c.textAlign='center';c.translate(PAGE_W/2,PAGE_H/2);c.rotate(-.32);c.fillText('SAMPLE - NOT APPROVED',0,0);c.restore();c.save();c.setTransform(permitScale,0,0,permitScale,0,0);c.fillStyle='#555';c.font='8px Arial';c.textAlign='right';c.fillText('DRAFT - '+(i+1)+' / '+pages.length,PAGE_W-36,PAGE_H-22);c.restore();
     }
     const vessel=String(preview.job.vessel||'VESSEL').replace(/[\\/:*?"<>|\x00-\x1f]/g,' ').trim().slice(0,100);
     const name='TERMINAL PERMIT - '+vessel.toUpperCase()+'.PDF';
@@ -341,3 +342,4 @@
   }
   window.HarborFlowOktbPdf={download,fileName,downloadLoi,downloadPermit,pdfFromPages};
 })();
+
