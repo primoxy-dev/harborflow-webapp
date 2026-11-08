@@ -422,8 +422,14 @@
         else table.rows=table.rows.filter(r=>r.id!==target.dataset.row);
         repaintPermitEditors(host,preview,ctx);refreshPermit(host,ctx);queueDocument(host,ctx,options);return;
       }
-      if(target.hasAttribute('data-download-permit')){
+      if(target.hasAttribute('data-download-permit')||target.hasAttribute('data-compose-permit')){
+        const composing=target.hasAttribute('data-compose-permit');let outlook=null,url='';
         try{
+          if(composing){
+            if(!host._hfdPermitMail)throw Error('Email editor is not ready.');
+            url=host._hfdPermitMail.composeUrl();
+            outlook=window.open('about:blank','_blank');if(!outlook)throw Error('Allow pop-ups to open Outlook.');outlook.opener=null;
+          }
           const outputMode=await downloadReady();
           const fresh=await get({action:'preview',jobId:options.jobId,serviceId:options.serviceId,type:'permit'});
           if(account!==profile||fresh.login!==options.login)throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
@@ -433,7 +439,8 @@
           if(JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job)||JSON.stringify(fresh.preview.people)!==JSON.stringify(preview.people))throw Error('ข้อมูล Job หรือรายชื่อเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจตารางก่อนดาวน์โหลด');
           if(preview.scope?.visitorView){const current=await get({action:'permitDefaults'});if(current.login!==options.login||current.version!==ctx.permitDefaults.version)throw Error('ค่าเริ่มต้นเปลี่ยน กรุณาเปิดเอกสารใหม่และตรวจร่างก่อนดาวน์โหลด');}
           await window.HarborFlowOktbPdf.downloadPermit({outputMode,preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF แล้ว');
-        }catch(error){if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}else if(host.querySelector('#hfdSaveStatus'))message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);else host.textContent=error.message;}finally{host.inert=false;}
+          if(outlook){outlook.location.href=url;host._hfdPermitMail.status('PDF downloaded. Copy the table, paste it in Outlook and attach the PDF.');}
+        }catch(error){if(outlook)outlook.close();if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}else if(host._hfdPermitMail&&composing)host._hfdPermitMail.status(error.message||'Could not prepare email.',true);else if(host.querySelector('#hfdSaveStatus'))message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);else host.textContent=error.message;}finally{host.inert=false;}
         return;
       }
       if (target.dataset.selectCrew) {
@@ -562,6 +569,11 @@
         host._hfdSourceFingerprint=data.sourceFingerprint;
         host._hfdScope=data.preview.scope;
         host._hfdQueuedSections=formState.encodeDocumentContext(ctx,options.type);
+      }
+      if(options.type==='permit'&&!options.localTransport){
+        const {mountPermitMail}=await import('./permit-mail.mjs');
+        if(gen!==generation||!host.isConnected||account!==profile)return;
+        host._hfdPermitMail=await mountPermitMail(host,{preview:data.preview,ctx,login:options.login,get});
       }
     } catch(error) {
       if (gen !== generation || !host.isConnected) return;
