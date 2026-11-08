@@ -1,6 +1,26 @@
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clean=v=>String(v||'').trim();
 const split=v=>String(v||'').split(/[;,\n]+/).map(clean).filter(Boolean);
+export function permitTablesPlainText(source){
+ const blocks=[];
+ for(const section of source.querySelectorAll('section')){
+  const table=section.querySelector('table');if(!table)continue;
+  const rows=[...table.querySelectorAll('tr')].map(row=>[...row.querySelectorAll('th,td')].map(cell=>String(cell.textContent||'').replace(/\s+/g,' ').trim()));
+  if(!rows.length)continue;
+  const count=Math.max(...rows.map(row=>row.length)),widths=Array.from({length:count},(_,i)=>Math.max(1,...rows.map(row=>[...(row[i]||'')].length)));
+  const border='+'+widths.map(width=>'-'.repeat(width+2)).join('+')+'+';
+  const lines=rows.map(row=>'| '+widths.map((width,i)=>{const value=row[i]||'';return value+' '.repeat(width-[...value].length);}).join(' | ')+' |');
+  const title=section.querySelector('h3')?.textContent?.trim()||'';
+  blocks.push([title,border,lines[0],border,...lines.slice(1),border].filter(Boolean).join('\n'));
+ }
+ return blocks.join('\n\n');
+}
+function legacyCopy(html,plain){
+ let handled=false;
+ const listener=event=>{if(!event.clipboardData)return;event.clipboardData.setData('text/html',html);event.clipboardData.setData('text/plain',plain);event.preventDefault();handled=true;};
+ document.addEventListener('copy',listener);
+ try{return document.execCommand('copy')&&handled;}finally{document.removeEventListener('copy',listener);}
+}
 export function fillPermitMail(text,job,ctx){
  const values={vessel:job.vessel||'',jobNo:job.jobNo||'',port:job.port||'',terminal:job.terminal||'',eta:job.eta||'',etd:job.etd||'',permitDate:ctx.permitDate||''};
  return String(text||'').replace(/\{\{(vessel|jobNo|port|terminal|eta|etd|permitDate)\}\}/g,(_,key)=>String(values[key]));
@@ -39,9 +59,13 @@ export async function mountPermitMail(host,{preview,ctx,login,get}){
   try{
    if(btn.hasAttribute('data-copy-permit-table')){
     const source=host.querySelector('#hfdPermitTables');if(!source?.querySelector('table'))throw Error('No rows to copy.');
-    const clone=source.cloneNode(true);clone.querySelectorAll('table').forEach(t=>{t.style.borderCollapse='collapse';});clone.querySelectorAll('th,td').forEach(c=>{c.style.border='1px solid #000';c.style.padding='4px';});
-    if(!navigator.clipboard?.write||typeof ClipboardItem==='undefined')throw Error('Your browser cannot copy formatted tables.');
-    await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([clone.innerHTML],{type:'text/html'}),'text/plain':new Blob([source.innerText||source.textContent],{type:'text/plain'})})]);status('Table copied. Paste it into Outlook.');return;
+    const clone=source.cloneNode(true);clone.querySelectorAll('table').forEach(t=>{t.setAttribute('border','1');t.setAttribute('cellpadding','4');t.setAttribute('cellspacing','0');t.style.borderCollapse='collapse';t.style.border='1px solid #000000';});clone.querySelectorAll('th,td').forEach(c=>{c.style.border='1px solid #000000';c.style.padding='4px';});
+    const plain=permitTablesPlainText(source);if(!plain)throw Error('No rows to copy.');
+    if(navigator.clipboard?.write&&typeof ClipboardItem!=='undefined'){
+     try{await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([clone.innerHTML],{type:'text/html'}),'text/plain':new Blob([plain],{type:'text/plain'})})]);}
+     catch(error){if(!legacyCopy(clone.innerHTML,plain))throw error;}
+    }else if(!legacyCopy(clone.innerHTML,plain))throw Error('Your browser cannot copy formatted tables. Select and copy the table in the preview instead.');
+    status('Table copied. Paste it into Outlook.');return;
    }
    if(!state.canSave||!['saveTemplate','updateTemplate','deleteTemplate'].some(k=>Object.hasOwn(btn.dataset,k)))return;
    const name=clean(root.querySelector('[data-template-name]').value),terminals=split(root.querySelector('[data-template-terminals]').value);

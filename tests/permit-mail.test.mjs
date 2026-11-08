@@ -1,11 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fillPermitMail,outlookComposeUrl} from '../permit-mail.mjs';
+import {fillPermitMail,outlookComposeUrl,permitTablesPlainText} from '../permit-mail.mjs';
 import {validatePermitMailTemplates,loadPermitMailTemplates,savePermitMailTemplates} from '../lib/permit-mail-templates.mjs';
 import {createDocumentsRoute} from '../api/documents.mjs';
 import {buildDocumentPreview} from '../lib/document-preview.mjs';
 
 const template={id:'demo',name:'Terminal A',terminals:['A','B'],to:['a@example.com'],cc:['b@example.com'],subject:'Permit {{vessel}}',body:'Job {{jobNo}}'};
+test('plain text keeps table borders, blank cells, and all rows',()=>{
+ const rows=[['Name','Rank'],['TEST PERSON','MASTER'],['ANOTHER','']].map(cells=>({querySelectorAll:()=>cells.map(textContent=>({textContent}))}));
+ const section={querySelector:s=>s==='table'?{querySelectorAll:()=>rows}:{textContent:'On-signers'}};
+ const text=permitTablesPlainText({querySelectorAll:()=>[section]});
+ assert.match(text,/\| TEST PERSON \| MASTER \|/);assert.match(text,/\| ANOTHER\s+\|\s+\|/);assert.match(text,/\+[-+]+\+/);
+});
 test('substitutes job values and builds an encoded Outlook compose URL',()=>{
  assert.equal(fillPermitMail(template.subject,{vessel:'TEST VESSEL'},{}),'Permit TEST VESSEL');
  const url=new URL(outlookComposeUrl({to:'a@example.com; b@example.com',cc:'c@example.com',subject:'A & B',body:'Line 1\nLine 2'}));
