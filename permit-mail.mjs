@@ -1,6 +1,11 @@
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clean=v=>String(v||'').trim();
 const split=v=>String(v||'').split(/[;,\n]+/).map(clean).filter(Boolean);
+export function sharePreparedPermit(ready,device,now=Date.now()){
+ if(!ready||now-ready.createdAt>120000)throw Error('PDF expired. Prepare it again before sharing.');
+ if(typeof device.share!=='function'||typeof device.canShare==='function'&&!device.canShare({files:[ready.file]}))throw Error('File sharing is unavailable on this device. Download the PDF and attach it in Outlook.');
+ return device.share({files:[ready.file],title:'Terminal Permit'});
+}
 export function permitTablesPlainText(source){
  const blocks=[];
  for(const section of source.querySelectorAll('section')){
@@ -48,6 +53,7 @@ export async function mountPermitMail(host,{preview,ctx,login,get}){
   <div class="hfd-oktb-editor"><label>To<input data-mail="to" value="${esc(draft.to)}" placeholder="email@example.com; another@example.com"></label><label>CC<input data-mail="cc" value="${esc(draft.cc)}"></label><label>Subject<input data-mail="subject" maxlength="500" value="${esc(draft.subject)}"></label><label>Message<textarea data-mail="body" rows="7">${esc(draft.body)}</textarea></label></div>
   <p>Use {{vessel}}, {{jobNo}}, {{port}}, {{terminal}}, {{eta}}, {{etd}}, {{permitDate}} in templates. Copy the table and paste it into Outlook; attach the downloaded PDF before sending.</p>
   <button type="button" class="secondary" data-copy-permit-table>Copy table</button> <button type="button" class="primary" data-compose-permit>Compose in Outlook</button>
+  <button type="button" class="secondary" data-prepare-permit-share>Prepare PDF to share</button> <button type="button" class="secondary" data-share-permit hidden>Share PDF</button><p>On supported devices, choose Outlook from the share menu. Recipients and message may need to be entered again.</p>
   ${state.canSave?'<details><summary>Manage templates</summary><p>Enter multiple email addresses or terminals separated by semicolons. Leave terminals blank for a general template. Use the placeholders above in the template subject and message.</p><label>Template name<input data-template-name></label><label>Terminals<input data-template-terminals></label><label>Template To<input data-template-to></label><label>Template CC<input data-template-cc></label><label>Template subject<input data-template-subject maxlength="500"></label><label>Template message<textarea data-template-body rows="6"></textarea></label><button type="button" class="secondary" data-save-template>Save as new template</button> <button type="button" class="secondary" data-update-template>Update selected template</button> <button type="button" class="secondary" data-delete-template>Delete selected template</button></details>':''}`;
   if(selected){const t=templates.find(x=>x.id===selected);if(t&&state.canSave){root.querySelector('[data-template-name]').value=t.name;root.querySelector('[data-template-terminals]').value=t.terminals.join('; ');root.querySelector('[data-template-to]').value=t.to.join('; ');root.querySelector('[data-template-cc]').value=t.cc.join('; ');root.querySelector('[data-template-subject]').value=t.subject;root.querySelector('[data-template-body]').value=t.body;}}
  }
@@ -78,5 +84,5 @@ export async function mountPermitMail(host,{preview,ctx,login,get}){
   }catch(error){status(error.message||'Action failed.',true);}
  });
  function refresh(){const template=templates.find(t=>t.id===selected);if(!template||!lastApplied)return;for(const key of ['subject','body'])if(draft[key]===lastApplied[key]){draft[key]=fillPermitMail(template[key],preview.job,ctx);lastApplied[key]=draft[key];const input=root.querySelector('[data-mail="'+key+'"]');if(input)input.value=draft[key];}}
- return {draft:()=>({...draft}),refresh,composeUrl:()=>{refresh();return outlookComposeUrl(draft);},status};
+ return {draft:()=>({...draft}),refresh,composeUrl:()=>{refresh();return outlookComposeUrl(draft);},share:ready=>sharePreparedPermit(ready,navigator),status};
 }
