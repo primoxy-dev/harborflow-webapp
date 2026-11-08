@@ -18,11 +18,11 @@ export async function mountPermitMail(host,{preview,ctx,login,get}){
  const status=(text,error=false)=>{const e=root.querySelector('[data-mail-status]');e.textContent=text;e.style.color=error?'#b42318':'';};
  let state;
  try{state=await get({action:'permitMailTemplates'});if(state.login!==login)throw Error('Account changed; reopen this document.');}catch(e){status(e.message||'Could not load templates.',true);return null;}
- let selected='',draft={to:'',cc:'',subject:'',body:''},templates=state.templates||[];
+ let selected='',draft={to:'',cc:'',subject:'',body:''},lastApplied=null,templates=state.templates||[];
  const terminal=clean(preview.job.terminal).toUpperCase();
  const matching=templates.filter(t=>t.terminals.some(x=>clean(x).toUpperCase()===terminal)&&terminal);
  if(matching.length===1){selected=matching[0].id;apply(matching[0]);}
- function apply(t){draft={to:t.to.join('; '),cc:t.cc.join('; '),subject:fillPermitMail(t.subject,preview.job,ctx),body:fillPermitMail(t.body,preview.job,ctx)};}
+ function apply(t){draft={to:t.to.join('; '),cc:t.cc.join('; '),subject:fillPermitMail(t.subject,preview.job,ctx),body:fillPermitMail(t.body,preview.job,ctx)};lastApplied={subject:draft.subject,body:draft.body};}
  function render(){
   root.querySelector('[data-mail-ui]').innerHTML=`<label>Template <select data-mail-template><option value="">Blank email</option>${templates.map(t=>`<option value="${esc(t.id)}" ${selected===t.id?'selected':''}>${esc(t.name)}${t.terminals.length?' · '+esc(t.terminals.join(', ')):' · General'}</option>`).join('')}</select></label>
   <div class="hfd-oktb-editor"><label>To<input data-mail="to" value="${esc(draft.to)}" placeholder="email@example.com; another@example.com"></label><label>CC<input data-mail="cc" value="${esc(draft.cc)}"></label><label>Subject<input data-mail="subject" maxlength="500" value="${esc(draft.subject)}"></label><label>Message<textarea data-mail="body" rows="7">${esc(draft.body)}</textarea></label></div>
@@ -33,7 +33,7 @@ export async function mountPermitMail(host,{preview,ctx,login,get}){
  }
  render();status(host.querySelector('#hfdPermitTables td')&&[...host.querySelectorAll('#hfdPermitTables td')].some(td=>!td.textContent.trim())?'Some table cells are blank. Check them before sending.':'Edit this email without changing the shared template.');
  root.addEventListener('input',e=>{if(e.target.dataset.mail)draft[e.target.dataset.mail]=e.target.value;});
- root.addEventListener('change',e=>{if(e.target.matches('[data-mail-template]')){selected=e.target.value;const t=templates.find(x=>x.id===selected);if(t)apply(t);else draft={to:'',cc:'',subject:'',body:''};render();}});
+ root.addEventListener('change',e=>{if(e.target.matches('[data-mail-template]')){selected=e.target.value;const t=templates.find(x=>x.id===selected);if(t)apply(t);else{draft={to:'',cc:'',subject:'',body:''};lastApplied=null;}render();}});
  root.addEventListener('click',async e=>{
   const btn=e.target.closest('button');if(!btn)return;
   try{
@@ -53,5 +53,6 @@ export async function mountPermitMail(host,{preview,ctx,login,get}){
    templates=result.templates;state.revision=result.revision;selected=id;render();status('Shared templates saved.');
   }catch(error){status(error.message||'Action failed.',true);}
  });
- return {draft:()=>({...draft}),composeUrl:()=>outlookComposeUrl(draft),status};
+ function refresh(){const template=templates.find(t=>t.id===selected);if(!template||!lastApplied)return;for(const key of ['subject','body'])if(draft[key]===lastApplied[key]){draft[key]=fillPermitMail(template[key],preview.job,ctx);lastApplied[key]=draft[key];const input=root.querySelector('[data-mail="'+key+'"]');if(input)input.value=draft[key];}}
+ return {draft:()=>({...draft}),refresh,composeUrl:()=>{refresh();return outlookComposeUrl(draft);},status};
 }

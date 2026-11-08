@@ -357,7 +357,7 @@
       const target = event.target;
       if(options.type==='permit'){
         if(target.id==='hfdPermitSubject'){ctx.permitDraft.subject=target.value;refreshPermit(host,ctx);}
-        if(target.id==='hfdPermitDate'){ctx.permitDate=target.value;host.querySelector('#hfdPermitDateOut').textContent=displayDate(target.value);}
+        if(target.id==='hfdPermitDate'){ctx.permitDate=target.value;host.querySelector('#hfdPermitDateOut').textContent=displayDate(target.value);host._hfdPermitMail?.refresh();}
         const key=target.dataset.permitTitle||target.dataset.permitHeader||target.dataset.permitCell;
         if(key){const table=ctx.permitDraft.tables.find(t=>t.key===key);if(target.dataset.permitTitle)table.title=target.value;
           else if(target.dataset.permitHeader)table.headers[Number(target.dataset.col)]=target.value;
