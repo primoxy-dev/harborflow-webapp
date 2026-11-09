@@ -261,7 +261,7 @@
     }
     const height=150+chartHeight+90+calendarHeight+70;
     const canvas=document.createElement('canvas');canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
-    const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);ctx.textBaseline='top';
+    const ctx=(window.HarborFlowVectorPdf?.captureContext(canvas)||canvas.getContext('2d'));ctx.scale(scale,scale);ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);ctx.textBaseline='top';
     const font=(size,weight=400)=>{ctx.font=`${weight} ${size}px Arial, sans-serif`;};
     const roundRect=(x,y,w,h,r=14,fill='#fff',stroke='#dbe3ed')=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();};
     const fitText=(text,maxWidth)=>{let value=String(text||'');if(ctx.measureText(value).width<=maxWidth)return value;while(value.length&&ctx.measureText(value+'…').width>maxWidth)value=value.slice(0,-1);return value+'…';};
@@ -295,6 +295,7 @@
   const canvasBlob=(canvas,type,quality)=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('Unable to create download file')),type,quality));
   function saveBlob(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   async function canvasPdfBlob(canvas,scale=1){
+    if(window.HarborFlowVectorPdf)return window.HarborFlowVectorPdf.fromCanvases([canvas],{width:Math.round(canvas.width/(2*scale)),height:Math.round(canvas.height/(2*scale))});
     const jpeg=new Uint8Array(await (await canvasBlob(canvas,'image/jpeg',.93)).arrayBuffer()),encoder=new TextEncoder(),pageW=Math.round(canvas.width/(2*scale)),pageH=Math.round(canvas.height/(2*scale));
     const ascii=value=>encoder.encode(value),content=ascii(`q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q`);
     const objects=[null,ascii('<< /Type /Catalog /Pages 2 0 R >>'),ascii('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),ascii(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`),[ascii(`<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`),jpeg,ascii('\nendstream')],[ascii(`<< /Length ${content.length} >>\nstream\n`),content,ascii('\nendstream')]];

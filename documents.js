@@ -498,6 +498,27 @@
       if (target.hasAttribute('data-document-retry')) mount(host, options);
     },{signal:controller.signal});
   }
+  function mountLivePdf(host,preview,ctx,profile,options) {
+    const source=host.querySelector('.hfd-oktb-page'),api=window.HarborFlowOktbPdf;
+    if(!source||!api?.renderPreview||!window.HarborFlowVectorPdf)return;
+    const live=document.createElement('div');live.className='hfd-live-pdf';live.setAttribute('aria-label','PDF Live');
+    source.after(live);
+    const controller=new AbortController();activeBindings.add(controller);let timer,revision=0;
+    async function refresh(){
+      const current=++revision;
+      try{
+        const pages=await api.renderPreview({type:options.type,preview,ctx:{...ctx,missionContactLines:options.type==='loi'?missionLines(ctx):undefined},people:preview.people.filter(p=>ctx.selected?.has(p.id)),person:loiPerson(preview,ctx),profile:profile.values,logo:source.querySelector('.hfd-oktb-logo'),outputMode:options.localTransport?'sample':'final'});
+        if(controller.signal.aborted||current!==revision||!host.isConnected)return;
+        for(const canvas of pages){canvas.style.cssText='display:block;width:100%;height:auto;margin-bottom:12px';canvas.setAttribute('role','img');canvas.setAttribute('aria-label','PDF page preview');}
+        live.replaceChildren(...pages);source.hidden=true;
+      }catch(error){if(!controller.signal.aborted){source.hidden=false;live.replaceChildren();}}
+    }
+    const schedule=()=>{clearTimeout(timer);timer=setTimeout(refresh,160);};
+    const observer=new MutationObserver(schedule);observer.observe(source,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['src']});
+    host.addEventListener('input',schedule,{signal:controller.signal});host.addEventListener('change',schedule,{signal:controller.signal});
+    controller.signal.addEventListener('abort',()=>{clearTimeout(timer);observer.disconnect();live.remove();activeBindings.delete(controller);},{once:true});
+    refresh();
+  }
   async function mount(host, options) {
     if (!host) return;
     host._hfdShareFile=null;
@@ -582,6 +603,7 @@
         host.querySelectorAll('#hfdSignaturePlaceholder').forEach(el=>el.textContent='Signature');
       }
       setDocumentEditability(host);
+      mountLivePdf(host,data.preview,ctx,profile,options);
       if(!options.localTransport){
         const status=document.createElement('p');status.id='hfdDocSaveStatus';status.role='status';status.textContent='โหลดข้อมูลส่วนกลางแล้ว';host.prepend(status);
         if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-download-oktb]):not([data-download-permit]):not([data-download-loi])').forEach(el=>el.disabled=true);
