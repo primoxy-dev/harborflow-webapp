@@ -1,6 +1,6 @@
 /* Browser-only OKTB draft PDF export. Crew data is never sent to another service. */
 (() => {
-  const PAGE_W=595, PAGE_H=842, SCALE=2.1;
+  const PAGE_W=595, PAGE_H=842, SCALE=3.5;
   // Replay the complete letter at a uniform scale on one A4 page.
   function singlePageSurface(scale=SCALE){
     const canvas=document.createElement('canvas');
@@ -343,4 +343,5 @@
   }
   window.HarborFlowOktbPdf={download,fileName,downloadLoi,downloadPermit,pdfFromPages};
 })();
+
 

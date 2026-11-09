@@ -58,7 +58,14 @@ test('download produces a PDF file for selected crew', async () => {
   const bytes = Buffer.from(await pdfBlob.arrayBuffer());
   assert.equal(bytes.subarray(0, 8).toString(), '%PDF-1.4');
   assert.match(bytes.toString('latin1'), /\/Type \/Page /);
+  assert.match(bytes.toString('latin1'), /\/Width 2083 \/Height 2947/);
   assert.ok(bytes.length > 1000);
+});
+
+test('LOI PDF renders at over 2K width',async()=>{
+ const {api,getDownload}=setup();await api.downloadLoi({preview:{job:{vessel:'TEST',port:'PORT'}},person:{id:'demo',name:'TEST'},ctx:{embassy:'TEST'},profile:{},outputMode:'final'});
+ const bytes=Buffer.from(await getDownload().pdfBlob.arrayBuffer()).toString('latin1');
+ assert.match(bytes,/\/Width 2083 \/Height 2947/);
 });
 
 
@@ -84,3 +91,4 @@ test('long OKTB and LOI retain their final content on one A4 page',async()=>{
     if(type==='oktb')assert.ok(painted.includes('CREW 29'));
   }
 });
+

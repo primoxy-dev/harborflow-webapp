@@ -90,12 +90,12 @@
     }).join(''):'<div class="hfs-empty-report">ยังไม่มี Service ใน Port Call นี้</div>';
     return `${header}<div class="hfs-report-meta">${metadata.map(([name,value])=>pair(name,value)).join('')}</div>${metrics}<div class="hfs-report-note">${report.publicView?'รายงานสาธารณะแสดงเฉพาะข้อมูลสรุป':'ข้อมูล ณ '+escape(report.generatedAt)+' (Asia/Bangkok) · ตรวจสอบข้อมูลกับ Job ก่อนนำไปใช้'}</div><div class="hfs-service-grid">${cards}</div>`;
   }
-  function createPages(report) {
-    const width=595,height=842,scale=2,pages=[];
+  function createPages(report,scale=3.5) {
+    const width=595,height=842,pages=[];
     let canvas,ctx,y,pageNumber=0;
     const left=38,right=width-38,bodyWidth=right-left;
     function page() {
-      canvas=document.createElement('canvas');canvas.width=width*scale;canvas.height=height*scale;
+      canvas=document.createElement('canvas');canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
       ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
       ctx.textBaseline='top';pages.push(canvas);pageNumber++;y=38;
       ctx.fillStyle='#107a72';ctx.fillRect(left,29,36,4);
@@ -178,7 +178,7 @@
     return {filename:`SERVICE SUMMARY - ${safeName(report)}.PDF`,blob:window.HarborFlowOktbPdf.pdfFromPages(pages)};
   }
   function createImage(report) {
-    const {pages}=createPages(report),gap=24;
+    const {pages}=createPages(report,2),gap=24;
     const canvas=document.createElement('canvas');canvas.width=Math.max(...pages.map(page=>page.width));canvas.height=pages.reduce((sum,page)=>sum+page.height,0)+gap*Math.max(0,pages.length-1);
     const context=canvas.getContext('2d');context.fillStyle='#e8eef3';context.fillRect(0,0,canvas.width,canvas.height);
     let top=0;for(const page of pages){context.drawImage(page,0,top);top+=page.height+gap;}
@@ -260,3 +260,4 @@
   }
   window.HarborFlowSummaryReport={build,render,createPdf,createExcel,createImage,downloadPdf,download};
 })();
+
