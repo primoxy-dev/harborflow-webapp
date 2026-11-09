@@ -244,7 +244,7 @@
     const first=state.view==='month' ? startOfWeek(start) : start, days=state.view==='month' ? 42 : 7;
     return `<div class="hfo-grid">${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(x=>`<b class="hfo-weekday">${x}</b>`).join('')}${Array.from({length:days},(_,i)=>{ const d=new Date(first); d.setDate(first.getDate()+i); const calls=state.jobs.filter(j=>j.data.status!=='Cancelled' && matchesDate(j,d)); const outside=state.view==='month' && d.getMonth()!==start.getMonth(); return `<div class="hfo-cell${outside?' hfo-outside':''}"><small>${d.getDate()} ${state.view==='week'?escape(d.toLocaleDateString('en',{month:'short'})):''}</small>${calls.map(j=>`<button class="hfo-job-pill ${portClass(j.data.port)}" data-open-job="${j.id}"><b>${vesselName(j)}</b><span class="hfo-job-meta">${escape(j.data.port||'No port')} · ${escape(jobStatus(j.data.status))}</span></button>`).join('')}</div>`;}).join('')}</div>`;
   }
-  function reportCanvas() {
+  function reportCanvas(scale=1) {
     const width=1800,pad=54,gap=22,cardWidth=(width-pad*2-gap*3)/4;
     const chart=monthlyChartData(),maxRows=Math.max(5,chart.ports.length,chart.types.length,chart.statuses.length);
     const chartHeight=112+Math.min(maxRows,16)*34+(maxRows>16?26:0);
@@ -260,8 +260,8 @@
       calendarHeight=rows*(82+maxMonthJobs*jobBoxHeight)+gap*(rows-1);
     }
     const height=150+chartHeight+90+calendarHeight+70;
-    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
-    const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);ctx.textBaseline='top';
+    const canvas=document.createElement('canvas');canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
+    const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);ctx.textBaseline='top';
     const font=(size,weight=400)=>{ctx.font=`${weight} ${size}px Arial, sans-serif`;};
     const roundRect=(x,y,w,h,r=14,fill='#fff',stroke='#dbe3ed')=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();};
     const fitText=(text,maxWidth)=>{let value=String(text||'');if(ctx.measureText(value).width<=maxWidth)return value;while(value.length&&ctx.measureText(value+'…').width>maxWidth)value=value.slice(0,-1);return value+'…';};
@@ -294,8 +294,8 @@
   }
   const canvasBlob=(canvas,type,quality)=>new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(Error('Unable to create download file')),type,quality));
   function saveBlob(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-  async function canvasPdfBlob(canvas){
-    const jpeg=new Uint8Array(await (await canvasBlob(canvas,'image/jpeg',.93)).arrayBuffer()),encoder=new TextEncoder(),pageW=Math.round(canvas.width/2),pageH=Math.round(canvas.height/2);
+  async function canvasPdfBlob(canvas,scale=1){
+    const jpeg=new Uint8Array(await (await canvasBlob(canvas,'image/jpeg',.93)).arrayBuffer()),encoder=new TextEncoder(),pageW=Math.round(canvas.width/(2*scale)),pageH=Math.round(canvas.height/(2*scale));
     const ascii=value=>encoder.encode(value),content=ascii(`q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q`);
     const objects=[null,ascii('<< /Type /Catalog /Pages 2 0 R >>'),ascii('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),ascii(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`),[ascii(`<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`),jpeg,ascii('\nendstream')],[ascii(`<< /Length ${content.length} >>\nstream\n`),content,ascii('\nendstream')]];
     const chunks=[ascii('%PDF-1.4\n%HFLOW\n')],offsets=[0];let length=chunks[0].length;
@@ -305,7 +305,7 @@
   }
   async function downloadCalendarReport(format){
     const button=document.querySelector(`[data-download="${format}"]`);if(button)button.disabled=true;
-    try{const canvas=reportCanvas(),slug=period()[2].replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase(),name=`harborflow-calendar-${slug}`;if(format==='png')saveBlob(await canvasBlob(canvas,'image/png'),name+'.png');else saveBlob(await canvasPdfBlob(canvas),name+'.pdf');}
+    try{const scale=format==='pdf'?2048/1800:1,canvas=reportCanvas(scale),slug=period()[2].replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase(),name=`harborflow-calendar-${slug}`;if(format==='png')saveBlob(await canvasBlob(canvas,'image/png'),name+'.png');else saveBlob(await canvasPdfBlob(canvas,scale),name+'.pdf');}
     catch(error){announce(error.message||'Unable to download Calendar report.');}
     finally{if(button)button.disabled=false;}
   }
@@ -1322,4 +1322,5 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.docume
   refresh();
   setInterval(refresh,15000);
 })();
+
 
