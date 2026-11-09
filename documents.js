@@ -449,7 +449,7 @@
           }
           if(JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job)||JSON.stringify(fresh.preview.people)!==JSON.stringify(preview.people))throw Error('ข้อมูล Job หรือรายชื่อเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจตารางก่อนดาวน์โหลด');
           if(preview.scope?.visitorView){const current=await get({action:'permitDefaults'});if(current.login!==options.login||current.version!==ctx.permitDefaults.version)throw Error('ค่าเริ่มต้นเปลี่ยน กรุณาเปิดเอกสารใหม่และตรวจร่างก่อนดาวน์โหลด');}
-          const generated=await window.HarborFlowOktbPdf.downloadPermit({outputMode,preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),returnFile:preparing});
+          const generated=await window.HarborFlowOktbPdf.downloadPermit({outputMode,preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page'),returnFile:preparing});
           if(preparing){
             const file=new File([generated.blob],generated.name,{type:'application/pdf'});
             if(typeof navigator.canShare==='function'&&!navigator.canShare({files:[file]}))throw Error('This device cannot share PDF files. Download and attach the PDF in Outlook.');
@@ -476,7 +476,7 @@
       if (target.hasAttribute('data-download-oktb')) {
         const selected=preview.people.filter(person=>ctx.selected.has(person.id));
         if(!selected.length)return;
-        try {const outputMode=await downloadReady();await window.HarborFlowOktbPdf.download({outputMode,preview,people:selected,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF แล้ว');}
+        try {const outputMode=await downloadReady();await window.HarborFlowOktbPdf.download({outputMode,preview,people:selected,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page')});message(host,'ดาวน์โหลด PDF แล้ว');}
         catch(error){if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาตรวจสิทธิ์อีกครั้ง</p>';}else message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);}finally{host.inert=false;}
       }
       if (target.hasAttribute('data-download-loi')) {
@@ -488,7 +488,7 @@
           if(account!==profile||fresh.login!==options.login)throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
           const original=preview.people.find(p=>p.id===ctx.loiPersonId),current=fresh.preview.people.find(p=>p.id===ctx.loiPersonId);
           if(!current||JSON.stringify(current)!==JSON.stringify(original)||JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job))throw Error('ข้อมูล Job หรือลูกเรือเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจร่างก่อนดาวน์โหลด');
-          await window.HarborFlowOktbPdf.downloadLoi({outputMode,preview,person,ctx:{...ctx,embassy,missionContactLines:missionLines(ctx)},profile:profile.values,logo:host.querySelector('.hfd-oktb-logo')});message(host,'ดาวน์โหลด PDF แล้ว');
+          await window.HarborFlowOktbPdf.downloadLoi({outputMode,preview,person,ctx:{...ctx,embassy,missionContactLines:missionLines(ctx)},profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page')});message(host,'ดาวน์โหลด PDF แล้ว');
         }
         catch(error){
           if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ Crew ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}
@@ -497,27 +497,6 @@
       }
       if (target.hasAttribute('data-document-retry')) mount(host, options);
     },{signal:controller.signal});
-  }
-  function mountLivePdf(host,preview,ctx,profile,options) {
-    const source=host.querySelector('.hfd-oktb-page'),api=window.HarborFlowOktbPdf;
-    if(!source||!api?.renderPreview||!window.HarborFlowVectorPdf)return;
-    const live=document.createElement('div');live.className='hfd-live-pdf';live.setAttribute('aria-label','PDF Live');
-    source.after(live);
-    const controller=new AbortController();activeBindings.add(controller);let timer,revision=0;
-    async function refresh(){
-      const current=++revision;
-      try{
-        const pages=await api.renderPreview({type:options.type,preview,ctx:{...ctx,missionContactLines:options.type==='loi'?missionLines(ctx):undefined},people:preview.people.filter(p=>ctx.selected?.has(p.id)),person:loiPerson(preview,ctx),profile:profile.values,logo:source.querySelector('.hfd-oktb-logo'),outputMode:options.localTransport?'sample':'final'});
-        if(controller.signal.aborted||current!==revision||!host.isConnected)return;
-        for(const canvas of pages){canvas.style.cssText='display:block;width:100%;height:auto;margin-bottom:12px';canvas.setAttribute('role','img');canvas.setAttribute('aria-label','PDF page preview');}
-        live.replaceChildren(...pages);source.hidden=true;
-      }catch(error){if(!controller.signal.aborted){source.hidden=false;live.replaceChildren();}}
-    }
-    const schedule=()=>{clearTimeout(timer);timer=setTimeout(refresh,160);};
-    const observer=new MutationObserver(schedule);observer.observe(source,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['src']});
-    host.addEventListener('input',schedule,{signal:controller.signal});host.addEventListener('change',schedule,{signal:controller.signal});
-    controller.signal.addEventListener('abort',()=>{clearTimeout(timer);observer.disconnect();live.remove();activeBindings.delete(controller);},{once:true});
-    refresh();
   }
   async function mount(host, options) {
     if (!host) return;
@@ -603,7 +582,6 @@
         host.querySelectorAll('#hfdSignaturePlaceholder').forEach(el=>el.textContent='Signature');
       }
       setDocumentEditability(host);
-      mountLivePdf(host,data.preview,ctx,profile,options);
       if(!options.localTransport){
         const status=document.createElement('p');status.id='hfdDocSaveStatus';status.role='status';status.textContent='โหลดข้อมูลส่วนกลางแล้ว';host.prepend(status);
         if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-download-oktb]):not([data-download-permit]):not([data-download-loi])').forEach(el=>el.disabled=true);
