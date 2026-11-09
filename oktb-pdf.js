@@ -5,7 +5,7 @@
   function singlePageSurface(scale=SCALE){
     const canvas=document.createElement('canvas');
     canvas.width=Math.round(PAGE_W*scale);canvas.height=Math.round(PAGE_H*scale);
-    const context=canvas.getContext('2d'),commands=[];
+    const context=(window.HarborFlowVectorPdf?.captureContext(canvas)||canvas.getContext('2d')),commands=[];
     const pen=new Proxy(context,{
       get(target,key){const value=target[key];if(typeof value!=='function')return value;
         return (...args)=>{if(key!=='measureText')commands.push([key,args]);return value.apply(target,args);};},
@@ -14,7 +14,7 @@
     return {canvas,pen,finish(bottom){
       const fit=Math.min(1,(PAGE_H-72)/Math.max(PAGE_H-72,bottom-36));
       const result=document.createElement('canvas');result.width=canvas.width;result.height=canvas.height;
-      const output=result.getContext('2d');output.fillStyle='#fff';output.fillRect(0,0,result.width,result.height);
+      const output=(window.HarborFlowVectorPdf?.captureContext(result)||result.getContext('2d'));output.fillStyle='#fff';output.fillRect(0,0,result.width,result.height);
       output.translate(PAGE_W*(1-fit)/2*scale,36*(1-fit)*scale);output.scale(fit,fit);
       for(const [key,value,property] of commands){if(property)output[key]=value;else output[key](...value);}
       output.setTransform(scale,0,0,scale,0,0);return result;
@@ -34,11 +34,11 @@
     const clean=value=>String(value||'').replace(/[\\/:*?"<>|\x00-\x1f]/g,' ').replace(/\s+/g,' ').trim().toUpperCase().slice(0,120);
     return 'OKTB - '+(clean(subject)||'CREW')+' ('+(clean(vessel)||'VESSEL')+').PDF';
   }
-  function image(source){
+  function image(source,kind,previewOnly=false){
     return new Promise((resolve,reject)=>{
       if(!source){resolve(null);return;}
       const img=new Image();
-      img.onload=()=>resolve(img);
+      img.onload=async()=>{try{resolve(window.HarborFlowVectorPdf?await window.HarborFlowVectorPdf.prepareImage(img,kind,!previewOnly):img);}catch(error){reject(error);}};
       img.onerror=()=>reject(Error('อ่านภาพสำหรับ PDF ไม่สำเร็จ'));
       img.src=source;
     });
@@ -50,6 +50,7 @@
     return match?.[1]||'';
   }
   function pdfFromPages(pages){
+    if(window.HarborFlowVectorPdf)return window.HarborFlowVectorPdf.fromCanvases(pages);
     const encoder=new TextEncoder(),parts=[];let length=0;
     const append=data=>{const bytes=typeof data==='string'?encoder.encode(data):data;parts.push(bytes);length+=bytes.length;};
     append('%PDF-1.4\n%HarborFlow\n');
@@ -76,9 +77,9 @@
     append('trailer\n<< /Size '+(count+1)+' /Root 1 0 R >>\nstartxref\n'+start+'\n%%EOF');
     return new Blob(parts,{type:'application/pdf'});
   }
-  async function renderPages({preview,people,ctx,profile,logo,outputMode='sample'}){
-    const logoImage=await image(logoSource(logo));
-    const signatureImage=profile.signature?await image(profile.signature):null;
+  async function renderPages({preview,people,ctx,profile,logo,outputMode='sample',previewOnly=false}){
+    const logoImage=await image(logoSource(logo),'logo');
+    const signatureImage=profile.signature?await image(profile.signature,'signature',previewOnly):null;
     const pages=[];let canvas,pen,y,surface;
     function newPage(continued=false){
       surface=singlePageSurface();canvas=surface.canvas;pen=surface.pen;
@@ -175,7 +176,7 @@
     text('As Agents Only',36,y,9);
     pages.splice(0,pages.length,surface.finish(y+14));
     for(const [index,page] of pages.entries()){
-      const ctx=page.getContext('2d');ctx.save();ctx.setTransform(SCALE,0,0,SCALE,0,0);
+      const ctx=(window.HarborFlowVectorPdf?.captureContext(page)||page.getContext('2d'));ctx.save();ctx.setTransform(SCALE,0,0,SCALE,0,0);
       ctx.fillStyle='rgba(160,0,0,.12)';ctx.font='bold 39px Arial';ctx.textAlign='center';
       ctx.translate(PAGE_W/2,PAGE_H/2);ctx.rotate(-.32);if(outputMode!=='final')ctx.fillText('SAMPLE · NOT APPROVED',0,0);ctx.restore();
       ctx.fillStyle='#555';ctx.font='8px Arial';ctx.textAlign='right';
@@ -193,11 +194,11 @@
     setTimeout(()=>URL.revokeObjectURL(url),60000);
     return name;
   }
-  async function downloadLoi({preview,person,ctx,profile,logo,outputMode='sample'}) {
+  async function downloadLoi({preview,person,ctx,profile,logo,outputMode='sample',previewOnly=false}) {
     if(!person?.id||!ctx.embassy)throw Error('กรุณาเลือกลูกเรือและสถานทูต');
     const surface=singlePageSurface(),pages=[];
     let pen=surface.pen;pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);
-    const logoImage=await image(logoSource(logo)),signature=profile.signature?await image(profile.signature):null;
+    const logoImage=await image(logoSource(logo),'logo'),signature=profile.signature?await image(profile.signature,'signature',previewOnly):null;
     const lines=(value,width,size=10)=>{
       pen.font=size+'px Arial';const output=[];let line='';
       for(const word of String(value||'[not set]').split(/\s+/)){
@@ -249,16 +250,17 @@
     if(signature){pen.drawImage(signature,360,y,140,49);y+=55;}else{text(outputMode==='final'?'Signature':'Signature pending owner approval',430,y,8,false,'center');y+=55;}
     for(const value of signoff){for(const line of lines(value,250,9)){text(line,415,y,9,false,'center');y+=13;}y+=5;}
     pages.push(surface.finish(y));
-    for(const [index,p]of pages.entries()){pen=p.getContext('2d');pen.save();pen.fillStyle='rgba(160,0,0,.12)';pen.font='bold 37px Arial';pen.textAlign='center';pen.translate(PAGE_W/2,PAGE_H/2);pen.rotate(-.32);if(outputMode!=='final')pen.fillText('SAMPLE · NOT APPROVED',0,0);pen.restore();text((outputMode==='final'?'':'DRAFT · ')+(index+1)+' / '+pages.length,PAGE_W-60,PAGE_H-22,8,false,'right');}
+    for(const [index,p]of pages.entries()){pen=(window.HarborFlowVectorPdf?.captureContext(p)||p.getContext('2d'));pen.save();pen.fillStyle='rgba(160,0,0,.12)';pen.font='bold 37px Arial';pen.textAlign='center';pen.translate(PAGE_W/2,PAGE_H/2);pen.rotate(-.32);if(outputMode!=='final')pen.fillText('SAMPLE · NOT APPROVED',0,0);pen.restore();text((outputMode==='final'?'':'DRAFT · ')+(index+1)+' / '+pages.length,PAGE_W-60,PAGE_H-22,8,false,'right');}
+    if(previewOnly)return pages;
     const name=fileName([person],preview.job.vessel).replace(/^OKTB/,'LOI');
     const blob=pdfFromPages(pages),url=URL.createObjectURL(blob),link=document.createElement('a');
     link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
   }
-  async function downloadPermit({preview,ctx,profile,logo,outputMode='sample',returnFile=false}){
+  async function downloadPermit({preview,ctx,profile,logo,outputMode='sample',returnFile=false,previewOnly=false}){
     const permitScale=3.5;
     const draft=ctx.permitDraft;
     if(!draft?.tables?.length)throw Error('ไม่มีตารางในร่างเอกสาร');
-    const logoImage=await image(logoSource(logo)),signature=profile.signature?await image(profile.signature):null;
+    const logoImage=await image(logoSource(logo),'logo'),signature=profile.signature?await image(profile.signature,'signature',previewOnly):null;
     const model=await import('./permit-draft.mjs');
     const pages=[];let canvas,pen,y,paginate=false,surface;
     function ensure(height){if(paginate&&y+height>PAGE_H-40)page();}
@@ -334,14 +336,15 @@
     page();drawDocument();
     pages.splice(0,pages.length,surface.finish(y));
     for(const [i,p] of (outputMode==='final'?[]:pages).entries()){
-      const c=p.getContext('2d');c.save();c.setTransform(permitScale,0,0,permitScale,0,0);c.fillStyle='rgba(160,0,0,.10)';c.font='bold 36px Arial';c.textAlign='center';c.translate(PAGE_W/2,PAGE_H/2);c.rotate(-.32);c.fillText('SAMPLE - NOT APPROVED',0,0);c.restore();c.save();c.setTransform(permitScale,0,0,permitScale,0,0);c.fillStyle='#555';c.font='8px Arial';c.textAlign='right';c.fillText('DRAFT - '+(i+1)+' / '+pages.length,PAGE_W-36,PAGE_H-22);c.restore();
+      const c=(window.HarborFlowVectorPdf?.captureContext(p)||p.getContext('2d'));c.save();c.setTransform(permitScale,0,0,permitScale,0,0);c.fillStyle='rgba(160,0,0,.10)';c.font='bold 36px Arial';c.textAlign='center';c.translate(PAGE_W/2,PAGE_H/2);c.rotate(-.32);c.fillText('SAMPLE - NOT APPROVED',0,0);c.restore();c.save();c.setTransform(permitScale,0,0,permitScale,0,0);c.fillStyle='#555';c.font='8px Arial';c.textAlign='right';c.fillText('DRAFT - '+(i+1)+' / '+pages.length,PAGE_W-36,PAGE_H-22);c.restore();
     }
     const vessel=String(preview.job.vessel||'VESSEL').replace(/[\\/:*?"<>|\x00-\x1f]/g,' ').trim().slice(0,100);
     const name='TERMINAL PERMIT - '+vessel.toUpperCase()+'.PDF';
+    if(previewOnly)return pages;
     const blob=pdfFromPages(pages);if(returnFile)return {blob,name};
     const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
   }
-  window.HarborFlowOktbPdf={download,fileName,downloadLoi,downloadPermit,pdfFromPages};
+  window.HarborFlowOktbPdf={renderPreview:input=>input.type==='loi'?downloadLoi({...input,previewOnly:true}):input.type==='permit'?downloadPermit({...input,previewOnly:true}):renderPages({...input,previewOnly:true}),download,fileName,downloadLoi,downloadPermit,pdfFromPages};
 })();
 
 

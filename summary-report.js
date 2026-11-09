@@ -96,7 +96,7 @@
     const left=38,right=width-38,bodyWidth=right-left;
     function page() {
       canvas=document.createElement('canvas');canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
-      ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
+      ctx=(window.HarborFlowVectorPdf?.captureContext(canvas)||canvas.getContext('2d'));ctx.scale(scale,scale);ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
       ctx.textBaseline='top';pages.push(canvas);pageNumber++;y=38;
       ctx.fillStyle='#107a72';ctx.fillRect(left,29,36,4);
       ctx.fillStyle='#66788b';ctx.font='9px Arial';ctx.fillText('HARBORFLOW  /  OPERATIONS',left,38);y=63;
@@ -164,7 +164,7 @@
       if(serviceIndex<report.services.length-1)rule();
     }
     for(const [index,surface] of pages.entries()){
-      const context=surface.getContext('2d');context.save();context.setTransform(scale,0,0,scale,0,0);
+      const context=(window.HarborFlowVectorPdf?.captureContext(surface)||surface.getContext('2d'));context.save();context.setTransform(scale,0,0,scale,0,0);
       context.fillStyle='#8190a2';context.font='8px Arial';context.textBaseline='top';
       context.fillText(`${report.publicView?'PUBLIC SUMMARY  ·  ':'TRIAL DATA  ·  '}Generated ${report.generatedAt} Asia/Bangkok`,left,height-30);
       context.textAlign='right';context.fillText(`${index+1} / ${pages.length}`,right,height-30);context.restore();
@@ -180,7 +180,7 @@
   function createImage(report) {
     const {pages}=createPages(report,2),gap=24;
     const canvas=document.createElement('canvas');canvas.width=Math.max(...pages.map(page=>page.width));canvas.height=pages.reduce((sum,page)=>sum+page.height,0)+gap*Math.max(0,pages.length-1);
-    const context=canvas.getContext('2d');context.fillStyle='#e8eef3';context.fillRect(0,0,canvas.width,canvas.height);
+    const context=(window.HarborFlowVectorPdf?.captureContext(canvas)||canvas.getContext('2d'));context.fillStyle='#e8eef3';context.fillRect(0,0,canvas.width,canvas.height);
     let top=0;for(const page of pages){context.drawImage(page,0,top);top+=page.height+gap;}
     return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve({filename:`SERVICE SUMMARY - ${safeName(report)}.PNG`,blob}):reject(Error('Image exporter unavailable')),'image/png'));
   }
