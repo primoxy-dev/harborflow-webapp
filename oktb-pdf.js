@@ -187,6 +187,7 @@
   async function download(input){
     if(!input.people?.length)throw Error('กรุณาเลือกลูกเรือก่อนดาวน์โหลด');
     const name=fileName(input.people,input.preview.job.vessel);
+    if(input.page&&window.HarborFlowVectorPdf?.fromLivePage){saveLivePdf(await window.HarborFlowVectorPdf.fromLivePage(input.page),name);return name;}
     const pages=await renderPages(input);
     const blob=pdfFromPages(pages),url=URL.createObjectURL(blob);
     const link=document.createElement('a');link.href=url;link.download=name;
@@ -194,8 +195,10 @@
     setTimeout(()=>URL.revokeObjectURL(url),60000);
     return name;
   }
-  async function downloadLoi({preview,person,ctx,profile,logo,outputMode='sample',previewOnly=false}) {
+  function saveLivePdf(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
+  async function downloadLoi({preview,person,ctx,profile,logo,page,outputMode='sample',previewOnly=false}) {
     if(!person?.id||!ctx.embassy)throw Error('กรุณาเลือกลูกเรือและสถานทูต');
+    if(page&&!previewOnly&&window.HarborFlowVectorPdf?.fromLivePage){const name=fileName([person],preview.job.vessel).replace(/^OKTB/,'LOI');saveLivePdf(await window.HarborFlowVectorPdf.fromLivePage(page),name);return name;}
     const surface=singlePageSurface(),pages=[];
     let pen=surface.pen;pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);
     const logoImage=await image(logoSource(logo),'logo'),signature=profile.signature?await image(profile.signature,'signature',previewOnly):null;
@@ -256,7 +259,8 @@
     const blob=pdfFromPages(pages),url=URL.createObjectURL(blob),link=document.createElement('a');
     link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
   }
-  async function downloadPermit({preview,ctx,profile,logo,outputMode='sample',returnFile=false,previewOnly=false}){
+  async function downloadPermit({preview,ctx,profile,logo,page,outputMode='sample',returnFile=false,previewOnly=false}){
+    if(page&&!previewOnly&&window.HarborFlowVectorPdf?.fromLivePage){const name='TERMINAL PERMIT - '+String(preview.job.vessel||'VESSEL').replace(/[\\/:*?"<>|]/g,' ').toUpperCase()+'.PDF',blob=await window.HarborFlowVectorPdf.fromLivePage(page);if(returnFile)return {blob,name};saveLivePdf(blob,name);return name;}
     const permitScale=3.5;
     const draft=ctx.permitDraft;
     if(!draft?.tables?.length)throw Error('ไม่มีตารางในร่างเอกสาร');

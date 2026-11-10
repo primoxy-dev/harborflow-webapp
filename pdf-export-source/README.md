@@ -26,10 +26,15 @@ retains its original jagged edges. The user must compare the original and vector
 and explicitly approve before every download. Cancelling stops the download.
 The original stored signature is never replaced by the trace.
 
-OKTB, LOI and Terminal Permit live previews use the same page layout functions
-as downloads. Their old HTML remains hidden as the data binding source, and is
-shown if the shared preview cannot be rendered. Summary, Calendar and legacy
-Quotation use the common vector writer. The existing React PDF quotation editor
-already uses its own vector renderer and is unchanged.
+OKTB, LOI and Terminal Permit downloads read the original visible HTML document
+layout, including its browser fonts, text positions, wrapping and spacing. The
+live preview is never replaced. Text is embedded as tightly cropped 3× PNGs to
+preserve the original typefaces; this is the user's chosen preference over vector
+English text in these three documents. Shared table borders are merged and drawn
+once as vector lines. Logos and approved signatures remain vector paths. The page
+is fitted proportionally onto A4 without stretching.
+
+Summary, Calendar and legacy Quotation retain the common vector writer. The
+existing React PDF quotation editor uses its own vector renderer and is unchanged.
 
 Dependency licenses are collected in `THIRD_PARTY_LICENSES.txt`.

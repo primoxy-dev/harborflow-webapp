@@ -1,10 +1,44 @@
 import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
 export { captureContext } from './capture.mjs';
-import { recordedPage } from './capture.mjs';
+import { recordedPage, captureContext, vectorImages } from './capture.mjs';
 import { logo } from './gac-logo.mjs';
 import { traceSignature } from '../lib/signature-vector.mjs';
 
 export function fromCanvases(canvases, options) { return createVectorPdf(canvases.map(recordedPage),options); }
+export async function fromLivePage(page, { exactText = true } = {}) {
+  await document.fonts.ready;
+  const clone=page.cloneNode(true),bounds=page.getBoundingClientRect();
+  clone.hidden=false;clone.style.cssText+=`;position:absolute;left:-20000px;top:0;width:${bounds.width}px;min-width:${bounds.width}px;box-sizing:border-box;box-shadow:none;border-color:transparent;`;
+  page.parentElement.append(clone);
+  try {
+    const borderGroups=new Map(),origin=clone.getBoundingClientRect();
+    for(const cell of clone.querySelectorAll('th,td')){
+      const rect=cell.getBoundingClientRect(),css=getComputedStyle(cell);
+      for(const [edge,axis,pos,start,end]of [['Top','h',rect.top-origin.top,rect.left-origin.left,rect.right-origin.left],['Bottom','h',rect.bottom-origin.top,rect.left-origin.left,rect.right-origin.left],['Left','v',rect.left-origin.left,rect.top-origin.top,rect.bottom-origin.top],['Right','v',rect.right-origin.left,rect.top-origin.top,rect.bottom-origin.top]]){
+        const width=parseFloat(css['border'+edge+'Width']),color=css['border'+edge+'Color'];
+        if(!width||css['border'+edge+'Style']==='none'||color==='transparent'||color==='rgba(0, 0, 0, 0)')continue;
+        const key=[axis,pos.toFixed(2),width,color].join('|');if(!borderGroups.has(key))borderGroups.set(key,{axis,pos,width,color,segments:[]});borderGroups.get(key).segments.push([start,end]);
+      }
+      cell.style.borderColor='transparent';
+    }
+    const logoElement=clone.querySelector('.hfd-oktb-logo');
+    if(logoElement){const background=getComputedStyle(logoElement).backgroundImage,src=background.match(/url\(["']?(.*?)["']?\)/)?.[1];if(src){const picture=new Image();picture.src=src;await picture.decode();await prepareImage(picture,'logo');vectorImages.set(picture.src,logo);picture.style.cssText='width:100%;height:100%;object-fit:contain';logoElement.style.backgroundImage='none';logoElement.append(picture);}}
+    const signature=clone.querySelector('#hfdSignatureOut');
+    if(signature&&!signature.hidden&&signature.src){await signature.decode();await prepareImage(signature,'signature');vectorImages.set(signature.src,signature.hfoVector);}
+    const canvas=document.createElement('canvas');canvas.width=Math.ceil(clone.getBoundingClientRect().width*3);canvas.height=Math.ceil(clone.getBoundingClientRect().height*3);
+    const context=captureContext(canvas,{rasterText:exactText}),nativeGet=canvas.getContext.bind(canvas);
+    canvas.getContext=(kind,...args)=>kind==='2d'?context:nativeGet(kind,...args);
+    await html2canvas(clone,{canvas,scale:3,backgroundColor:'#fff',logging:false});
+    context.save();context.setTransform(3,0,0,3,0,0);
+    for(const {axis,pos,width,color,segments}of borderGroups.values()){
+      const merged=[];for(const span of segments.sort((a,b)=>a[0]-b[0])){const last=merged.at(-1);if(last&&span[0]<=last[1]+0.1)last[1]=Math.max(last[1],span[1]);else merged.push([...span]);}
+      context.strokeStyle=color;context.lineWidth=width;context.beginPath();for(const [start,end]of merged){context.moveTo(axis==='h'?start:pos,axis==='h'?pos:start);context.lineTo(axis==='h'?end:pos,axis==='h'?pos:end);}context.stroke();
+    }
+    context.restore();
+    return fromCanvases([canvas],{width:595,height:842,preserveAspectRatio:true});
+  } finally {clone.remove();vectorImages.clear();}
+}
 function drawPath(ctx,d) {
   const tokens=d.match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?/g)||[];
   let i=0,cmd='',x=0,y=0,sx=0,sy=0;
@@ -46,7 +80,7 @@ export async function prepareImage(image,kind,review=true) {
 
 // Replay the same drawing commands used for the screen onto a PDF surface.
 // Callers supply a text image for scripts which must retain browser shaping.
-export function createVectorPdf(pages, { width = 595, height = 842 } = {}) {
+export function createVectorPdf(pages, { width = 595, height = 842, preserveAspectRatio = false } = {}) {
   if (!pages.length) throw new Error('No PDF pages');
   const pdf = new jsPDF({unit:'pt',format:[width,height],orientation:width > height ? 'landscape' : 'portrait',compress:true});
   pages.forEach((page,index) => {
@@ -54,13 +88,14 @@ export function createVectorPdf(pages, { width = 595, height = 842 } = {}) {
     const ctx = pdf.context2d;
     ctx.autoPaging = false;
     ctx.save();
-    ctx.scale(width / page.width,height / page.height);
+    const sx=preserveAspectRatio?Math.min(width/page.width,height/page.height):width/page.width,sy=preserveAspectRatio?sx:height/page.height;
+    ctx.scale(sx,sy);
     for (const command of page.commands) {
       const {name,args,property} = command;
       if (property) { ctx[name] = args; continue; }
-      if(name==='setTransform'){ctx.setTransform(...args.map((n,i)=>n*(i===1||i===3||i===5?height/page.height:width/page.width)));continue;}
-      if(name==='textImage'){ctx.save();ctx.setTransform(width/page.width,0,0,height/page.height,0,0);ctx.drawImage(...args);ctx.restore();continue;}
-      if(name==='drawImage'&&args[0].hfoVector){const vector=args[0].hfoVector,[,x,y,w,h]=args;ctx.save();ctx.translate(x,y);ctx.scale(w/vector.viewBox[2],h/vector.viewBox[3]);ctx.translate(-vector.viewBox[0],-vector.viewBox[1]);for(const path of vector.paths){ctx.fillStyle=path.fill;drawPath(ctx,path.d);}ctx.restore();continue;}
+      if(name==='setTransform'){ctx.setTransform(...args.map((n,i)=>n*(i===1||i===3||i===5?sy:sx)));continue;}
+      if(name==='textImage'){pdf.addImage(args[0],'PNG',args[1]*sx,args[2]*sy,args[3]*sx,args[4]*sy,undefined,'FAST');continue;}
+      if(name==='drawImage'&&args[0].hfoVector){const vector=args[0].hfoVector,[x,y,w,h]=args.length===9?args.slice(5):args.slice(1);ctx.save();ctx.translate(x,y);ctx.scale(w/vector.viewBox[2],h/vector.viewBox[3]);ctx.translate(-vector.viewBox[0],-vector.viewBox[1]);for(const path of vector.paths){ctx.fillStyle=path.fill;drawPath(ctx,path.d);}ctx.restore();continue;}
       if(name==='roundRect'){const [x,y,w,h,radius]=args,r=Math.min(Number(Array.isArray(radius)?radius[0]:radius)||0,w/2,h/2);ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();continue;}
       if (typeof ctx[name] !== 'function') throw new Error(`Unsupported PDF drawing command: ${name}`);
       ctx[name](...args);
