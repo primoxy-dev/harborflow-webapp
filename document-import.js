@@ -431,12 +431,44 @@
     return best;
   }
   const looksCombinedDocuments=text=>/(?:\bPASSPORT\b|P<[A-Z]{3})/i.test(text)&&/(?:SEAFARER|MARITIME INDUSTRY AUTHORITY|\bSRB\b|VALID UNTIL)/i.test(text);
+  async function readCrewPdfPages(pdf,onProgress,type,ocr){
+    const pageIdentityStatus=window.HarborFlowPageIdentityStatus||(await import('./lib/crew-document-batch.mjs')).pageIdentityStatus,pages=[];
+    for(let pageNumber=1;pageNumber<=pdf.numPages;pageNumber++){
+      const page=await pdf.getPage(pageNumber);let canvas;
+      try{
+        const content=await page.getTextContent();let text=content.items.map(item=>item.str+(item.hasEOL?'\n':' ')).join(''),confidence=100,templateValuesForPage={};
+        const pageProgress=value=>onProgress?.(Math.round(((pageNumber-1)+value/100)*100/pdf.numPages));
+        if(clean(text).length<80){
+          const viewport=page.getViewport({scale:3});if(viewport.width*viewport.height>40000000)throw Error(`Page ${pageNumber} is too large to read.`);
+          canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+          await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+          const oriented=await recognizeBestOrientation(canvas,type,value=>pageProgress(value*.65),ocr);
+          text=oriented.result.text;confidence=oriented.result.confidence;
+          const check=pageIdentityStatus(text);if(!check.safe){pages.push({pageNumber,error:check.reason});continue;}
+          const passport=/(?:\bPASSPORT\b|P<[A-Z]{3})/i.test(text),seaman=/(?:SEAFARER|MARITIME INDUSTRY AUTHORITY|\bSRB\b|\bCDC\b|SEAMAN)/i.test(text);
+          if(passport&&seaman){pages.push({pageNumber,error:'Multiple documents on one page need review before saving.'});continue;}
+          const actualType=passport?'passport':seaman?'seamanBook':type;
+          templateValuesForPage=await templateValues(oriented.canvas,oriented.result,actualType,ocr);
+          const source=actualType==='passport'?await recognizePassportSource(oriented.canvas,value=>pageProgress(65+value*.35),oriented.result,ocr):await recognizeSeamanSource(oriented.canvas,value=>pageProgress(65+value*.35),oriented.result,ocr);
+          text=source.text;confidence=source.confidence;
+        }
+        const check=pageIdentityStatus(text);if(!check.safe){pages.push({pageNumber,error:check.reason});continue;}
+        const passport=/(?:\bPASSPORT\b|P<[A-Z]{3})/i.test(text),seaman=/(?:SEAFARER|MARITIME INDUSTRY AUTHORITY|\bSRB\b|\bCDC\b|SEAMAN)/i.test(text);
+        if(passport&&seaman){pages.push({pageNumber,error:'Multiple documents on one page need review before saving.'});continue;}
+        pages.push({pageNumber,text,confidence,type:passport?'passport':seaman?'seamanBook':type,templateValues:templateValuesForPage});
+      }finally{if(canvas){canvas.width=0;canvas.height=0;}page.cleanup?.();}
+      onProgress?.(Math.round(pageNumber*100/pdf.numPages));
+    }
+    return {pages};
+  }
   async function readPdf(file,onProgress,type,ocr){
-    const pdfjs=await pdfLibrary(),pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='',confidence=100,combined=false;const images=[],passportPages=[];
-    for(let pageNumber=1;pageNumber<=Math.min(pdf.numPages,3);pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent(),pageText=content.items.map(item=>item.str+(item.hasEOL?'\n':' ')).join('');text+='\n'+pageText;if(clean(pageText).length<80){const viewport=page.getViewport({scale:3}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;images.push(canvas);}else if(type==='passport')passportPages.push({text:pageText,confidence:100});}
+    const pdfjs=window.HarborFlowPdfLibrary||await pdfLibrary(),pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='',confidence=100,combined=false;const images=[],passportPages=[];
+    if(pdf.numPages>1&&type!=='flightTicket'){try{return await readCrewPdfPages(pdf,onProgress,type,ocr);}finally{await pdf.destroy?.();}}
+    for(let pageNumber=1;pageNumber<=Math.min(pdf.numPages,3);pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent(),pageText=content.items.map(item=>item.str+(item.hasEOL?'\n':' ')).join('');if((type==='passport'||type==='seamanBook')&&clean(pageText).length>=80){const check=window.HarborFlowPageIdentityStatus||(await import('./lib/crew-document-batch.mjs')).pageIdentityStatus;if(!check(pageText).safe)throw Error('Multiple possible people on one page. Please separate the documents and retry.');}text+='\n'+pageText;if(clean(pageText).length<80){const viewport=page.getViewport({scale:3}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;images.push(canvas);}else if(type==='passport')passportPages.push({text:pageText,confidence:100});}
     if(images.length){const values=[];for(let index=0;index<images.length;index++){
       const pageStart=index/images.length,pageEnd=(index+1)/images.length,pageProgress=value=>onProgress?.(Math.round((pageStart+(value/100)*(pageEnd-pageStart))*100)),oriented=await recognizeBestOrientation(images[index],type,value=>pageProgress(value*.6),ocr);let pageText=oriented.result.text,pageConfidence=oriented.result.confidence;
-      const values=await templateValues(oriented.canvas,oriented.result,type,ocr);if(Object.keys(values).length)images[index].templateValues=values;
+      if(type==='passport'||type==='seamanBook'){const check=window.HarborFlowPageIdentityStatus||(await import('./lib/crew-document-batch.mjs')).pageIdentityStatus;if(!check(pageText).safe)throw Error('Multiple possible people on one page. Please separate the documents and retry.');}
+      const template=await templateValues(oriented.canvas,oriented.result,type,ocr);if(Object.keys(template).length)images[index].templateValues=template;
       const isCombined=looksCombinedDocuments(pageText);combined=combined||isCombined;
       if(isCombined){const passport=await recognizeCombinedPassport(oriented.canvas,value=>pageProgress(60+value*.2),oriented.result,ocr),seaman=await recognizeCombinedSeaman(oriented.canvas,value=>pageProgress(80+value*.2),ocr);pageText=`${passport.text}\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,passport.confidence,seaman.confidence);}else if(type==='passport'){const source=await recognizePassportSource(oriented.canvas,value=>pageProgress(60+value*.4),oriented.result,ocr);pageText=source.text;pageConfidence=source.confidence;}else if(type==='seamanBook'){const seaman=await recognizeSeamanSource(oriented.canvas,value=>pageProgress(60+value*.4),oriented.result,ocr);pageText+=`\n${seaman.text}`;pageConfidence=Math.max(pageConfidence,seaman.confidence);}text+='\n'+pageText;values.push(pageConfidence);if(type==='passport')passportPages.push({text:pageText,confidence:pageConfidence});
     }confidence=values.reduce((sum,value)=>sum+value,0)/Math.max(1,values.length);}
@@ -452,6 +484,7 @@
       if(pdf)source=await readPdf(file,onProgress,type,ocr);
       else if(type==='passport'){
         const full=await recognize(file,progress=>onProgress?.(Math.round(progress*.35)),{rotateAuto:true},ocr);
+        const check=window.HarborFlowPageIdentityStatus||(await import('./lib/crew-document-batch.mjs')).pageIdentityStatus;if(!check(full.text).safe)throw Error('Multiple possible people in one image. Please separate the documents and retry.');
         let values={};if(typeof createImageBitmap==='function'){const bitmap=await createImageBitmap(file);try{values=await templateValues(bitmap,full,type,ocr);}finally{bitmap.close?.();}}
         if(/(?:PHILIPPINES|FILIPINO|PHL)/i.test(full.text)){
           const fields=await recognizePhilippineNameFields(file,progress=>onProgress?.(35+Math.round(progress*.65)),ocr);source={text:`${fields.text}\n${full.text}`,confidence:Math.max(full.confidence,fields.confidence)};
@@ -462,7 +495,19 @@
         source=await recognizeSeamanSource(file,onProgress,null,ocr);
         if(typeof createImageBitmap==='function'){const bitmap=await createImageBitmap(file);try{source.templateValues=await templateValues(bitmap,source,type,ocr);}finally{bitmap.close?.();}}
       }else source=await recognize(file,onProgress,null,ocr);
-      let result=extractFromText(type,source.text,source.confidence,file.name);if(pdf&&source.combined){const passportResult=extractFromText('passport',source.text,source.confidence,file.name),seamanResult=extractFromText('seamanBook',source.text,source.confidence,file.name);result=mergeCombinedResults(type,passportResult,seamanResult);result.type=type;result.rawLength=source.text.length;}result=applyTemplateValues(result,source.templateValues||{});result.fileName=file.name;result.checkedAt=new Date().toISOString();onProgress?.(100);return result;
+      if(source.pages){
+        const reconcile=window.HarborFlowReconcilePrintedFields||(await import('./lib/crew-document-integrated.mjs')).reconcilePrintedFields;
+        const results=source.pages.map(page=>{
+          if(page.error)return {pageNumber:page.pageNumber,fileName:file.name,error:page.error};
+          const extracted=extractFromText(page.type,page.text,page.confidence,file.name),result=applyTemplateValues(reconcile(extracted,page.text,page.type,nationalityChoice),page.templateValues||{});
+          result.pageNumber=page.pageNumber;result.fileName=file.name;result.checkedAt=new Date().toISOString();return result;
+        });
+        onProgress?.(100);return {results,fileName:file.name};
+      }
+      let result=extractFromText(type,source.text,source.confidence,file.name);if(pdf&&source.combined){const passportResult=extractFromText('passport',source.text,source.confidence,file.name),seamanResult=extractFromText('seamanBook',source.text,source.confidence,file.name);result=mergeCombinedResults(type,passportResult,seamanResult);result.type=type;result.rawLength=source.text.length;}
+      if(type==='passport'||type==='seamanBook'){const reconcile=window.HarborFlowReconcilePrintedFields||(await import('./lib/crew-document-integrated.mjs')).reconcilePrintedFields;result=reconcile(result,source.text,type,nationalityChoice);}
+      result=applyTemplateValues(result,source.templateValues||{});
+      result.fileName=file.name;result.checkedAt=new Date().toISOString();onProgress?.(100);return result;
     }finally{if(!sharedOcr)await ocr.close();}
   }
   function createBatchReader(){

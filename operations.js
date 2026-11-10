@@ -977,6 +977,11 @@
     const passportMatches=!person&&result.type==='passport'&&result.fields?.passport?scopedPeople.filter(candidate=>String(candidate.data.passport||'').toUpperCase()===String(result.fields.passport).toUpperCase()):[];
     const matchedByPassport=passportMatches.length===1;if(matchedByPassport)person=passportMatches[0];
     if(person){
+      if(result.visibleFieldsOnly){
+        const {assessExistingMatch}=await import('./lib/crew-document-match.mjs');
+        const assessment=assessExistingMatch([person],result.fields);
+        if(!assessment.safe){item.outcome='Needs review';item.error=assessment.reason+'. Nothing was saved.';return;}
+      }
       const safeResult=structuredClone(result);safeResult.fields={...(safeResult.fields||{}),name:person.data.name};
       const applied=reader.applyToPerson(person.data,safeResult);
       await saveImportedPerson(person,applied.person);
@@ -1013,7 +1018,18 @@
         try{
           const result=await batchReader.read(file,type,progress=>documentProgress(type,`Reading ${file.name}… ${progress||0}%`));
           if(service()?.id!==serviceId||job()?.id!==jobId)throw Error('Service changed during import. Nothing was saved.');
-          const item={fileName:file.name,name:'',outcome:'Needs review'};batch.results.push(item);await applyImportedResult(result,item);
+          let results=Array.isArray(result.results)?result.results:[result];
+          if(Array.isArray(result.results)){
+            const {groupDocumentPages}=await import('./lib/crew-document-batch.mjs');
+            const errors=results.filter(page=>page.error),groups=groupDocumentPages(results.filter(page=>!page.error));
+            results=[...errors,...groups.flatMap(group=>group.pages.map(page=>group.status==='ready'?page:{...page,error:group.reason}))];
+          }
+          for(const pageResult of results){
+            const item={fileName:pageResult.pageNumber?`${file.name} · page ${pageResult.pageNumber}`:file.name,name:'',outcome:'Needs review'};batch.results.push(item);
+            if(pageResult.error){item.error=pageResult.error;continue;}
+            if(service()?.id!==serviceId||job()?.id!==jobId){item.error='Service changed during import. Nothing was saved.';continue;}
+            await applyImportedResult(pageResult,item);
+          }
         }catch(error){batch.results.push({fileName:file.name,name:'',outcome:'Not processed',error:error.message||'Document could not be read.'});}
         batch.completed+=1;render();
       }

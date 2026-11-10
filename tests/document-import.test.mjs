@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
+import {reconcilePrintedFields} from '../lib/crew-document-integrated.mjs';
+import {pageIdentityStatus} from '../lib/crew-document-batch.mjs';
 
 const source=await readFile(new URL('../document-import.js',import.meta.url),'utf8');
 const context={window:{},structuredClone,Date,console};
 vm.createContext(context);
-vm.runInContext(source,context);
+vm.runInContext(source,context,{importModuleDynamically:specifier=>import(new URL(specifier,new URL('../document-import.js',import.meta.url)))});
 const reader=context.window.HarborFlowDocumentImport;
 
 test('template values fill missing fields without overwriting existing values',()=>{
@@ -96,11 +98,11 @@ test('invalid calendar dates cannot silently roll over to a different month',()=
 
 test('reuses one OCR worker for multiple reads within a document and releases it',async()=>{
   const calls={created:0,recognized:0,terminated:0,modes:[]};
-  const session={window:{Tesseract:{async createWorker(){
+  const session={window:{HarborFlowReconcilePrintedFields:reconcilePrintedFields,HarborFlowPageIdentityStatus:pageIdentityStatus,Tesseract:{async createWorker(){
     calls.created++;
     return {async setParameters(parameters){calls.modes.push(parameters.tessedit_pageseg_mode);},async recognize(){calls.recognized++;return {data:{text:'PASSPORT NO: Z1234567\nGIVEN NAMES: ARJUN\nSURNAME: KUMAR\nSEX: M',confidence:95}};},async terminate(){calls.terminated++;}};
   }}},document:{querySelector(){return {};}},structuredClone,Date,console};
-  vm.createContext(session);vm.runInContext(source,session);
+  vm.createContext(session);vm.runInContext(source,session,{importModuleDynamically:specifier=>import(new URL(specifier,new URL('../document-import.js',import.meta.url)))});
   const result=await session.window.HarborFlowDocumentImport.read({name:'passport.png',type:'image/png',size:1},'passport');
   assert.equal(result.fields.passport,'Z1234567');
   assert.deepEqual(calls,{created:1,recognized:2,terminated:1,modes:['6','6']});
@@ -109,6 +111,14 @@ test('reuses one OCR worker for multiple reads within a document and releases it
   await batch.read({name:'second.png',type:'image/png',size:1},'passport');
   await batch.close();
   assert.deepEqual(calls,{created:2,recognized:6,terminated:2,modes:['6','6','6','6','6','6']});
+});
+
+test('reads every PDF page independently and closes the PDF',async()=>{
+  const texts=['PASSPORT NO: Z1234567\nGIVEN NAMES: ALICE\nSURNAME: SAMPLE\nSEX: F\nDATE OF BIRTH: 01 JAN 1990\nDATE OF EXPIRY: 01 JAN 2035','PASSPORT NO: Z7654321\nGIVEN NAMES: BOB\nSURNAME: EXAMPLE\nSEX: M\nDATE OF BIRTH: 02 JAN 1991\nDATE OF EXPIRY: 01 JAN 2035','SURNAME: ONE\nSURNAME: TWO\n'+('OTHER INFORMATION '.repeat(5))];
+  let destroyed=false;const session={window:{HarborFlowReconcilePrintedFields:reconcilePrintedFields,HarborFlowPageIdentityStatus:pageIdentityStatus,HarborFlowPdfLibrary:{getDocument(){return {promise:Promise.resolve({numPages:3,async getPage(n){return {async getTextContent(){return {items:[{str:texts[n-1]}]};},cleanup(){}};},async destroy(){destroyed=true;}})};}}},structuredClone,Date,console,Uint8Array};
+  vm.createContext(session);vm.runInContext(source,session);
+  const result=await session.window.HarborFlowDocumentImport.read({name:'sample.pdf',type:'application/pdf',size:1,arrayBuffer:async()=>new ArrayBuffer(1)},'passport');
+  assert.equal(result.results.length,3);assert.equal(result.results[0].fields.passport,'Z1234567');assert.equal(result.results[1].fields.passport,'Z7654321');assert.ok(result.results[2].error);assert.equal(destroyed,true);
 });
 
 test('reads a machine-readable passport and validates its check digits',()=>{
