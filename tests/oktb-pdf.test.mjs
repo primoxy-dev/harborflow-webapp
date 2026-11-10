@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = readFileSync(new URL('../oktb-pdf.js', import.meta.url), 'utf8');
 const pixelJpeg = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q==';
-function setup() {
+function setup(vectorPdf) {
   let downloaded = '', pdfBlob;const painted=[];
   const paint = { scale(){}, setTransform(){}, fillRect(){}, drawImage(){}, fillText(value){painted.push(value);},
     strokeRect(){}, save(){}, restore(){}, translate(){}, rotate(){},
@@ -18,7 +18,7 @@ function setup() {
     },
     body: { appendChild() {} }
   };
-  const window = {};
+  const window = vectorPdf ? {HarborFlowVectorPdf:vectorPdf} : {};
   const URL = { createObjectURL(blob) { pdfBlob = blob; return 'blob:test'; }, revokeObjectURL() {} };
   vm.runInNewContext(source, { window, document, URL, Blob, TextEncoder, Uint8Array, atob,
     setTimeout() {}, getComputedStyle() { return { backgroundImage: 'none' }; } });
@@ -92,3 +92,14 @@ test('long OKTB and LOI retain their final content on one A4 page',async()=>{
   }
 });
 
+
+
+test('Terminal Permit passes the live DOM page to both downloads and prepared attachments',async()=>{
+ for(const returnFile of [true,false]){
+  const element={cloneNode(){}};const blob=new Blob(['test'],{type:'application/pdf'});let called=0;
+  const {api,getDownload}=setup({fromLivePage:async page=>{assert.equal(page,element);called++;return blob;}});
+  const result=await api.downloadPermit({page:element,preview:{job:{vessel:'TEST VESSEL'}},ctx:{},profile:{},returnFile,outputMode:'final'});
+  assert.equal(called,1);
+  if(returnFile){assert.equal(result.blob,blob);assert.match(result.name,/TERMINAL PERMIT/);}else{assert.equal(getDownload().pdfBlob,blob);}
+ }
+});
