@@ -259,8 +259,8 @@
     const blob=pdfFromPages(pages),url=URL.createObjectURL(blob),link=document.createElement('a');
     link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
   }
-  async function downloadPermit({preview,ctx,profile,logo,page,outputMode='sample',returnFile=false,previewOnly=false}){
-    if(page&&!previewOnly&&window.HarborFlowVectorPdf?.fromLivePage){const name='TERMINAL PERMIT - '+String(preview.job.vessel||'VESSEL').replace(/[\\/:*?"<>|]/g,' ').toUpperCase()+'.PDF',blob=await window.HarborFlowVectorPdf.fromLivePage(page);if(returnFile)return {blob,name};saveLivePdf(blob,name);return name;}
+  async function downloadPermit({preview,ctx,profile,logo,page:livePage,outputMode='sample',returnFile=false,previewOnly=false}){
+    if(livePage&&!previewOnly&&window.HarborFlowVectorPdf?.fromLivePage){const name='TERMINAL PERMIT - '+String(preview.job.vessel||'VESSEL').replace(/[\\/:*?"<>|]/g,' ').toUpperCase()+'.PDF',blob=await window.HarborFlowVectorPdf.fromLivePage(livePage);if(returnFile)return {blob,name};saveLivePdf(blob,name);return name;}
     const permitScale=3.5;
     const draft=ctx.permitDraft;
     if(!draft?.tables?.length)throw Error('ไม่มีตารางในร่างเอกสาร');
