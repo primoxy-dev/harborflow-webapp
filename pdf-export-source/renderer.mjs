@@ -4,6 +4,7 @@ export { captureContext } from './capture.mjs';
 import { recordedPage, captureContext, vectorImages } from './capture.mjs';
 import { logo } from './gac-logo.mjs';
 import { traceSignature } from '../lib/signature-vector.mjs';
+import { pageFit } from './page-fit.mjs';
 
 export function fromCanvases(canvases, options) { return createVectorPdf(canvases.map(recordedPage),options); }
 export async function fromLivePage(page, { exactText = true } = {}) {
@@ -88,13 +89,14 @@ export function createVectorPdf(pages, { width = 595, height = 842, preserveAspe
     const ctx = pdf.context2d;
     ctx.autoPaging = false;
     ctx.save();
-    const sx=preserveAspectRatio?Math.min(width/page.width,height/page.height):width/page.width,sy=preserveAspectRatio?sx:height/page.height;
+    const {sx,sy,x:offsetX,y:offsetY}=pageFit(page.width,page.height,width,height,preserveAspectRatio);
+    ctx.translate(offsetX,offsetY);
     ctx.scale(sx,sy);
     for (const command of page.commands) {
       const {name,args,property} = command;
       if (property) { ctx[name] = args; continue; }
-      if(name==='setTransform'){ctx.setTransform(...args.map((n,i)=>n*(i===1||i===3||i===5?sy:sx)));continue;}
-      if(name==='textImage'){pdf.addImage(args[0],'PNG',args[1]*sx,args[2]*sy,args[3]*sx,args[4]*sy,undefined,'FAST');continue;}
+      if(name==='setTransform'){ctx.setTransform(...args.map((n,i)=>n*(i===1||i===3||i===5?sy:sx)+(i===4?offsetX:i===5?offsetY:0)));continue;}
+      if(name==='textImage'){pdf.addImage(args[0],'PNG',offsetX+args[1]*sx,offsetY+args[2]*sy,args[3]*sx,args[4]*sy,undefined,'FAST');continue;}
       if(name==='drawImage'&&args[0].hfoVector){const vector=args[0].hfoVector,[x,y,w,h]=args.length===9?args.slice(5):args.slice(1);ctx.save();ctx.translate(x,y);ctx.scale(w/vector.viewBox[2],h/vector.viewBox[3]);ctx.translate(-vector.viewBox[0],-vector.viewBox[1]);for(const path of vector.paths){ctx.fillStyle=path.fill;drawPath(ctx,path.d);}ctx.restore();continue;}
       if(name==='roundRect'){const [x,y,w,h,radius]=args,r=Math.min(Number(Array.isArray(radius)?radius[0]:radius)||0,w/2,h/2);ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();continue;}
       if (typeof ctx[name] !== 'function') throw new Error(`Unsupported PDF drawing command: ${name}`);

@@ -32,7 +32,8 @@ live preview is never replaced. Text is embedded as tightly cropped 3× PNGs to
 preserve the original typefaces; this is the user's chosen preference over vector
 English text in these three documents. Shared table borders are merged and drawn
 once as vector lines. Logos and approved signatures remain vector paths. The page
-is fitted proportionally onto A4 without stretching.
+is fitted proportionally onto A4 without stretching and centered horizontally
+and vertically so unused page space is distributed evenly.
 
 Summary, Calendar and legacy Quotation retain the common vector writer. The
 existing React PDF quotation editor uses its own vector renderer and is unchanged.
