@@ -16,3 +16,9 @@ test('wide live documents have equal top and bottom space and are not stretched'
 test('existing report scaling stays unchanged',()=>{
   assert.deepEqual(pageFit(1200,1600,600,800,false),{sx:0.5,sy:0.5,x:0,y:0});
 });
+test('short Terminal Permit pages stay at the top while preserving horizontal fit',()=>{
+  const centered=pageFit(2400,2700,595,842,true);
+  const permit=pageFit(2400,2700,595,842,true,'top');
+  assert.ok(centered.y>0);assert.equal(permit.y,0);
+  assert.equal(permit.x,centered.x);assert.equal(permit.sx,centered.sx);assert.equal(permit.sy,centered.sy);
+});

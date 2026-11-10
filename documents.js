@@ -205,7 +205,7 @@
   const loiFields = [['name','Name - Surname'],['surname','Surname'],['givenName','Given name'],['dob','Date of Birth'],['placeOfBirth','Place of Birth'],['nationality','Nationality'],['passport','Passport No.'],['passportIssued','Issued (Passport)'],['passportExpiry','Expiry'],['seamanBook','Seamans book'],['seamanBookIssued','Issued (Seamans book)']];
   let permitModel;
   function permitPaperTables(ctx) {
-    return permitModel.visiblePermitTables(ctx.permitDraft).map(table=>`<section class="hfd-permit-table-block"><h3>${escape(table.title)}</h3><table><thead><tr>${table.headers.map(h=>'<th>'+escape(h)+'</th>').join('')}</tr></thead><tbody>${table.rows.map(r=>'<tr>'+r.cells.map(c=>'<td>'+escape(c||'\u00a0')+'</td>').join('')+'</tr>').join('')}</tbody></table></section>`).join('');
+    return permitModel.visiblePermitTables(ctx.permitDraft).map(table=>`<section class="hfd-permit-table-block"><h3>${escape(table.title)}</h3><table><thead><tr>${table.headers.map(h=>'<th>'+escape(h)+'</th>').join('')}</tr></thead><tbody>${table.rows.map(r=>'<tr>'+r.cells.map((c,i)=>'<td'+(table.fields[i]==='name'?' class="hfd-permit-name"':'')+'>'+escape(c||'\u00a0')+'</td>').join('')+'</tr>').join('')}</tbody></table></section>`).join('');
   }
   function permitEditors(preview,ctx) {
     return ctx.permitDraft.tables.filter(t=>['on','off'].includes(t.key)?preview.scope?.crewView:preview.scope?.visitorView).map(table=>{
