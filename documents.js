@@ -256,7 +256,7 @@
       <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page hfd-permit-page" aria-label="Terminal Permit draft">
         <div class="hfd-loi-letterhead"><div class="hfd-oktb-logo" role="img" aria-label="GAC"></div><div><b>บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด</b><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p>26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400 &nbsp; Fax +66-2-650 7401 &nbsp; E-mail shipping.thailand@gac.com</p></div></div>
         <p class="hfd-permit-issued"><span id="hfdIssuedDate">${displayDate(ctx.issueDate)}</span></p>
-        <p>Subject: <span id="hfdPermitSubjectOut">${escape(ctx.permitDraft.subject)}</span></p><p>Dear Marine Operation Division</p>
+        <p class="hfd-permit-subject-line">Subject: <span id="hfdPermitSubjectOut">${escape(ctx.permitDraft.subject)}</span></p><p class="hfd-permit-salutation">Dear Marine Operation Division</p>
         <p class="hfd-permit-intro">Gulf Agency Company (Thailand) LTD. has been appointed of the subject vessel "${escape(preview.job.vessel||'[Vessel not set in Job]')}"</p>
         <p>at ${escape(permitModel.permitLocation(preview.job))} on <span id="hfdPermitDateOut">${displayDate(ctx.permitDate)}</span> during her operations</p>
         <div id="hfdPermitTables">${permitPaperTables(ctx)}</div>

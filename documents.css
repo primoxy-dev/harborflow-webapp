@@ -77,18 +77,21 @@
   border: 1px solid #ccd8e6; border-radius: 7px; background: white; color: #17283b;
 }
 .hfd-loi-editor label[hidden] { display: none; }
-.hfd-loi-page { position: relative; font-family: Calibri, Arial, sans-serif; }
+.hfd-loi-page { position: relative; font-family: Calibri, Arial, sans-serif; font-size:13px; box-sizing:border-box;width:800px;min-height:1132px;padding:48px 30px 36px; }
+.hfd-loi-page p{margin-bottom:12px}
+.hfd-loi-page .hfd-loi-letterhead{margin-bottom:24px}
+.hfd-loi-page h3{margin:18px 0 12px}
 .hfd-loi-letterhead { display: grid; grid-template-columns: 130px 1fr; align-items: center; gap: 12px; margin-bottom: 48px; }
 .hfd-loi-letterhead p { font-size: 10.5px; line-height: 1.3; margin: 7px 0; }
 .hfd-loi-letterhead b { font-size: 12px; }
 .hfd-loi-heading { text-align: center; font: bold 20px Arial, sans-serif; margin: 24px 0; }
-.hfd-loi-addressee-gap { min-height: 72px; }
-.hfd-loi-intro { line-height: 1.9; }
-.hfd-loi-personal { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 20px; margin-bottom: 30px; overflow-wrap: anywhere; }
-.hfd-loi-undertaking { line-height: 1.9; }
-.hfd-loi-signoff { width: 340px; margin: 25px 0 0 auto; text-align: center; }
-.hfd-loi-signoff .hfd-oktb-signature { margin: 12px auto; }
-.hfd-loi-signoff p { line-height: 1.9; }
+.hfd-loi-addressee-gap { min-height: 16px; }
+.hfd-loi-intro { line-height: 1.5; }
+.hfd-loi-personal { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; margin-bottom: 20px; overflow-wrap: anywhere; }
+.hfd-loi-undertaking { line-height: 1.5; }
+.hfd-loi-signoff { width: 340px; margin: 18px 0 0 auto; text-align: center; }
+.hfd-loi-signoff .hfd-oktb-signature { min-height:64px;margin: 8px auto; }
+.hfd-loi-signoff p { line-height: 1.45; }
 /* Terminal Permit: editable draft controls remain separate from the letter. */
 .hfd-permit-editor .hfd-permit-subject{grid-column:1/-1}
 .hfd-permit-editor-table{padding:12px;border:1px solid var(--line,#dce4ed);border-radius:8px;margin:12px 0;min-width:0}
@@ -109,5 +112,6 @@
 .hfd-permit-table-block{margin:16px 0 0;break-inside:avoid}.hfd-permit-table-block h3{font-size:10px!important;margin:0 0 4px!important}
 .hfd-permit-table-block table{width:100%;border-collapse:collapse;table-layout:fixed}.hfd-permit-table-block th,.hfd-permit-table-block td{font-size:9px!important;border:1px solid #111!important;padding:4px!important;overflow-wrap:anywhere}
 .hfd-permit-table-block th{background:#d8dfe7;text-align:center!important;vertical-align:middle!important}.hfd-permit-edit-scroll th input{text-align:center}.hfd-permit-table-block th:first-child{width:6%}.hfd-permit-table-block th:nth-child(2){width:28%}
-.hfd-permit-closing{margin-top:13px!important}.hfd-permit-signoff{text-align:center;margin-left:auto;width:250px;margin-top:24px}.hfd-permit-signoff .hfd-oktb-signature{margin-left:auto;margin-right:auto}
+.hfd-permit-page .hfd-permit-subject-line,.hfd-permit-page .hfd-permit-salutation{margin-bottom:10px!important}
+.hfd-permit-page .hfd-permit-closing{margin-top:12px!important}.hfd-permit-signoff{text-align:center;margin-left:auto;width:250px;margin-top:18px}.hfd-permit-signoff .hfd-oktb-signature{min-height:64px;margin:12px auto 16px}
 @media(max-width:700px){.hfd-permit-row-pickers{grid-template-columns:1fr}.hfd-permit-editor-table{padding:8px}.hfd-permit-editor input[type=file]{max-width:100%}}
