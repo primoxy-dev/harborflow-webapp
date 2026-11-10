@@ -35,6 +35,11 @@ once as vector lines. Logos and approved signatures remain vector paths. The pag
 is fitted proportionally onto A4 without stretching and centered horizontally
 and vertically so unused page space is distributed evenly.
 
+Exports use an isolated 800px-wide document and a 1200px capture viewport, rather
+than the phone's visible panel size. Text autosizing is disabled on document
+content. This keeps exported layout independent of responsive panels, ancestor
+transforms, horizontal scroll and mobile text inflation.
+
 Summary, Calendar and legacy Quotation retain the common vector writer. The
 existing React PDF quotation editor uses its own vector renderer and is unchanged.
 

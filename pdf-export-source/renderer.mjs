@@ -9,9 +9,11 @@ import { pageFit } from './page-fit.mjs';
 export function fromCanvases(canvases, options) { return createVectorPdf(canvases.map(recordedPage),options); }
 export async function fromLivePage(page, { exactText = true } = {}) {
   await document.fonts.ready;
-  const clone=page.cloneNode(true),bounds=page.getBoundingClientRect();
-  clone.hidden=false;clone.style.cssText+=`;position:absolute;left:-20000px;top:0;width:${bounds.width}px;min-width:${bounds.width}px;box-sizing:border-box;box-shadow:none;border-color:transparent;`;
-  page.parentElement.append(clone);
+  // Export at the desktop document width, independently of mobile viewport,
+  // text inflation and scrollable/transformed document-panel ancestors.
+  const clone=page.cloneNode(true);
+  clone.hidden=false;clone.style.cssText+=';position:absolute;left:-20000px;top:0;width:800px;min-width:800px;max-width:800px;box-sizing:border-box;box-shadow:none;border-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%;';
+  document.body.append(clone);
   try {
     const borderGroups=new Map(),origin=clone.getBoundingClientRect();
     for(const cell of clone.querySelectorAll('th,td')){
@@ -30,7 +32,7 @@ export async function fromLivePage(page, { exactText = true } = {}) {
     const canvas=document.createElement('canvas');canvas.width=Math.ceil(clone.getBoundingClientRect().width*3);canvas.height=Math.ceil(clone.getBoundingClientRect().height*3);
     const context=captureContext(canvas,{rasterText:exactText}),nativeGet=canvas.getContext.bind(canvas);
     canvas.getContext=(kind,...args)=>kind==='2d'?context:nativeGet(kind,...args);
-    await html2canvas(clone,{canvas,scale:3,backgroundColor:'#fff',logging:false});
+    await html2canvas(clone,{canvas,scale:3,windowWidth:1200,windowHeight:Math.max(900,Math.ceil(clone.getBoundingClientRect().height)),backgroundColor:'#fff',logging:false});
     context.save();context.setTransform(3,0,0,3,0,0);
     for(const {axis,pos,width,color,segments}of borderGroups.values()){
       const merged=[];for(const span of segments.sort((a,b)=>a[0]-b[0])){const last=merged.at(-1);if(last&&span[0]<=last[1]+0.1)last[1]=Math.max(last[1],span[1]);else merged.push([...span]);}
