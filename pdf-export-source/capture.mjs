@@ -1,6 +1,7 @@
 const surfaces = new WeakMap();
+export const vectorImages = new Map();
 const styles = ['font','fillStyle','strokeStyle','lineWidth','lineCap','lineJoin','miterLimit','globalAlpha','textAlign','textBaseline'];
-export function captureContext(canvas) {
+export function captureContext(canvas, { rasterText = false } = {}) {
   if (surfaces.has(canvas)) return surfaces.get(canvas).context;
   const native = canvas.getContext('2d'), commands = [];
   const context = new Proxy(native, {
@@ -8,12 +9,13 @@ export function captureContext(canvas) {
       const value = target[name];
       if (typeof value !== 'function') return value;
       return (...args) => {
+        if(name==='drawImage'&&vectorImages.has(args[0]?.src)) args[0].hfoVector=vectorImages.get(args[0].src);
         if(name==='drawImage'&&args[0].hfoVector){
-          commands.push({name,args});const vector=args[0].hfoVector,[,x,y,w,h]=args;
+          commands.push({name,args});const vector=args[0].hfoVector,[x,y,w,h]=args.length===9?args.slice(5):args.slice(1);
           target.save();target.translate(x,y);target.scale(w/vector.viewBox[2],h/vector.viewBox[3]);target.translate(-vector.viewBox[0],-vector.viewBox[1]);
           for(const path of vector.paths){target.fillStyle=path.fill;target.fill(new Path2D(path.d));}target.restore();return;
         }
-        if (name === 'fillText' && /[^\x20-\x7e\u00a0-\u00ff]/.test(String(args[0]))) {
+        if (name === 'fillText' && (rasterText || /[^\x20-\x7e\u00a0-\u00ff]/.test(String(args[0])))) {
           // Preserve browser shaping for Thai and other complex scripts.
           const metrics=target.measureText(String(args[0])),matrix=target.getTransform();
           const x=args[1],y=args[2],fontSize=parseFloat(target.font.match(/([\d.]+)px/)?.[1]||'12');
