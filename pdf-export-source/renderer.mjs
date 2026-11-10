@@ -15,24 +15,29 @@ export async function fromLivePage(page, { exactText = true } = {}) {
   clone.hidden=false;clone.style.cssText+=';position:absolute;left:-20000px;top:0;width:800px;min-width:800px;max-width:800px;box-sizing:border-box;box-shadow:none;border-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%;';
   document.body.append(clone);
   try {
-    const borderGroups=new Map(),origin=clone.getBoundingClientRect();
-    for(const cell of clone.querySelectorAll('th,td')){
-      const rect=cell.getBoundingClientRect(),css=getComputedStyle(cell);
-      for(const [edge,axis,pos,start,end]of [['Top','h',rect.top-origin.top,rect.left-origin.left,rect.right-origin.left],['Bottom','h',rect.bottom-origin.top,rect.left-origin.left,rect.right-origin.left],['Left','v',rect.left-origin.left,rect.top-origin.top,rect.bottom-origin.top],['Right','v',rect.right-origin.left,rect.top-origin.top,rect.bottom-origin.top]]){
-        const width=parseFloat(css['border'+edge+'Width']),color=css['border'+edge+'Color'];
-        if(!width||css['border'+edge+'Style']==='none'||color==='transparent'||color==='rgba(0, 0, 0, 0)')continue;
-        const key=[axis,pos.toFixed(2),width,color].join('|');if(!borderGroups.has(key))borderGroups.set(key,{axis,pos,width,color,segments:[]});borderGroups.get(key).segments.push([start,end]);
-      }
-      cell.style.borderColor='transparent';
-    }
+    const borderGroups=new Map();
     const logoElement=clone.querySelector('.hfd-oktb-logo');
     if(logoElement){const background=getComputedStyle(logoElement).backgroundImage,src=background.match(/url\(["']?(.*?)["']?\)/)?.[1];if(src){const picture=new Image();picture.src=src;await picture.decode();await prepareImage(picture,'logo');vectorImages.set(picture.src,logo);picture.style.cssText='width:100%;height:100%;object-fit:contain';logoElement.style.backgroundImage='none';logoElement.append(picture);}}
     const signature=clone.querySelector('#hfdSignatureOut');
     if(signature&&!signature.hidden&&signature.src){await signature.decode();await prepareImage(signature,'signature');vectorImages.set(signature.src,signature.hfoVector);}
-    const canvas=document.createElement('canvas');canvas.width=Math.ceil(clone.getBoundingClientRect().width*3);canvas.height=Math.ceil(clone.getBoundingClientRect().height*3);
+    const canvas=document.createElement('canvas');
     const context=captureContext(canvas,{rasterText:exactText}),nativeGet=canvas.getContext.bind(canvas);
     canvas.getContext=(kind,...args)=>kind==='2d'?context:nativeGet(kind,...args);
-    await html2canvas(clone,{canvas,scale:3,windowWidth:1200,windowHeight:Math.max(900,Math.ceil(clone.getBoundingClientRect().height)),backgroundColor:'#fff',logging:false});
+    await html2canvas(clone,{canvas,scale:3,windowWidth:1200,windowHeight:900,backgroundColor:'#fff',logging:false,onclone:async(doc,captured)=>{
+        await doc.fonts.ready;
+        const origin=captured.getBoundingClientRect();
+        canvas.width=Math.ceil(origin.width*3);canvas.height=Math.ceil(origin.height*3);
+        for(const cell of captured.querySelectorAll('th,td')){
+          const rect=cell.getBoundingClientRect(),css=doc.defaultView.getComputedStyle(cell);
+          for(const [edge,axis,pos,start,end]of [['Top','h',rect.top-origin.top,rect.left-origin.left,rect.right-origin.left],['Bottom','h',rect.bottom-origin.top,rect.left-origin.left,rect.right-origin.left],['Left','v',rect.left-origin.left,rect.top-origin.top,rect.bottom-origin.top],['Right','v',rect.right-origin.left,rect.top-origin.top,rect.bottom-origin.top]]){
+            const width=parseFloat(css['border'+edge+'Width']),color=css['border'+edge+'Color'];
+            if(!width||css['border'+edge+'Style']==='none'||color==='transparent'||color==='rgba(0, 0, 0, 0)')continue;
+            const key=[axis,pos.toFixed(2),width,color].join('|');if(!borderGroups.has(key))borderGroups.set(key,{axis,pos,width,color,segments:[]});borderGroups.get(key).segments.push([start,end]);
+          }
+          cell.style.borderColor='transparent';
+        }
+      }
+    });
     context.save();context.setTransform(3,0,0,3,0,0);
     for(const {axis,pos,width,color,segments}of borderGroups.values()){
       const merged=[];for(const span of segments.sort((a,b)=>a[0]-b[0])){const last=merged.at(-1);if(last&&span[0]<=last[1]+0.1)last[1]=Math.max(last[1],span[1]);else merged.push([...span]);}

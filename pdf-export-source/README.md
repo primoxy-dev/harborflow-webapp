@@ -40,6 +40,21 @@ than the phone's visible panel size. Text autosizing is disabled on document
 content. This keeps exported layout independent of responsive panels, ancestor
 transforms, horizontal scroll and mobile text inflation.
 
+Table borders and canvas dimensions must be measured in html2canvas's `onclone`
+callback, after the capture document has laid out and its fonts are ready.
+Measurements from the original mobile document can differ from that capture and
+must not be mixed with captured text coordinates.
+
+Regression test (requires Playwright/Chromium, or `PLAYWRIGHT_MODULE` and
+`CHROME_PATH` pointing to an existing installation):
+
+```
+node --test pdf-export-source/tests/mobile-layout.browser.mjs
+```
+
+The test forces viewport-dependent text reflow before export, then compares the
+rendered mobile and desktop PDFs pixel for pixel to catch shifted table borders.
+
 Summary, Calendar and legacy Quotation retain the common vector writer. The
 existing React PDF quotation editor uses its own vector renderer and is unchanged.
 
