@@ -44,7 +44,7 @@ export async function fromLivePage(page, { exactText = true } = {}) {
       context.strokeStyle=color;context.lineWidth=width;context.beginPath();for(const [start,end]of merged){context.moveTo(axis==='h'?start:pos,axis==='h'?pos:start);context.lineTo(axis==='h'?end:pos,axis==='h'?pos:end);}context.stroke();
     }
     context.restore();
-    return fromCanvases([canvas],{width:595,height:842,preserveAspectRatio:true});
+    return fromCanvases([canvas],{width:595,height:842,preserveAspectRatio:true,verticalAlign:page.classList.contains('hfd-permit-page')?'top':'center'});
   } finally {clone.remove();vectorImages.clear();}
 }
 function drawPath(ctx,d) {
@@ -88,7 +88,7 @@ export async function prepareImage(image,kind,review=true) {
 
 // Replay the same drawing commands used for the screen onto a PDF surface.
 // Callers supply a text image for scripts which must retain browser shaping.
-export function createVectorPdf(pages, { width = 595, height = 842, preserveAspectRatio = false } = {}) {
+export function createVectorPdf(pages, { width = 595, height = 842, preserveAspectRatio = false, verticalAlign = 'center' } = {}) {
   if (!pages.length) throw new Error('No PDF pages');
   const pdf = new jsPDF({unit:'pt',format:[width,height],orientation:width > height ? 'landscape' : 'portrait',compress:true});
   pages.forEach((page,index) => {
@@ -96,7 +96,7 @@ export function createVectorPdf(pages, { width = 595, height = 842, preserveAspe
     const ctx = pdf.context2d;
     ctx.autoPaging = false;
     ctx.save();
-    const {sx,sy,x:offsetX,y:offsetY}=pageFit(page.width,page.height,width,height,preserveAspectRatio);
+    const {sx,sy,x:offsetX,y:offsetY}=pageFit(page.width,page.height,width,height,preserveAspectRatio,verticalAlign);
     ctx.translate(offsetX,offsetY);
     ctx.scale(sx,sy);
     for (const command of page.commands) {

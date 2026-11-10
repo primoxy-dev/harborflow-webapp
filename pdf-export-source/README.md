@@ -34,6 +34,8 @@ English text in these three documents. Shared table borders are merged and drawn
 once as vector lines. Logos and approved signatures remain vector paths. The page
 is fitted proportionally onto A4 without stretching and centered horizontally
 and vertically so unused page space is distributed evenly.
+Terminal Permit uses top alignment instead of vertical centering, with its
+smaller live-page top padding, to avoid a large blank area above the letterhead.
 
 Exports use an isolated 800px-wide document and a 1200px capture viewport, rather
 than the phone's visible panel size. Text autosizing is disabled on document
