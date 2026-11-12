@@ -187,12 +187,19 @@
   async function download(input){
     if(!input.people?.length)throw Error('กรุณาเลือกลูกเรือก่อนดาวน์โหลด');
     const name=fileName(input.people,input.preview.job.vessel);
-    if(input.page&&window.HarborFlowVectorPdf?.fromLivePage){saveLivePdf(await window.HarborFlowVectorPdf.fromLivePage(input.page),name);return name;}
-    const pages=await renderPages(input);
-    const blob=pdfFromPages(pages),url=URL.createObjectURL(blob);
-    const link=document.createElement('a');link.href=url;link.download=name;
-    document.body.appendChild(link);link.click();link.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),60000);
+    const blob=input.page&&window.HarborFlowVectorPdf?.fromLivePage
+      ?await window.HarborFlowVectorPdf.fromLivePage(input.page)
+      :pdfFromPages(await renderPages(input));
+    if(input.fileHandle){
+      const writer=await input.fileHandle.createWritable();
+      try {
+        await writer.write(blob);
+        await writer.close();
+      }catch(error){
+        try{await writer.abort();}catch{}
+        throw error;
+      }
+    }else saveLivePdf(blob,name);
     return name;
   }
   function saveLivePdf(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
