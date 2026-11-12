@@ -153,7 +153,10 @@
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
       </article></div>
       <p class="hfd-warning">${escape(preview.notice)} ข้อมูลผู้ติดต่อและลายเซ็นบันทึกส่วนตัวตามบัญชีผู้ใช้</p>
-      <button type="button" class="secondary" data-download-oktb ${selectedPeople.length?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>`;
+      <div class="hfo-row">
+        <button type="button" class="secondary" data-download-oktb ${selectedPeople.length?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>
+        <button type="button" class="secondary" data-save-oktb ${selectedPeople.length?'':'disabled'}>Save as</button>
+      </div>`;
   }
   function clear() {
     for(const saver of activeSavers)saver.dispose();activeSavers.clear();
@@ -171,7 +174,7 @@
     ctx.airline=selectedAirline(preview,ctx,airlineNames);
     host.querySelector('#hfdAirline').value=ctx.airline;
     host.querySelector('#hfdAirlineOut').textContent=ctx.airline||'[airline not set]';
-    host.querySelector('[data-download-oktb]').disabled=!selected.length;
+    host.querySelectorAll('[data-download-oktb],[data-save-oktb]').forEach(button=>{button.disabled=!selected.length;});
     host.querySelectorAll('[data-oktb-person]').forEach(input => { input.checked = ctx.selected.has(input.dataset.oktbPerson); });
   }
   function showSignature(host, signature) {
@@ -473,10 +476,30 @@
         queueDocument(host,ctx,options);
       }
       if (target.hasAttribute('data-clear-signature') && profile.canSave) { showSignature(host, ''); remember(host, profile, {signature:''}); }
-      if (target.hasAttribute('data-download-oktb')) {
+      if (target.hasAttribute('data-download-oktb') || target.hasAttribute('data-save-oktb')) {
         const selected=preview.people.filter(person=>ctx.selected.has(person.id));
         if(!selected.length)return;
-        try {const outputMode=await downloadReady();await window.HarborFlowOktbPdf.download({outputMode,preview,people:selected,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page')});message(host,'ดาวน์โหลด PDF แล้ว');}
+        try {
+          const pdf=window.HarborFlowOktbPdf;
+          let fileHandle;
+          host.inert=true;
+          if(target.hasAttribute('data-save-oktb')&&typeof window.showSaveFilePicker==='function'){
+            // The file picker must open before awaiting saves or rendering.
+            try {
+              fileHandle=await window.showSaveFilePicker({
+                suggestedName:pdf.fileName(selected,preview.job.vessel),
+                types:[{description:'PDF document',accept:{'application/pdf':['.pdf']}}]
+              });
+            }catch(error){
+              if(error.name==='AbortError')return;
+              throw error;
+            }
+          }
+          if(account!==profile||!host.isConnected)return;
+          const outputMode=await downloadReady();
+          await pdf.download({outputMode,preview,people:selected,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page'),fileHandle});
+          message(host,fileHandle?'บันทึก PDF ลงในเครื่องแล้ว':'ดาวน์โหลด PDF แล้ว');
+        }
         catch(error){if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาตรวจสิทธิ์อีกครั้ง</p>';}else message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);}finally{host.inert=false;}
       }
       if (target.hasAttribute('data-download-loi')) {
@@ -584,7 +607,7 @@
       setDocumentEditability(host);
       if(!options.localTransport){
         const status=document.createElement('p');status.id='hfdDocSaveStatus';status.role='status';status.textContent='โหลดข้อมูลส่วนกลางแล้ว';host.prepend(status);
-        if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-download-oktb]):not([data-download-permit]):not([data-download-loi])').forEach(el=>el.disabled=true);
+        if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-download-oktb]):not([data-save-oktb]):not([data-download-permit]):not([data-download-loi])').forEach(el=>el.disabled=true);
         host._hfdSourceFingerprint=data.sourceFingerprint;
         host._hfdScope=data.preview.scope;
         host._hfdQueuedSections=formState.encodeDocumentContext(ctx,options.type);

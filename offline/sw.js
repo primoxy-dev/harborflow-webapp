@@ -1,5 +1,5 @@
 // Public static templates only. Never cache authenticated pages, APIs or drafts.
-const CACHE='harborflow-offline-documents-v12';
+const CACHE='harborflow-offline-documents-v13';
 const paths=['./','./index.html','./app.mjs','./style.css','./draft-store.mjs','../documents.js','../documents.css','../pdf-vector.js','../oktb-pdf.js','../permit-draft.mjs','../lib/document-preview.mjs'];
 const urls=paths.map(path=>new URL(path,self.location.href).href);
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(urls))));
