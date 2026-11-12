@@ -190,8 +190,12 @@
     const blob=input.page&&window.HarborFlowVectorPdf?.fromLivePage
       ?await window.HarborFlowVectorPdf.fromLivePage(input.page)
       :pdfFromPages(await renderPages(input));
-    if(input.fileHandle){
-      const writer=await input.fileHandle.createWritable();
+    await saveLivePdf(blob,name,input.fileHandle);
+    return name;
+  }
+  async function saveLivePdf(blob,name,fileHandle){
+    if(fileHandle){
+      const writer=await fileHandle.createWritable();
       try {
         await writer.write(blob);
         await writer.close();
@@ -199,13 +203,22 @@
         try{await writer.abort();}catch{}
         throw error;
       }
-    }else saveLivePdf(blob,name);
-    return name;
+      return;
+    }
+    const url=URL.createObjectURL(blob),link=document.createElement('a');
+    link.href=url;link.download=name;
+    document.body.appendChild(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
   }
-  function saveLivePdf(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-  async function downloadLoi({preview,person,ctx,profile,logo,page,outputMode='sample',previewOnly=false}) {
+  const loiFileName=(person,vessel)=>fileName([person],vessel).replace(/^OKTB/,'LOI');
+  const permitFileName=vessel=>'TERMINAL PERMIT - '+String(vessel||'VESSEL').replace(/[\\/:*?"<>|\x00-\x1f]/g,' ').trim().slice(0,100).toUpperCase()+'.PDF';
+  async function downloadLoi({preview,person,ctx,profile,logo,page,fileHandle,outputMode='sample',previewOnly=false}) {
     if(!person?.id||!ctx.embassy)throw Error('กรุณาเลือกลูกเรือและสถานทูต');
-    if(page&&!previewOnly&&window.HarborFlowVectorPdf?.fromLivePage){const name=fileName([person],preview.job.vessel).replace(/^OKTB/,'LOI');saveLivePdf(await window.HarborFlowVectorPdf.fromLivePage(page),name);return name;}
+    const name=loiFileName(person,preview.job.vessel);
+    if(page&&!previewOnly&&window.HarborFlowVectorPdf?.fromLivePage){
+      await saveLivePdf(await window.HarborFlowVectorPdf.fromLivePage(page),name,fileHandle);
+      return name;
+    }
     const surface=singlePageSurface(),pages=[];
     let pen=surface.pen;pen.scale(SCALE,SCALE);pen.fillStyle='#fff';pen.fillRect(0,0,PAGE_W,PAGE_H);
     const logoImage=await image(logoSource(logo),'logo'),signature=profile.signature?await image(profile.signature,'signature',previewOnly):null;
@@ -262,12 +275,17 @@
     pages.push(surface.finish(y));
     for(const [index,p]of pages.entries()){pen=(window.HarborFlowVectorPdf?.captureContext(p)||p.getContext('2d'));pen.save();pen.fillStyle='rgba(160,0,0,.12)';pen.font='bold 37px Arial';pen.textAlign='center';pen.translate(PAGE_W/2,PAGE_H/2);pen.rotate(-.32);if(outputMode!=='final')pen.fillText('SAMPLE · NOT APPROVED',0,0);pen.restore();text((outputMode==='final'?'':'DRAFT · ')+(index+1)+' / '+pages.length,PAGE_W-60,PAGE_H-22,8,false,'right');}
     if(previewOnly)return pages;
-    const name=fileName([person],preview.job.vessel).replace(/^OKTB/,'LOI');
-    const blob=pdfFromPages(pages),url=URL.createObjectURL(blob),link=document.createElement('a');
-    link.href=url;link.download=name;document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
+    await saveLivePdf(pdfFromPages(pages),name,fileHandle);
+    return name;
   }
-  async function downloadPermit({preview,ctx,profile,logo,page:livePage,outputMode='sample',returnFile=false,previewOnly=false}){
-    if(livePage&&!previewOnly&&window.HarborFlowVectorPdf?.fromLivePage){const name='TERMINAL PERMIT - '+String(preview.job.vessel||'VESSEL').replace(/[\\/:*?"<>|]/g,' ').toUpperCase()+'.PDF',blob=await window.HarborFlowVectorPdf.fromLivePage(livePage);if(returnFile)return {blob,name};saveLivePdf(blob,name);return name;}
+  async function downloadPermit({preview,ctx,profile,logo,page:livePage,fileHandle,outputMode='sample',returnFile=false,previewOnly=false}){
+    const name=permitFileName(preview.job.vessel);
+    if(livePage&&!previewOnly&&window.HarborFlowVectorPdf?.fromLivePage){
+      const blob=await window.HarborFlowVectorPdf.fromLivePage(livePage);
+      if(returnFile)return {blob,name};
+      await saveLivePdf(blob,name,fileHandle);
+      return name;
+    }
     const permitScale=3.5;
     const draft=ctx.permitDraft;
     if(!draft?.tables?.length)throw Error('ไม่มีตารางในร่างเอกสาร');
@@ -349,13 +367,12 @@
     for(const [i,p] of (outputMode==='final'?[]:pages).entries()){
       const c=(window.HarborFlowVectorPdf?.captureContext(p)||p.getContext('2d'));c.save();c.setTransform(permitScale,0,0,permitScale,0,0);c.fillStyle='rgba(160,0,0,.10)';c.font='bold 36px Arial';c.textAlign='center';c.translate(PAGE_W/2,PAGE_H/2);c.rotate(-.32);c.fillText('SAMPLE - NOT APPROVED',0,0);c.restore();c.save();c.setTransform(permitScale,0,0,permitScale,0,0);c.fillStyle='#555';c.font='8px Arial';c.textAlign='right';c.fillText('DRAFT - '+(i+1)+' / '+pages.length,PAGE_W-36,PAGE_H-22);c.restore();
     }
-    const vessel=String(preview.job.vessel||'VESSEL').replace(/[\\/:*?"<>|\x00-\x1f]/g,' ').trim().slice(0,100);
-    const name='TERMINAL PERMIT - '+vessel.toUpperCase()+'.PDF';
     if(previewOnly)return pages;
     const blob=pdfFromPages(pages);if(returnFile)return {blob,name};
-    const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);return name;
+    await saveLivePdf(blob,name,fileHandle);
+    return name;
   }
-  window.HarborFlowOktbPdf={renderPreview:input=>input.type==='loi'?downloadLoi({...input,previewOnly:true}):input.type==='permit'?downloadPermit({...input,previewOnly:true}):renderPages({...input,previewOnly:true}),download,fileName,downloadLoi,downloadPermit,pdfFromPages};
+  window.HarborFlowOktbPdf={renderPreview:input=>input.type==='loi'?downloadLoi({...input,previewOnly:true}):input.type==='permit'?downloadPermit({...input,previewOnly:true}):renderPages({...input,previewOnly:true}),download,fileName,loiFileName,permitFileName,downloadLoi,downloadPermit,pdfFromPages};
 })();
 
 

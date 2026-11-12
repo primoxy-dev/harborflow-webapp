@@ -267,7 +267,10 @@
         <div class="hfd-permit-signoff"><p>Thank you &amp; Best regards,</p><div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" ${saved.signature?`src="${escape(saved.signature)}"`:'hidden'}><span id="hfdSignaturePlaceholder" ${saved.signature?'hidden':''}>Signature pending owner approval</span></div><p>(<span id="hfdSignerOut">${escape(saved.signer||'[signatory not set]')}</span>)<br>Operations Coordinator, Shipping Services<br>Mobile: <span id="hfdPhoneOut">${escape(saved.phone||'[phone not set]')}</span><br>As Agents Only</p></div>
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
       </article></div><p class="hfd-warning">ร่างยังไม่อนุมัติ ห้ามใช้ยื่นจริง · หัวข้อและแถวที่แก้ใช้ในร่างนี้ ไม่บันทึกข้อมูลบุคคลกลับ Job</p>
-      <button type="button" class="secondary" data-download-permit>ดาวน์โหลด PDF (ร่าง)</button>`;
+      <div class="hfo-row">
+        <button type="button" class="secondary" data-download-permit>ดาวน์โหลด PDF (ร่าง)</button>
+        <button type="button" class="secondary" data-save-permit>Save as</button>
+      </div>`;
   }
   function loiPerson(preview,ctx) {
     const person=preview.people.find(person=>person.id===ctx.loiPersonId);
@@ -318,7 +321,10 @@
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
       </article></div>
       <p class="hfd-notice">ข้อความรับผิดชอบตามต้นแบบ LOI ต้องให้เจ้าของตรวจและอนุมัติ · ห้ามใช้ร่างยื่นจริง</p>
-      <button type="button" class="secondary" data-download-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>`;
+      <div class="hfo-row">
+        <button type="button" class="secondary" data-download-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>
+        <button type="button" class="secondary" data-save-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>Save as</button>
+      </div>`;
   }
   function updateLoiEmbassy(host,ctx) {
     const custom=ctx.embassy==='other',text=ctx.embassySnapshot?.name||(custom?ctx.customEmbassy:ctx.embassy);
@@ -328,10 +334,24 @@
     source.hidden=!entry?.sourceUrl;if(entry?.sourceUrl)source.href=entry.sourceUrl;else source.removeAttribute('href');
     host.querySelector('#hfdMissionStatus').textContent=(entry?.status==='verified'?'ตรวจแหล่งทางการ '+entry.verifiedAt:'ข้อมูลติดต่อยังตรวจไม่ครบ · กรุณาตรวจและกรอกช่องที่ขาดก่อนใช้')+' · ตรวจเขตรับผิดชอบกับสถานทูตก่อนใช้';
     for(const input of host.querySelectorAll('[data-mission-field]')){const key=input.dataset.missionField;input.value=['general','visa'].includes(key)?entry?.emails?.[key]?.join(' / ')||'':entry?.[key]||'';}
-    host.querySelector('[data-download-loi]').disabled=!ctx.loiPersonId||!text;
+    host.querySelectorAll('[data-download-loi],[data-save-loi]').forEach(button=>{button.disabled=!ctx.loiPersonId||!text;});
   }
   function bind(host, preview, ctx, profile, options, airlineNames) {
     const get = options.localTransport?.get || window.HarborFlowDocuments.request;
+    async function choosePdfDestination(suggestedName){
+      host.inert=true;
+      if(typeof window.showSaveFilePicker!=='function')return;
+      try{
+        // Open the picker during the click, before waiting for saves or rendering.
+        const handle=await window.showSaveFilePicker({
+          suggestedName,types:[{description:'PDF document',accept:{'application/pdf':['.pdf']}}]
+        });
+        return account===profile&&host.isConnected?handle:null;
+      }catch(error){
+        if(error.name==='AbortError')return null;
+        throw error;
+      }
+    }
     async function downloadReady(){
       host.inert=true;
       await profile.queue;if(profile.blocked)throw Error('ค่าเริ่มต้นยังบันทึกไม่สำเร็จ กรุณาตรวจและลองใหม่');
@@ -435,7 +455,7 @@
         }catch(error){if(error.name!=='AbortError')host._hfdPermitMail?.status(error.message||'Could not share the PDF.',true);}
         return;
       }
-      if(target.hasAttribute('data-download-permit')||target.hasAttribute('data-compose-permit')||target.hasAttribute('data-prepare-permit-share')){
+      if(target.hasAttribute('data-download-permit')||target.hasAttribute('data-save-permit')||target.hasAttribute('data-compose-permit')||target.hasAttribute('data-prepare-permit-share')){
         const composing=target.hasAttribute('data-compose-permit'),preparing=target.hasAttribute('data-prepare-permit-share');let outlook=null,url='';
         try{
           if(preparing&&typeof navigator.share!=='function')throw Error('File sharing is unavailable on this device. Download the PDF and attach it in Outlook.');
@@ -444,6 +464,9 @@
             url=host._hfdPermitMail.composeUrl();
             outlook=window.open('about:blank','_blank');if(!outlook)throw Error('Allow pop-ups to open Outlook.');outlook.opener=null;
           }
+          const pdf=window.HarborFlowOktbPdf;
+          const fileHandle=target.hasAttribute('data-save-permit')?await choosePdfDestination(pdf.permitFileName(preview.job.vessel)):undefined;
+          if(fileHandle===null)return;
           const outputMode=await downloadReady();
           const fresh=await get({action:'preview',jobId:options.jobId,serviceId:options.serviceId,type:'permit'});
           if(account!==profile||fresh.login!==options.login)throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
@@ -452,14 +475,14 @@
           }
           if(JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job)||JSON.stringify(fresh.preview.people)!==JSON.stringify(preview.people))throw Error('ข้อมูล Job หรือรายชื่อเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจตารางก่อนดาวน์โหลด');
           if(preview.scope?.visitorView){const current=await get({action:'permitDefaults'});if(current.login!==options.login||current.version!==ctx.permitDefaults.version)throw Error('ค่าเริ่มต้นเปลี่ยน กรุณาเปิดเอกสารใหม่และตรวจร่างก่อนดาวน์โหลด');}
-          const generated=await window.HarborFlowOktbPdf.downloadPermit({outputMode,preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page'),returnFile:preparing});
+          const generated=await pdf.downloadPermit({outputMode,preview,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page'),returnFile:preparing,fileHandle});
           if(preparing){
             const file=new File([generated.blob],generated.name,{type:'application/pdf'});
             if(typeof navigator.canShare==='function'&&!navigator.canShare({files:[file]}))throw Error('This device cannot share PDF files. Download and attach the PDF in Outlook.');
             host._hfdShareFile={file,createdAt:Date.now()};const button=host.querySelector('[data-share-permit]');if(button)button.hidden=false;
             host._hfdPermitMail?.status('PDF ready. Tap Share PDF, then select Outlook if available.');return;
           }
-          message(host,'ดาวน์โหลด PDF แล้ว');
+          message(host,fileHandle?'บันทึก PDF ลงในเครื่องแล้ว':'ดาวน์โหลด PDF แล้ว');
           if(outlook){outlook.location.href=url;host._hfdPermitMail.status('PDF downloaded. Copy the table, paste it in Outlook and attach the PDF.');}
         }catch(error){if(outlook)outlook.close();if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}else if(host._hfdPermitMail&&(composing||preparing))host._hfdPermitMail.status(error.message||'Could not prepare PDF.',true);else if(host.querySelector('#hfdSaveStatus'))message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);else host.textContent=error.message;}finally{host.inert=false;}
         return;
@@ -481,37 +504,28 @@
         if(!selected.length)return;
         try {
           const pdf=window.HarborFlowOktbPdf;
-          let fileHandle;
-          host.inert=true;
-          if(target.hasAttribute('data-save-oktb')&&typeof window.showSaveFilePicker==='function'){
-            // The file picker must open before awaiting saves or rendering.
-            try {
-              fileHandle=await window.showSaveFilePicker({
-                suggestedName:pdf.fileName(selected,preview.job.vessel),
-                types:[{description:'PDF document',accept:{'application/pdf':['.pdf']}}]
-              });
-            }catch(error){
-              if(error.name==='AbortError')return;
-              throw error;
-            }
-          }
-          if(account!==profile||!host.isConnected)return;
+          const fileHandle=target.hasAttribute('data-save-oktb')?await choosePdfDestination(pdf.fileName(selected,preview.job.vessel)):undefined;
+          if(fileHandle===null||account!==profile||!host.isConnected)return;
           const outputMode=await downloadReady();
           await pdf.download({outputMode,preview,people:selected,ctx,profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page'),fileHandle});
           message(host,fileHandle?'บันทึก PDF ลงในเครื่องแล้ว':'ดาวน์โหลด PDF แล้ว');
         }
         catch(error){if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาตรวจสิทธิ์อีกครั้ง</p>';}else message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);}finally{host.inert=false;}
       }
-      if (target.hasAttribute('data-download-loi')) {
+      if (target.hasAttribute('data-download-loi')||target.hasAttribute('data-save-loi')) {
         const person=loiPerson(preview,ctx),embassy=ctx.embassySnapshot?.name||(ctx.embassy==='other'?ctx.customEmbassy:ctx.embassy);
         if(!person||!embassy)return;
         try {
+          const pdf=window.HarborFlowOktbPdf;
+          const fileHandle=target.hasAttribute('data-save-loi')?await choosePdfDestination(pdf.loiFileName(person,preview.job.vessel)):undefined;
+          if(fileHandle===null)return;
           const outputMode=await downloadReady();
           const fresh=await get({action:'preview',jobId:options.jobId,serviceId:options.serviceId,type:'loi'});
           if(account!==profile||fresh.login!==options.login)throw Error('บัญชีเปลี่ยน กรุณาเปิดเอกสารใหม่');
           const original=preview.people.find(p=>p.id===ctx.loiPersonId),current=fresh.preview.people.find(p=>p.id===ctx.loiPersonId);
           if(!current||JSON.stringify(current)!==JSON.stringify(original)||JSON.stringify(fresh.preview.job)!==JSON.stringify(preview.job))throw Error('ข้อมูล Job หรือลูกเรือเปลี่ยน กรุณาเปิดแท็บใหม่และตรวจร่างก่อนดาวน์โหลด');
-          await window.HarborFlowOktbPdf.downloadLoi({outputMode,preview,person,ctx:{...ctx,embassy,missionContactLines:missionLines(ctx)},profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page')});message(host,'ดาวน์โหลด PDF แล้ว');
+          await pdf.downloadLoi({outputMode,preview,person,ctx:{...ctx,embassy,missionContactLines:missionLines(ctx)},profile:profile.values,logo:host.querySelector('.hfd-oktb-logo'),page:host.querySelector('.hfd-oktb-page'),fileHandle});
+          message(host,fileHandle?'บันทึก PDF ลงในเครื่องแล้ว':'ดาวน์โหลด PDF แล้ว');
         }
         catch(error){
           if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ Crew ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}
@@ -607,7 +621,7 @@
       setDocumentEditability(host);
       if(!options.localTransport){
         const status=document.createElement('p');status.id='hfdDocSaveStatus';status.role='status';status.textContent='โหลดข้อมูลส่วนกลางแล้ว';host.prepend(status);
-        if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-download-oktb]):not([data-save-oktb]):not([data-download-permit]):not([data-download-loi])').forEach(el=>el.disabled=true);
+        if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-download-oktb],[data-save-oktb],[data-download-permit],[data-save-permit],[data-download-loi],[data-save-loi])').forEach(el=>el.disabled=true);
         host._hfdSourceFingerprint=data.sourceFingerprint;
         host._hfdScope=data.preview.scope;
         host._hfdQueuedSections=formState.encodeDocumentContext(ctx,options.type);
