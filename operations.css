@@ -79,6 +79,9 @@
 .hfo-crew-first .hfo-crew-flight-number{padding-top:28px}
 .hfo-crew-extra{padding-top:0}
 .hfo-crew-no-flights{grid-column:4/-1;align-self:center;color:#526579}
+.hfo-visitor-compact .hfo-crew-detail-grid{grid-template-columns:26px minmax(54px,.7fr) minmax(66px,.9fr) minmax(67px,.9fr) minmax(51px,.7fr) minmax(51px,.7fr) minmax(68px,.9fr) minmax(66px,.9fr) minmax(64px,1fr) 100px;min-width:705px}
+.hfo-visitor-compact .hfo-crew-flight-number{grid-column:1;border-left:0}
+.hfo-visitor-compact .hfo-crew-no-flights{grid-column:1/-1}
 .hfo-person-expanded.hfo-crew-compact [data-person-save-status]:not(.hfo-save-error){position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;margin:0}
 .hfo-person-expanded.hfo-crew-compact .hfo-save-error{padding:0 10px 8px}
 .hfo-person-expanded .hfo-field{margin:8px 0}
