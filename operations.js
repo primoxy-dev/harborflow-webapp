@@ -498,9 +498,11 @@
   function personRow(p, i, kind) {
   const edit=canEditPeople(kind), expanded=state.personDraft?.id===p.id;
   const fields=[['nationality','Nationality'],['rank','Rank'],['dob','Date of Birth','date'],['seamanBook','Seaman book'],['passport','Passport'],['passportExpiry','PP. EXP','date']].filter(([key])=>kind==='crew'||key!=='seamanBook');
-  const nameCell=`<input data-person-field="name" data-person-id="${p.id}" aria-label="Name – Surname" value="${escape(p.data.name||'')}" ${edit?'':'disabled'}><button type="button" class="hfo-name-link" data-edit-person="${p.id}" aria-expanded="${expanded}">${kind==='crew'?'Immigration & flight details':'Flight details'} <span aria-hidden="true">${expanded?'▴':'▾'}</span></button>`;
+  const detailsLabel=kind==='crew'?'Immigration & flight details':'Flight details';
+  const detailsToggle=`<button type="button" class="${kind==='crew'?'hfo-btn hfo-crew-toggle':'hfo-name-link'}" data-edit-person="${p.id}" aria-expanded="${expanded}" aria-label="${detailsLabel}" title="${detailsLabel}">${kind==='crew'?'':detailsLabel+' '}<span aria-hidden="true">${expanded?'▴':'▾'}</span></button>`;
+  const nameCell=`<input data-person-field="name" data-person-id="${p.id}" aria-label="Name – Surname" value="${escape(p.data.name||'')}" ${edit?'':'disabled'}>${kind==='crew'?'':detailsToggle}`;
   return `<tr class="hfo-person-row"><td data-label="No.">${i+1}</td><td data-label="Name – Surname">${nameCell}</td>${fields.map(([key,label,type])=>`<td data-label="${label}">${crewTableInput(p,key,label,type||'text',edit)}</td>`).join('')}
-    <td data-label="Actions">${edit?`<button type="button" class="hfo-btn danger" data-remove-person="${p.id}" aria-label="Remove ${escape(p.data.name)}">×</button>`:''}</td></tr>
+    <td data-label="Actions"><div class="hfo-person-actions">${kind==='crew'?detailsToggle:''}${edit?`<button type="button" class="hfo-btn danger" data-remove-person="${p.id}" aria-label="Remove ${escape(p.data.name)}">×</button>`:''}</div></td></tr>
     ${expanded?`<tr class="hfo-person-details-row"><td colspan="${kind==='crew'?9:8}">${personForm()}</td></tr>`:''}`;
 }
   function newPersonRow(category, kind) {
@@ -588,7 +590,8 @@
     input.dispatchEvent(new Event('change',{bubbles:true}));
   }
 
-  function flightCell(fl,i,key,label,editable) {
+  const FLIGHT_FIELDS=[['airline','Airline'],['number','Flight No.'],['date','Date'],['from','From'],['to','To'],['departure','Departure'],['arrival','Arrival'],['booking','PNR']];
+  function flightCell(fl,i,key,label,editable,compact=false,showLabel=true) {
     const kind=key==='airline'?'airlines':['from','to'].includes(key)?'airports':'';
     const raw=fl[key]||'',formattedDate=key==='date'?formatDdMmm(raw):'';
     const value=key==='date'&&formattedDate!=='DDMMM'?formattedDate:String(raw).toUpperCase();
@@ -597,7 +600,9 @@
     const lookupAttrs=kind?`data-code-kind="${kind}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}" autocomplete="off" spellcheck="false"`:'';
     const input=`<input data-flight="${i}" data-flight-field="${key}" aria-label="${label}, flight ${i+1}" type="text" ${placeholder?`placeholder="${placeholder}"`:''} ${lookupAttrs} value="${escape(value)}" ${editable?'':'disabled'}>`;
     const row=kind?(flightCodes[kind]||[]).find(item=>item[0]===value):null;
-    return `<td data-label="${label}">${kind?`<div class="hfo-code-field">${input}<div id="${id}" class="hfo-code-results" role="listbox" aria-label="${label} suggestions" hidden></div><small class="hfo-code-caption">${escape(row?codeLabel(row,kind):'')}</small></div>`:input}</td>`;
+    const field=kind?`<div class="hfo-code-field">${input}<div id="${id}" class="hfo-code-results" role="listbox" aria-label="${label} suggestions" hidden></div><small class="hfo-code-caption">${escape(row?codeLabel(row,kind):'')}</small></div>`:input;
+    if(compact)return `<div class="hfo-crew-flight-field">${showLabel?`<span class="hfo-crew-label">${label}</span>`:''}${field}</div>`;
+    return `<td data-label="${label}">${field}</td>`;
   }
   const DOCUMENT_TYPES=[
     ['passport','Passport','Passport no., name, nationality, date of birth and expiry'],
@@ -636,22 +641,33 @@
   }
   function personForm() {
   const draft=state.personDraft,p=draft.data,edit=canEditPeople(draft.kind),flights=Array.isArray(p.flights)?p.flights:[],displayFlights=flights.length?flights:edit?[{}]:[];
+  const dis=edit?'':'disabled';
+  if(draft.kind==='crew'){
   const codes=['VISA','VISA-C','VOA','BG','OKTB','EX'];
   const current=p.immigration?.codes||{};
   const checked=code=>Boolean(current[code]||code==='VISA'&&p.immigration?.visa||code==='OKTB'&&p.immigration?.oktb);
-
-  const dis=edit?'':'disabled';
-  return `<form id="hfoPersonForm" class="hfo-person-expanded"><div class="hfo-toolbar"><h4>${draft.kind==='crew'?'Immigration & flight details':'Flight details'} · ${escape(p.name)}</h4><button type="button" class="hfo-btn" data-close-person>Close</button></div>
-    ${draft.kind==='crew'?`<div class="hfo-immigration-row">
-      ${FLAT_VISITORS[service()?.data.type]?'':sel(draft.kind==='crew'?'Change role':'Visitor role',p.category,'category',draft.kind==='crew'?CATEGORIES.slice(0,2):CATEGORIES.slice(2),dis)}
-      <fieldset class="hfo-immigration-compact"><legend>Immigration</legend><div class="hfo-immigration-codes">${codes.map(code=>`<label><input type="checkbox" name="immigration-${code}" ${checked(code)?'checked':''} ${dis}><span>${code}</span></label>`).join('')}</div></fieldset>
-        ${sel('Status',p.immigration?.status||'Not started','immigrationStatus',['Not started','Documents pending','Submitted','Approved','Rejected'],dis)}
+  const flightRow=(flight,i)=>`<span class="hfo-crew-flight-number" aria-label="Flight ${i+1}">#${i+1}</span>
+    ${FLIGHT_FIELDS.map(([key,label])=>flightCell(flight,i,key,label,edit,true,i===0)).join('')}
+    <div class="hfo-crew-flight-actions">${edit&&i===0?'<button type="button" class="hfo-btn" data-add-flight>+ Flight</button>':''}
+      ${edit&&flights.length?`<button type="button" class="hfo-btn danger" data-remove-flight="${i}" aria-label="Remove flight ${i+1}">×</button>`:''}</div>`;
+  return `<form id="hfoPersonForm" class="hfo-person-expanded hfo-crew-compact" aria-label="Immigration & flight details · ${escape(p.name)}">
+    <div class="hfo-crew-detail-scroll">
+      <div class="hfo-crew-detail-grid hfo-crew-first">
+        ${sel('Change role',p.category,'category',CATEGORIES.slice(0,2),dis)}
+        <fieldset class="hfo-immigration-compact"><legend>Immigration</legend><div class="hfo-immigration-codes">${codes.map(code=>`<label><input type="checkbox" name="immigration-${code}" ${checked(code)?'checked':''} ${dis}><span>${code}</span></label>`).join('')}</div></fieldset>
         <label class="hfo-field hfo-immigration-notes"><span>Notes</span><textarea name="immigrationNotes" rows="1" ${dis}>${escape(p.immigration?.notes||'')}</textarea></label>
-    </div>`:''}
+        ${displayFlights.length?flightRow(displayFlights[0],0):'<span class="hfo-crew-no-flights">No flights</span>'}
+      </div>
+      ${displayFlights.slice(1).map((flight,i)=>`<div class="hfo-crew-detail-grid hfo-crew-extra">${flightRow(flight,i+1)}</div>`).join('')}
+    </div>
+    ${edit?'<small data-person-save-status role="status" class="hfo-muted">Changes save automatically</small>':''}
+  </form>`;
+  }
+  return `<form id="hfoPersonForm" class="hfo-person-expanded"><div class="hfo-toolbar"><h4>Flight details · ${escape(p.name)}</h4><button type="button" class="hfo-btn" data-close-person>Close</button></div>
     <div class="hfo-toolbar"><h4>Flights · ${flights.length}</h4>${edit?'<button type="button" class="hfo-btn" data-add-flight>+ Add flight</button>':''}</div>
     <div class="hfo-table-wrap"><table class="hfo-table hfo-flight-table"><thead><tr><th>#</th><th>Airline</th><th>Flight No.</th><th>Date (DDMMM)</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>PNR</th><th></th></tr></thead><tbody>
     ${displayFlights.map((fl,i)=>`<tr><td data-label="#">${i+1}</td>
-      ${[['airline','Airline'],['number','Flight No.'],['date','Date (DDMMM)'],['from','From'],['to','To'],['departure','Departure'],['arrival','Arrival'],['booking','PNR']].map(([key,label])=>flightCell(fl,i,key,label,edit)).join('')}
+      ${FLIGHT_FIELDS.map(([key,label])=>flightCell(fl,i,key,key==='date'?'Date (DDMMM)':label,edit)).join('')}
       <td data-label="Remove">${edit&&flights.length?`<button type="button" class="hfo-btn danger" data-remove-flight="${i}" aria-label="Remove flight ${i+1}">×</button>`:''}</td></tr>`).join('')}
     </tbody></table></div>${edit?'<small data-person-save-status role="status" class="hfo-muted">Changes save automatically</small>':''}</form>`;
 }
@@ -926,9 +942,9 @@
     const draft=state.personDraft,form=document.getElementById('hfoPersonForm');if(!draft?.id||!form)return;
     const d=new FormData(form);
     if(d.has('category'))draft.data.category=String(d.get('category')||'');
-    if(draft.kind==='crew'&&d.has('immigrationStatus')){
+    if(draft.kind==='crew'&&d.has('immigrationNotes')){
       const codes=Object.fromEntries(['VISA','VISA-C','VOA','BG','OKTB','EX'].map(code=>[code,d.has('immigration-'+code)]));
-      draft.data.immigration={...(draft.data.immigration||{}),status:String(d.get('immigrationStatus')||'Not started'),codes,notes:String(d.get('immigrationNotes')||'')};
+      draft.data.immigration={...(draft.data.immigration||{}),codes,notes:String(d.get('immigrationNotes')||'')};
       delete draft.data.immigration.visa;delete draft.data.immigration.oktb;
     }
     if(!Array.isArray(draft.data.flights))draft.data.flights=[];
@@ -937,7 +953,6 @@
       if(!draft.data.flights[i])draft.data.flights[i]={airline:'',number:'',date:'',from:'',to:'',departure:'',arrival:'',booking:''};
       draft.data.flights[i][key]=input.value.toUpperCase();
     });
-    draft.data.flights=draft.data.flights.filter(flight=>Object.values(flight).some(value=>String(value||'').trim()));
   }
   function documentProgress(type,message,failed=false) {
     const output=document.querySelector(`[data-doc-progress="${type}"]`);

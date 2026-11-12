@@ -57,6 +57,30 @@
 .hfo-name-link{display:block;border:0;background:none;color:#0b6f68;padding:4px 0;text-align:left;font-size:11px;text-decoration:underline;cursor:pointer}
 .hfo-person-expanded{padding:16px;border:1px solid #c9e8e3;border-radius:9px;background:#f8fcfb;max-width:100%;min-width:0}
 .hfo-person-expanded h4{margin:4px 0 10px}
+.hfo-person-actions{display:flex;gap:4px;align-items:center;white-space:nowrap}
+.hfo-person-actions .hfo-btn{padding:5px 8px;min-height:30px}
+.hfo-person-actions .hfo-crew-toggle{color:#086b65}
+.hfo-crew-compact{padding:0;border-radius:6px;background:#f5f8fa;border-color:#d7e0e9}
+.hfo-crew-detail-scroll{overflow-x:auto}
+.hfo-crew-detail-grid{display:grid;grid-template-columns:100px 290px minmax(116px,1.25fr) 26px 54px 66px 67px 51px 51px 68px 66px minmax(64px,.45fr) 100px;gap:8px;min-width:1240px;padding:8px 10px;align-items:start}
+.hfo-person-expanded.hfo-crew-compact .hfo-field{display:block;margin:0;min-width:0}
+.hfo-crew-compact .hfo-field>span,.hfo-crew-label,.hfo-crew-compact legend{display:block;font-size:12px;font-weight:600;color:#293e55;margin-bottom:5px;line-height:14px;white-space:nowrap}
+.hfo-crew-compact .hfo-field select,.hfo-crew-compact .hfo-field textarea,.hfo-crew-flight-field input{display:block;width:100%;height:32px;min-height:32px;box-sizing:border-box;padding:6px;font-size:12px}
+.hfo-crew-flight-field{min-width:0}
+.hfo-crew-flight-field .hfo-code-caption:empty{display:none}
+.hfo-crew-compact .hfo-immigration-compact .hfo-immigration-codes{min-height:32px;gap:3px}
+.hfo-crew-compact .hfo-immigration-compact .hfo-immigration-codes label{padding:4px 3px;gap:2px}
+.hfo-crew-compact .hfo-immigration-codes input{width:12px;height:12px;padding:0}
+.hfo-crew-compact .hfo-immigration-codes label:has(input:checked){background:#e6f3f0;border-color:#8dc4ba;color:#075f5a}
+.hfo-crew-flight-number{grid-column:4;align-self:stretch;display:flex;align-items:flex-start;justify-content:center;border-left:1px solid #d7e0e9;color:#415971;font-size:11px;font-weight:600;padding-top:9px}
+.hfo-crew-flight-actions{display:flex;gap:3px;align-items:center}
+.hfo-crew-flight-actions .hfo-btn{height:32px;padding:4px 6px;font-size:12px;white-space:nowrap}
+.hfo-crew-first .hfo-crew-flight-actions{padding-top:19px}
+.hfo-crew-first .hfo-crew-flight-number{padding-top:28px}
+.hfo-crew-extra{padding-top:0}
+.hfo-crew-no-flights{grid-column:4/-1;align-self:center;color:#526579}
+.hfo-person-expanded.hfo-crew-compact [data-person-save-status]:not(.hfo-save-error){position:absolute;width:1px;height:1px;clip-path:inset(50%);overflow:hidden;margin:0}
+.hfo-person-expanded.hfo-crew-compact .hfo-save-error{padding:0 10px 8px}
 .hfo-person-expanded .hfo-field{margin:8px 0}
 .hfo-immigration{border:1px solid #dbe3ed;border-radius:7px;margin:14px 0;padding:12px}
 .hfo-immigration legend{font-weight:700;font-size:13px;padding:0 6px}
@@ -109,7 +133,7 @@
   .hfo-service-tile{min-height:135px;padding:10px}
   .hfo-service-icon{width:40px;height:40px;font-size:25px}
   .hfo-roster-table tr.hfo-person-row,.hfo-flight-table tbody tr{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .hfo-person-expanded{padding:10px}
+  .hfo-person-expanded:not(.hfo-crew-compact){padding:10px}
   .hfo-immigration-codes{gap:4px}
   .hfo-immigration-codes label{font-size:10px}
 }
