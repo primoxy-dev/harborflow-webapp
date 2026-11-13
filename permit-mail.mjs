@@ -3,11 +3,6 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const permitFields={vessel:'Vessel',jobNo:'Job No.',port:'Port',terminal:'Terminal',eta:'ETA',etd:'ETD',permitDate:'Permit date'};
 const clean=v=>String(v||'').trim();
 const split=v=>String(v||'').split(/[;,\n]+/).map(clean).filter(Boolean);
-export function sharePreparedPermit(ready,device,now=Date.now()){
- if(!ready||now-ready.createdAt>120000)throw Error('PDF expired. Prepare it again before sharing.');
- if(typeof device.share!=='function'||typeof device.canShare==='function'&&!device.canShare({files:[ready.file]}))throw Error('File sharing is unavailable on this device. Download the PDF and attach it in Outlook.');
- return device.share({files:[ready.file],title:'Terminal Permit'});
-}
 export function permitTablesPlainText(source){
  const blocks=[];
  for(const section of source.querySelectorAll('section')){
@@ -43,7 +38,7 @@ export function outlookComposeUrl({to,cc,subject,body}){
 export async function mountPermitMail(host,{preview,ctx,login,get}){
  const root=document.createElement('section');
  root.className='hfd-oktb-settings hfd-permit-mail';
- root.innerHTML='<button type="button" class="primary" data-open-permit-mail>Compose Email</button> <button type="button" class="secondary" data-prepare-permit-share>Prepare PDF to share</button> <button type="button" class="secondary" data-share-permit hidden>Share PDF</button><p role="status" data-permit-mail-status></p>';
+ root.innerHTML='<button type="button" class="primary" data-open-permit-mail>Compose Email</button><p role="status" data-permit-mail-status></p>';
  host.querySelector('[data-download-permit]')?.closest('.hfd-pdf-actions')?.before(root);
  const dialog=createMailComposer({
   templateLabel:'Terminal Permit email template', availableFields:permitFields,
@@ -185,5 +180,5 @@ export async function mountPermitMail(host,{preview,ctx,login,get}){
  return {refresh,composeUrl:({includeBody=true}={})=>{
   const data=draft();
   return outlookComposeUrl({...data,subject:fillPermitMail(data.subject,preview.job,ctx),body:includeBody?fillPermitMail(editor.innerText,preview.job,ctx):''});
- },share:ready=>sharePreparedPermit(ready,navigator),status};
+ },status};
 }
