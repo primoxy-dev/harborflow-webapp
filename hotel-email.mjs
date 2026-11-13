@@ -1,20 +1,20 @@
-const tags = new Set('P DIV BR B STRONG I EM U UL OL LI TABLE THEAD TBODY TFOOT TR TH TD A SPAN'.split(' '));
+const tags = new Set('P DIV SECTION H3 BR B STRONG I EM U UL OL LI TABLE THEAD TBODY TFOOT TR TH TD A SPAN'.split(' '));
 const drop = new Set('SCRIPT STYLE SVG MATH IFRAME OBJECT EMBED TEMPLATE'.split(' '));
 const addressPattern = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 export const fields = {hotel:'Hotel',vessel:'Vessel',checkIn:'Check-in',checkOut:'Check-out',rooms:'Rooms',roomType:'Room type'};
-const substitute = (text, values) => values ? text.replace(/\{\{(\w+)\}\}/g, (match,key) => Object.hasOwn(fields,key) ? values[key] || 'To be confirmed' : match) : text;
+const substitute = (text, values, availableFields=fields) => values ? text.replace(/\{\{(\w+)\}\}/g, (match,key) => Object.hasOwn(availableFields,key) ? values[key] || 'To be confirmed' : match) : text;
 
 function safeLink(value) {
   try { return ['https:','http:','mailto:'].includes(new URL(value).protocol); }
   catch { return false; }
 }
 
-export function cleanBody(html, values) {
+export function cleanBody(html, values, availableFields=fields) {
   const input = document.createElement('template');
   input.innerHTML = html;
   const output = document.createElement('div');
   function copy(node, parent) {
-    if (node.nodeType === Node.TEXT_NODE) { parent.append(document.createTextNode(substitute(node.data,values))); return; }
+    if (node.nodeType === Node.TEXT_NODE) { parent.append(document.createTextNode(substitute(node.data,values,availableFields))); return; }
     if (node.nodeType !== Node.ELEMENT_NODE || drop.has(node.tagName) || node.namespaceURI !== 'http://www.w3.org/1999/xhtml') return;
     const element = tags.has(node.tagName) ? document.createElement(node.tagName) : null;
     if (element) {
@@ -27,6 +27,29 @@ export function cleanBody(html, values) {
         element.style.cssText='border:1px solid #64748b;padding:4px 8px;';
       }
       if (node.tagName === 'TABLE') element.style.borderCollapse='collapse';
+      if (node.classList.contains('hfo-permit-email-layout')) {
+        element.className='hfo-permit-email-layout';
+        element.style.cssText='font:13px/1.4 Arial,sans-serif;color:#111;';
+      }
+      if (node.classList.contains('hfd-permit-table-block')) element.style.margin='16px 0';
+      if (node.closest('.hfo-permit-email-layout')) {
+        if (node.tagName==='P') element.style.margin='0 0 10px';
+        if (node.classList.contains('hfd-permit-intro')) {
+          element.style.marginBottom='2px';element.style.textIndent='3em';
+        }
+        if (node.tagName==='H3') element.style.cssText='font:bold 13px Arial,sans-serif;text-decoration:underline;margin:0 0 6px;';
+        if (node.tagName==='TABLE') element.style.cssText='width:100%;table-layout:fixed;border-collapse:collapse;';
+        if (['TD','TH'].includes(node.tagName)) {
+          element.style.cssText='border:1px solid #111;padding:8px 5px;font:10px Arial,sans-serif;overflow-wrap:anywhere;text-align:center;vertical-align:middle;';
+          if (node.classList.contains('hfd-permit-name')) element.style.textAlign='left';
+          if (node.tagName==='TH') {
+            element.style.backgroundColor='#d8dfe7';element.style.fontWeight='bold';
+            if (node.cellIndex===0) element.style.width='6%';
+            if (node.cellIndex===1) element.style.width='28%';
+          }
+        }
+        element.classList.add(...Array.from(node.classList).filter(name=>['hfd-permit-intro','hfd-permit-table-block','hfd-permit-name'].includes(name)));
+      }
       const style = node.getAttribute('style') || '';
       if (/font-weight\s*:\s*(bold|[6-9]00)\b/i.test(style)) element.style.fontWeight='bold';
       if (/font-style\s*:\s*italic\b/i.test(style)) element.style.fontStyle='italic';
@@ -50,8 +73,7 @@ export function outlookUrl({to,cc,subject,body}) {
   return url.href;
 }
 
-export function openHotelEmail({api,serviceId,booking,trigger}) {
-  const scope = {serviceId,bookingId:booking.id};
+export function createMailComposer({templateLabel, availableFields, templateHelp, templateExtra='', footerExtra='', bodyExtra='', outlookAttribute='data-outlook'}) {
   const dialog = document.createElement('dialog');
   dialog.className='hfo-hotel-mail';
   dialog.setAttribute('aria-labelledby','hotelEmailTitle');
@@ -59,7 +81,7 @@ export function openHotelEmail({api,serviceId,booking,trigger}) {
     <p role="status" data-mail-notice>Loading email…</p>
     <form hidden>
       <div class="hfo-mail-templates">
-        <label>Hotel email template<select name="template"></select></label>
+        <label>${templateLabel}<select name="template"></select></label>
         <button type="button" class="hfo-btn" data-use>Use template</button>
         <small data-branch-hint></small>
       </div>
@@ -74,45 +96,29 @@ export function openHotelEmail({api,serviceId,booking,trigger}) {
           <button type="button" data-format="insertUnorderedList">Bullets</button>
           <button type="button" data-format="insertOrderedList">Numbering</button>
           <button type="button" data-format="createLink">Link</button>
-          <select data-field aria-label="Booking field">${Object.entries(fields).map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select>
-          <button type="button" data-insert>Insert field</button>
+          <select data-field aria-label="Template field">${Object.entries(availableFields).map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select>
+          <button type="button" data-insert>Insert field</button>${bodyExtra}
         </div>
         <div class="hfo-mail-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Body"></div>
       </div>
       <details data-manage hidden><summary>Manage templates</summary>
-        <label>Template name<input name="templateName" maxlength="120"></label>
-        <small>Use placeholders like {{hotel}} in the subject or body to fill each booking.</small>
+        <label>Template name<input name="templateName" maxlength="120"></label>${templateExtra}
+        <small>${templateHelp}</small>
         <div class="hfo-actions"><button type="button" class="hfo-btn" data-template-action="create">Save as new</button>
         <button type="button" class="hfo-btn" data-template-action="load">Load for editing</button>
         <button type="button" class="hfo-btn" data-template-action="update">Update selected</button>
         <button type="button" class="hfo-btn danger" data-template-action="remove">Delete selected</button></div>
       </details>
-      <footer><button type="submit" class="hfo-btn">Save draft</button>
+      <footer>${footerExtra}
         <button type="button" class="hfo-btn" data-copy>Copy formatted body</button>
-        <button type="button" class="hfo-btn primary" data-outlook>Open Outlook</button></footer>
+        <button type="button" class="hfo-btn primary" ${outlookAttribute}>Open Outlook</button></footer>
     </form>`;
-  const form=dialog.querySelector('form'), editor=form.querySelector('.hfo-mail-editor'), select=form.elements.template;
-  const notice=dialog.querySelector('[data-mail-notice]');
-  let state, baseline, range, busy=false;
-  const read=()=>({to:form.elements.to.value,cc:form.elements.cc.value,subject:form.elements.subject.value,body:cleanBody(editor.innerHTML)});
-  const set=data=>{
-    for(const key of ['to','cc','subject'])form.elements[key].value=data[key] || '';
-    editor.innerHTML=cleanBody(data.body || '');
-    range=null;
-  };
-  const changed=()=>state && JSON.stringify(read())!==baseline;
-  const report=(message,error=false)=>{notice.textContent=message;notice.classList.toggle('hfo-alert',error);};
-  function closeEmail() {
-    if (busy) return;
-    if (!changed()) { dialog.close(); return; }
-    void run(async()=>{await saveDraft(); if(!changed())dialog.close();});
-  }
-  dialog.querySelector('[data-close-mail]').onclick=closeEmail;
-  dialog.addEventListener('cancel',event=>{event.preventDefault();closeEmail();});
-  dialog.addEventListener('close',()=>{dialog.remove();trigger.focus();},{once:true});
-  document.body.append(dialog);
-  dialog.showModal();
+  return dialog;
+}
 
+export function bindMailEditor(form) {
+  const editor=form.querySelector('.hfo-mail-editor');
+  let range;
   function remember() {
     const selection=window.getSelection();
     if(selection.rangeCount && editor.contains(selection.getRangeAt(0).commonAncestorContainer))range=selection.getRangeAt(0).cloneRange();
@@ -135,6 +141,62 @@ export function openHotelEmail({api,serviceId,booking,trigger}) {
     else document.execCommand('insertText',false,event.clipboardData.getData('text/plain'));
     remember();
   });
+  form.addEventListener('click',event=>{
+    const button=event.target.closest('button');
+    if(!button)return;
+    if(button.dataset.format){
+      restore();
+      const command=button.dataset.format;
+      if(command==='createLink'){
+        const url=window.prompt('Link URL','https://')?.trim();
+        if(!url)return;
+        if(!safeLink(url)){form.dispatchEvent(new CustomEvent('mail-format-error',{detail:'Enter a valid web or email link.'}));return;}
+        if(window.getSelection().isCollapsed){
+          const link=document.createElement('a');link.href=url;link.textContent=url;
+          document.execCommand('insertHTML',false,link.outerHTML);
+        }else document.execCommand(command,false,url);
+      }else document.execCommand(command,false);
+      remember();
+    }else if(button.hasAttribute('data-insert')){
+      restore();
+      document.execCommand('insertText',false,'{{'+form.querySelector('[data-field]').value+'}}');
+      remember();
+    }
+  });
+  return {editor, reset:()=>{range=null;}};
+}
+
+export function openHotelEmail({api,serviceId,booking,trigger}) {
+  const scope = {serviceId,bookingId:booking.id};
+  const dialog=createMailComposer({
+    templateLabel:'Hotel email template', availableFields:fields,
+    templateHelp:'Use placeholders like {{hotel}} in the subject or body to fill each booking.',
+    footerExtra:'<button type="submit" class="hfo-btn">Save draft</button>'
+  });
+  const form=dialog.querySelector('form'), select=form.elements.template;
+  const {editor,reset}=bindMailEditor(form);
+  const notice=dialog.querySelector('[data-mail-notice]');
+  let state, baseline, busy=false;
+  const read=()=>({to:form.elements.to.value,cc:form.elements.cc.value,subject:form.elements.subject.value,body:cleanBody(editor.innerHTML)});
+  const set=data=>{
+    for(const key of ['to','cc','subject'])form.elements[key].value=data[key] || '';
+    editor.innerHTML=cleanBody(data.body || '');
+    reset();
+  };
+  const changed=()=>state && JSON.stringify(read())!==baseline;
+  const report=(message,error=false)=>{notice.textContent=message;notice.classList.toggle('hfo-alert',error);};
+  form.addEventListener('mail-format-error',event=>report(event.detail,true));
+  function closeEmail() {
+    if (busy) return;
+    if (!changed()) { dialog.close(); return; }
+    void run(async()=>{await saveDraft(); if(!changed())dialog.close();});
+  }
+  dialog.querySelector('[data-close-mail]').onclick=closeEmail;
+  dialog.addEventListener('cancel',event=>{event.preventDefault();closeEmail();});
+  dialog.addEventListener('close',()=>{dialog.remove();trigger.focus();},{once:true});
+  document.body.append(dialog);
+  dialog.showModal();
+
   function renderTemplates(id=''){
     const options=[new Option('Standard reservation enquiry','default'),...state.templates.map(t=>new Option(t.name,t.id))];
     select.replaceChildren(...options);
@@ -176,24 +238,7 @@ export function openHotelEmail({api,serviceId,booking,trigger}) {
   form.addEventListener('click',event=>{
     const button=event.target.closest('button');
     if(!button || busy)return;
-    if(button.dataset.format){
-      restore();
-      const command=button.dataset.format;
-      if(command==='createLink'){
-        const url=window.prompt('Link URL','https://')?.trim();
-        if(!url)return;
-        if(!safeLink(url)){report('Enter a valid web or email link.',true);return;}
-        if(window.getSelection().isCollapsed){
-          const link=document.createElement('a');link.href=url;link.textContent=url;
-          document.execCommand('insertHTML',false,link.outerHTML);
-        }else document.execCommand(command,false,url);
-      }else document.execCommand(command,false);
-      remember();
-    }else if(button.hasAttribute('data-insert')){
-      restore();
-      document.execCommand('insertText',false,'{{'+form.querySelector('[data-field]').value+'}}');
-      remember();
-    }else if(button.hasAttribute('data-use')){
+    if(button.hasAttribute('data-use')){
       if(changed() && !window.confirm('Replace this email with the selected template?'))return;
       const template=state.templates.find(t=>t.id===select.value);
       set(fill(template?.data || defaultEmail));
