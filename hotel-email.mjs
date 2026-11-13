@@ -39,14 +39,14 @@ export function cleanBody(html, values) {
   return output.innerHTML;
 }
 
-export function outlookUrl({to,cc,subject}) {
+export function outlookUrl({to,cc,subject,body}) {
   const recipients = value => value.split(/[;,\n]+/).map(x=>x.trim()).filter(Boolean);
   const targets = recipients(to), copies = recipients(cc);
   if ([...targets,...copies].some(address=>!addressPattern.test(address))) throw Error('Check the To and CC email addresses.');
   const url = new URL('https://outlook.office.com/mail/deeplink/compose');
-  url.search='?'+Object.entries({to:targets.join(';'),cc:copies.join(';'),subject})
+  url.search='?'+Object.entries({to:targets.join(';'),cc:copies.join(';'),subject,...(body?{body}:{})})
     .map(([key,value])=>key+'='+encodeURIComponent(value)).join('&');
-  if (url.href.length > 7000) throw Error('Shorten the recipients or subject before opening Outlook.');
+  if (url.href.length > 7000) throw Error(body?'This email is too long for an Outlook link. Shorten the body or use Copy formatted body.':'Shorten the recipients or subject before opening Outlook.');
   return url.href;
 }
 
@@ -150,6 +150,7 @@ export function openHotelEmail({api,serviceId,booking,trigger}) {
     to:'',cc:'',subject:'Hotel room reservation enquiry - {{hotel}}',
     body:'<p>Dear Reservations Team,</p><p>Please advise availability and a quotation for the following booking:</p><p>Hotel: {{hotel}}<br>Vessel: {{vessel}}<br>Check-in: {{checkIn}}<br>Check-out: {{checkOut}}<br>Room type: {{roomType}}<br>Rooms: {{rooms}}</p><p>Please confirm the rate, taxes, cancellation terms, and booking reference.</p><p>Best regards,</p>'
   };
+  const bodyText=()=>substitute(editor.innerText,{...state.booking,vessel:state.vessel});
   function emailForDelivery(data){
     const values={...state.booking,vessel:state.vessel};
     return {...data,subject:substitute(data.subject,values),body:cleanBody(data.body,values)};
@@ -198,12 +199,23 @@ export function openHotelEmail({api,serviceId,booking,trigger}) {
       set(fill(template?.data || defaultEmail));
       report('Template applied to this draft.');
     }else if(button.hasAttribute('data-outlook')){
-      try{window.open(outlookUrl(emailForDelivery(read())),'_blank','noopener,noreferrer');report('Paste the formatted body into Outlook, then review and send.');}
+      try{
+        const email={...emailForDelivery(read()),body:bodyText()};
+        let url=outlookUrl({...email,body:''});
+        let includesBody=true;
+        try { url=outlookUrl(email); }
+        catch(error){
+          if(!window.confirm(error.message+' Open Outlook with the recipients and subject?'))return;
+          includesBody=false;
+        }
+        window.open(url,'_blank','noopener,noreferrer');
+        report(includesBody?'Outlook opened with plain text. To keep tables and formatting, replace the body with Copy formatted body.':'Copy the formatted body and paste it into Outlook.');
+      }
       catch(error){report(error.message,true);}
     }else if(button.hasAttribute('data-copy')){
       void run(async()=>{
         const data=emailForDelivery(read());
-        const plain=substitute(editor.innerText,{...state.booking,vessel:state.vessel});
+        const plain=bodyText();
         if(!navigator.clipboard?.write || typeof ClipboardItem==='undefined')throw Error('Select and copy the body directly to keep its formatting.');
         await navigator.clipboard.write([new ClipboardItem({
           'text/html':new Blob([data.body],{type:'text/html'}),
