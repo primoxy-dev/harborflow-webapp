@@ -214,7 +214,7 @@
 }
 
 /* Calm calendar palette and type-specific vessel marks. */
-.hfo-job-form-grid>:nth-child(12){grid-column:span 4}
+@media(min-width:1101px){.hfo-job-form-grid>:nth-child(12){grid-column:span 4}}
 .hfo-job-pill{border:1px solid transparent;box-shadow:none;transition:background-color .15s,border-color .15s}
 .hfo-job-pill:hover,.hfo-job-pill:focus-visible{border-color:#91a3b3;filter:brightness(.985)}
 .hfo-job-pill.port-map-ta-phut{background:#d8f3e6;color:#15583e;border-left:3px solid #58a982}
@@ -228,7 +228,7 @@
 .hfo-vessel-detail rect,.hfo-vessel-detail circle{fill:currentColor;stroke:none}
 .hfo-vessel-hull{fill:currentColor;opacity:.9}
 .hfo-vessel-wave{fill:none;stroke:currentColor;stroke-width:1.2;stroke-linecap:round}
-@media(max-width:1100px){.hfo-job-form-grid>:nth-child(11){grid-column:span 6}.hfo-job-form-grid>:nth-child(12){grid-column:1/-1}}
+@media(min-width:601px) and (max-width:1100px){.hfo-job-form-grid>:nth-child(11){grid-column:span 6}.hfo-job-form-grid>:nth-child(12){grid-column:1/-1}}
 @media(max-width:600px){.hfo-vessel-icon{width:14px;height:12px;flex-basis:14px}.hfo-vessel-name{gap:3px}}
 
 /* Crew document reader: original files stay on the operator's device. */
