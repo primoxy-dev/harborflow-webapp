@@ -348,6 +348,42 @@
     for(const input of host.querySelectorAll('[data-mission-field]')){const key=input.dataset.missionField;input.value=['general','visa'].includes(key)?entry?.emails?.[key]?.join(' / ')||'':entry?.[key]||'';}
     setPdfAvailability(host,'loi',loiPdfHint(ctx.loiPersonId,text));
   }
+  function bindPdfPreview(host, signal) {
+    const viewport=host.querySelector('.hfd-oktb-sheet-wrap');
+    if (!viewport) return;
+    const paper=viewport.querySelector('.hfd-oktb-page');
+    const stage=document.createElement('div');
+    stage.className='hfd-pdf-stage';
+    paper.before(stage);
+    stage.append(paper);
+
+    const toolbar=document.createElement('div');
+    toolbar.className='hfd-pdf-preview-toolbar';
+    toolbar.innerHTML='<span>PDF Live</span><button type="button" class="secondary" data-pdf-zoom>Zoom in</button>';
+    viewport.before(toolbar);
+    const button=toolbar.querySelector('button');
+    let zoomed=false;
+    function resize() {
+      const width=viewport.clientWidth;
+      if (!width) return;
+      const paperWidth=paper.offsetWidth;
+      const scale=zoomed ? Math.min(1, width*2/paperWidth) : Math.min(1, width/paperWidth);
+      stage.style.setProperty('--hfd-preview-scale',scale);
+      stage.style.setProperty('--hfd-preview-width',Math.floor(paperWidth*scale)+'px');
+      stage.style.setProperty('--hfd-preview-height',Math.ceil(paper.offsetHeight*scale)+'px');
+    }
+    button.addEventListener('click',()=>{
+      zoomed=!zoomed;
+      button.textContent=zoomed?'Fit to width':'Zoom in';
+      resize();
+      if (!zoomed) viewport.scrollLeft=0;
+    },{signal});
+    const observer=new ResizeObserver(resize);
+    observer.observe(viewport);
+    observer.observe(paper);
+    signal.addEventListener('abort',()=>observer.disconnect(),{once:true});
+    resize();
+  }
   function bind(host, preview, ctx, profile, options, airlineNames) {
     const get = options.localTransport?.get || window.HarborFlowDocuments.request;
     async function choosePdfDestination(suggestedName){
@@ -379,6 +415,7 @@
     }
     if(host._hfdBindings){host._hfdBindings.abort();activeBindings.delete(host._hfdBindings);}
     const controller=new AbortController();host._hfdBindings=controller;activeBindings.add(controller);
+    bindPdfPreview(host,controller.signal);
     host.addEventListener('focusin',event=>{if(event.target.dataset.permitName&&!event.target.disabled)nameSuggestions(host,event.target,preview,ctx);},{signal:controller.signal});
     host.addEventListener('pointerdown',event=>{if(event.target.closest('[data-permit-choice]'))event.preventDefault();},{signal:controller.signal});
     host.addEventListener('keydown',event=>{
@@ -631,7 +668,7 @@
       setDocumentEditability(host);
       if(!options.localTransport){
         const status=document.createElement('p');status.id='hfdDocSaveStatus';status.role='status';status.textContent='โหลดข้อมูลส่วนกลางแล้ว';host.prepend(status);
-        if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-download-oktb],[data-save-oktb],[data-download-permit],[data-save-permit],[data-download-loi],[data-save-loi])').forEach(el=>el.disabled=true);
+        if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-pdf-zoom],[data-download-oktb],[data-save-oktb],[data-download-permit],[data-save-permit],[data-download-loi],[data-save-loi])').forEach(el=>el.disabled=true);
         host._hfdSourceFingerprint=data.sourceFingerprint;
         host._hfdScope=data.preview.scope;
         host._hfdQueuedSections=formState.encodeDocumentContext(ctx,options.type);

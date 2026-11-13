@@ -47,7 +47,6 @@
 .hfo-service-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto}
 .hfo-service-meta small{padding:3px 6px;border-radius:100px;background:#edf2f7;font-size:10px}
 .hfo-service-meta .hfo-status{background:#e7f4f2;color:#0b6f68}
-.hfo-remove-service{position:absolute;right:6px;top:6px;padding:2px 7px}
 .hfo-service-status{max-width:230px;margin:14px 0}
 .hfo-roster-table{min-width:1050px}
 .hfo-roster-table input,.hfo-flight-table input{width:100%;min-width:0;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:5px;padding:7px;font-size:12px;color:#172033}
@@ -308,3 +307,30 @@
   .hfo-job-form-grid > .hfo-imo-field { grid-column: 1 / -1; }
   .hfo-job-summary-actions .hfo-btn { min-height: 44px; display: inline-flex; align-items: center; box-sizing: border-box; }
 }
+
+.hfo-service-menu { position: absolute; inset: 5px 5px auto auto; }
+.hfo-service-menu[open] { z-index: 1; }
+.hfo-service-menu summary {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 7px;
+  color: #12304b;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.hfo-service-menu summary::-webkit-details-marker { display: none; }
+.hfo-service-menu summary:hover, .hfo-service-menu[open] summary { background: #edf2f7; }
+.hfo-service-menu-panel {
+  position: absolute;
+  right: 0;
+  min-width: max-content;
+  padding: 5px;
+  border: 1px solid #dbe3ed;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 4px 16px #10233d26;
+}
+.hfo-service-menu-panel button { min-height: 44px; }
