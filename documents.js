@@ -153,8 +153,9 @@
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
       </article></div>
       <p class="hfd-warning">${escape(preview.notice)} ข้อมูลผู้ติดต่อและลายเซ็นบันทึกส่วนตัวตามบัญชีผู้ใช้</p>
-      <div class="hfo-row">
-        <button type="button" class="secondary" data-download-oktb ${selectedPeople.length?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>
+      <div class="hfo-row hfd-pdf-actions">
+        <p class="hfd-pdf-hint" data-pdf-hint role="status">${selectedPeople.length?'':'Select at least one crew member to enable PDF actions.'}</p>
+        <button type="button" class="secondary hfd-pdf-download" data-download-oktb ${selectedPeople.length?'':'disabled'}>Download PDF</button>
         <button type="button" class="secondary" data-save-oktb ${selectedPeople.length?'':'disabled'}>Save as</button>
       </div>`;
   }
@@ -174,7 +175,7 @@
     ctx.airline=selectedAirline(preview,ctx,airlineNames);
     host.querySelector('#hfdAirline').value=ctx.airline;
     host.querySelector('#hfdAirlineOut').textContent=ctx.airline||'[airline not set]';
-    host.querySelectorAll('[data-download-oktb],[data-save-oktb]').forEach(button=>{button.disabled=!selected.length;});
+    setPdfAvailability(host,'oktb',selected.length?'':'Select at least one crew member to enable PDF actions.');
     host.querySelectorAll('[data-oktb-person]').forEach(input => { input.checked = ctx.selected.has(input.dataset.oktbPerson); });
   }
   function showSignature(host, signature) {
@@ -267,8 +268,9 @@
         <div class="hfd-permit-signoff"><p>Thank you &amp; Best regards,</p><div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" ${saved.signature?`src="${escape(saved.signature)}"`:'hidden'}><span id="hfdSignaturePlaceholder" ${saved.signature?'hidden':''}>Signature pending owner approval</span></div><p>(<span id="hfdSignerOut">${escape(saved.signer||'[signatory not set]')}</span>)<br>Operations Coordinator, Shipping Services<br>Mobile: <span id="hfdPhoneOut">${escape(saved.phone||'[phone not set]')}</span><br>As Agents Only</p></div>
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
       </article></div><p class="hfd-warning">ร่างยังไม่อนุมัติ ห้ามใช้ยื่นจริง · หัวข้อและแถวที่แก้ใช้ในร่างนี้ ไม่บันทึกข้อมูลบุคคลกลับ Job</p>
-      <div class="hfo-row">
-        <button type="button" class="secondary" data-download-permit>ดาวน์โหลด PDF (ร่าง)</button>
+      <div class="hfo-row hfd-pdf-actions">
+        <p class="hfd-pdf-hint" data-pdf-hint role="status"></p>
+        <button type="button" class="secondary hfd-pdf-download" data-download-permit>Download PDF</button>
         <button type="button" class="secondary" data-save-permit>Save as</button>
       </div>`;
   }
@@ -321,10 +323,20 @@
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
       </article></div>
       <p class="hfd-notice">ข้อความรับผิดชอบตามต้นแบบ LOI ต้องให้เจ้าของตรวจและอนุมัติ · ห้ามใช้ร่างยื่นจริง</p>
-      <div class="hfo-row">
-        <button type="button" class="secondary" data-download-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>ดาวน์โหลด PDF (ร่าง)</button>
+      <div class="hfo-row hfd-pdf-actions">
+        <p class="hfd-pdf-hint" data-pdf-hint role="status">${loiPdfHint(person,ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy))}</p>
+        <button type="button" class="secondary hfd-pdf-download" data-download-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>Download PDF</button>
         <button type="button" class="secondary" data-save-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>Save as</button>
       </div>`;
+  }
+  function loiPdfHint(person, embassy) {
+    if (!person && !embassy) return 'Select a crew member and an embassy to enable PDF actions.';
+    if (!person) return 'Select a crew member to enable PDF actions.';
+    return embassy ? '' : 'Select or enter an embassy to enable PDF actions.';
+  }
+  function setPdfAvailability(host, type, hint) {
+    host.querySelector('[data-pdf-hint]').textContent=hint;
+    host.querySelectorAll(`[data-download-${type}],[data-save-${type}]`).forEach(button=>{button.disabled=Boolean(hint);});
   }
   function updateLoiEmbassy(host,ctx) {
     const custom=ctx.embassy==='other',text=ctx.embassySnapshot?.name||(custom?ctx.customEmbassy:ctx.embassy);
@@ -334,7 +346,7 @@
     source.hidden=!entry?.sourceUrl;if(entry?.sourceUrl)source.href=entry.sourceUrl;else source.removeAttribute('href');
     host.querySelector('#hfdMissionStatus').textContent=(entry?.status==='verified'?'ตรวจแหล่งทางการ '+entry.verifiedAt:'ข้อมูลติดต่อยังตรวจไม่ครบ · กรุณาตรวจและกรอกช่องที่ขาดก่อนใช้')+' · ตรวจเขตรับผิดชอบกับสถานทูตก่อนใช้';
     for(const input of host.querySelectorAll('[data-mission-field]')){const key=input.dataset.missionField;input.value=['general','visa'].includes(key)?entry?.emails?.[key]?.join(' / ')||'':entry?.[key]||'';}
-    host.querySelectorAll('[data-download-loi],[data-save-loi]').forEach(button=>{button.disabled=!ctx.loiPersonId||!text;});
+    setPdfAvailability(host,'loi',loiPdfHint(ctx.loiPersonId,text));
   }
   function bind(host, preview, ctx, profile, options, airlineNames) {
     const get = options.localTransport?.get || window.HarborFlowDocuments.request;
@@ -608,13 +620,11 @@
           }
         });await saver.load();host._hfdSaver=saver;activeSavers.add(saver);
       }
-      host.innerHTML = '<div class="hfd-header"><h3>' + escape(labels[options.type]) + '</h3><span class="hfd-badge">Draft</span></div>' +
+      host.innerHTML = '<div class="hfd-header"><h3>' + escape(labels[options.type]) + '</h3><span class="hfd-badge">Document</span></div>' +
         (options.type === 'oktb' ? oktbPreview(data.preview, ctx, profile, airlineNames) : options.type === 'loi' ? loiPreview(data.preview,ctx,profile) : options.type==='permit'?permitPreview(data.preview,ctx,profile):genericPreview(data.preview));
       bind(host, data.preview, ctx, profile, options, airlineNames);
       if(!options.localTransport){
-        host.querySelector('.hfd-badge').textContent='เอกสาร';
         host.querySelectorAll('.hfd-oktb-watermark').forEach(el=>el.remove());
-        host.querySelectorAll('[data-download-oktb],[data-download-permit],[data-download-loi]').forEach(el=>el.textContent='ดาวน์โหลด PDF');
         host.querySelectorAll('.hfd-notice').forEach(el=>{if(/ห้ามใช้|ยังไม่อนุมัติ/.test(el.textContent))el.textContent='ระบบทดลอง · ใช้ข้อมูลสมมติเท่านั้น · ตรวจรายละเอียดก่อนดาวน์โหลด';});
         host.querySelectorAll('#hfdSignaturePlaceholder').forEach(el=>el.textContent='Signature');
       }

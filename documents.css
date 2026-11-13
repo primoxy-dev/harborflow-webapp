@@ -115,3 +115,31 @@
 .hfd-permit-page .hfd-permit-subject-line,.hfd-permit-page .hfd-permit-salutation{margin-bottom:10px!important}
 .hfd-permit-page .hfd-permit-closing{margin-top:12px!important}.hfd-permit-signoff{text-align:center;margin-left:auto;width:250px;margin-top:18px}.hfd-permit-signoff .hfd-oktb-signature{min-height:64px;margin:12px auto 16px}
 @media(max-width:700px){.hfd-permit-row-pickers{grid-template-columns:1fr}.hfd-permit-editor-table{padding:8px}.hfd-permit-editor input[type=file]{max-width:100%}}
+
+
+.hfd-pdf-hint { flex-basis: 100%; margin: 0; color: #52667a; font-size: .82rem; }
+.hfd-pdf-hint:empty { display: none; }
+
+@media (max-width: 760px) {
+  .hfo-overlay #hfoDocument:has(.hfd-pdf-actions) { margin-bottom: calc(132px + env(safe-area-inset-bottom)); }
+  .hfo-overlay #hfoDocument .hfd-pdf-actions {
+    position: fixed;
+    inset-inline: 12px;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
+    background: #fff;
+    border: 1px solid #dbe3ed;
+    border-radius: 9px;
+    box-shadow: 0 -3px 12px #10233d12;
+  }
+  .hfo-overlay #hfoDocument .hfd-pdf-actions button { flex: 1 1 0; min-height: 44px; }
+  .hfo-overlay #hfoDocument .hfd-pdf-actions .hfd-pdf-download:not(:disabled) {
+    color: #fff;
+    background: #107a72;
+    border-color: #107a72;
+  }
+}
