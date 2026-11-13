@@ -21,9 +21,19 @@ test('plain text keeps table borders, blank cells, and all rows',()=>{
 });
 test('substitutes job values and builds an encoded Outlook compose URL',()=>{
  assert.equal(fillPermitMail(template.subject,{vessel:'TEST VESSEL'},{}),'Permit TEST VESSEL');
- const url=new URL(outlookComposeUrl({to:'a@example.com; b@example.com',cc:'c@example.com',subject:'A & B',body:'Line 1\nLine 2'}));
- assert.equal(url.hostname,'outlook.office.com');assert.equal(url.searchParams.get('to'),'a@example.com;b@example.com');assert.equal(url.searchParams.get('body'),'Line 1\nLine 2');
- assert.throws(()=>outlookComposeUrl({to:'bad address'}));
+ const draft={to:'a@example.com; b@example.com',cc:'c@example.com',subject:'A & B + Permit',body:'\nLine 1\n\nอนุญาต + crew'};
+ const link=outlookComposeUrl(draft);
+ const url=new URL(link);
+ assert.equal(url.hostname,'outlook.office.com');
+ assert.equal(url.searchParams.get('to'),'a@example.com;b@example.com');
+ assert.equal(url.searchParams.get('cc'),draft.cc);
+ assert.equal(url.searchParams.get('subject'),draft.subject);
+ assert.equal(url.searchParams.get('body'),draft.body);
+ assert.ok(link.includes('%20'));
+ assert.ok(!link.includes('+'));
+ assert.equal(new URL(outlookComposeUrl({...draft,body:''})).searchParams.has('body'),false);
+ assert.throws(()=>outlookComposeUrl({...draft,body:'ท'.repeat(1000)}),RangeError);
+ assert.throws(()=>outlookComposeUrl({to:'bad address'}),/Check the To and CC/);
 });
 test('permit preview exposes ETD for email templates',()=>{
  const preview=buildDocumentPreview('permit',{id:'demo',data:{vessel:'TEST',etd:'2026-11-09T12:00'}},[],[],{crewDetails:true});

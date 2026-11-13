@@ -168,3 +168,6 @@
     transform-origin: top left;
   }
 }
+
+.hfd-permit-mail { padding: 12px; }
+.hfd-permit-mail > [role="status"]:empty { display: none; }

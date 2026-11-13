@@ -260,11 +260,13 @@
       <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page hfd-permit-page" aria-label="Terminal Permit draft">
         <div class="hfd-loi-letterhead"><div class="hfd-oktb-logo" role="img" aria-label="GAC"></div><div><b>บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด</b><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p>26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400 &nbsp; Fax +66-2-650 7401 &nbsp; E-mail shipping.thailand@gac.com</p></div></div>
         <p class="hfd-permit-issued"><span id="hfdIssuedDate">${displayDate(ctx.issueDate)}</span></p>
+        <div data-permit-letter-body>
         <p class="hfd-permit-subject-line">Subject: <span id="hfdPermitSubjectOut">${escape(ctx.permitDraft.subject)}</span></p><p class="hfd-permit-salutation">Dear Marine Operation Division</p>
         <p class="hfd-permit-intro">Gulf Agency Company (Thailand) LTD. has been appointed of the subject vessel "${escape(preview.job.vessel||'[Vessel not set in Job]')}"</p>
         <p>at ${escape(permitModel.permitLocation(preview.job))} on <span id="hfdPermitDateOut">${displayDate(ctx.permitDate)}</span> during her operations</p>
         <div id="hfdPermitTables">${permitPaperTables(ctx)}</div>
         <p class="hfd-permit-closing">We would be grateful to terminal approve permission.</p>
+        </div>
         <div class="hfd-permit-signoff"><p>Thank you &amp; Best regards,</p><div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" ${saved.signature?`src="${escape(saved.signature)}"`:'hidden'}><span id="hfdSignaturePlaceholder" ${saved.signature?'hidden':''}>Signature pending owner approval</span></div><p>(<span id="hfdSignerOut">${escape(saved.signer||'[signatory not set]')}</span>)<br>Operations Coordinator, Shipping Services<br>Mobile: <span id="hfdPhoneOut">${escape(saved.phone||'[phone not set]')}</span><br>As Agents Only</p></div>
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
       </article></div><p class="hfd-warning">ร่างยังไม่อนุมัติ ห้ามใช้ยื่นจริง · หัวข้อและแถวที่แก้ใช้ในร่างนี้ ไม่บันทึกข้อมูลบุคคลกลับ Job</p>
@@ -505,12 +507,18 @@
         return;
       }
       if(target.hasAttribute('data-download-permit')||target.hasAttribute('data-save-permit')||target.hasAttribute('data-compose-permit')||target.hasAttribute('data-prepare-permit-share')){
-        const composing=target.hasAttribute('data-compose-permit'),preparing=target.hasAttribute('data-prepare-permit-share');let outlook=null,url='';
+        const composing=target.hasAttribute('data-compose-permit'),preparing=target.hasAttribute('data-prepare-permit-share');let outlook=null,url='',includeBody=true;
         try{
           if(preparing&&typeof navigator.share!=='function')throw Error('File sharing is unavailable on this device. Download the PDF and attach it in Outlook.');
           if(composing){
             if(!host._hfdPermitMail)throw Error('Email editor is not ready.');
-            url=host._hfdPermitMail.composeUrl();
+            url=host._hfdPermitMail.composeUrl({includeBody:false});
+            try{url=host._hfdPermitMail.composeUrl();}
+            catch(error){
+              if(!(error instanceof RangeError))throw error;
+              if(!window.confirm('The Body is too long for the Outlook link. Open Outlook with To, CC and Subject so you can paste the Body manually?'))return;
+              includeBody=false;
+            }
             outlook=window.open('about:blank','_blank');if(!outlook)throw Error('Allow pop-ups to open Outlook.');outlook.opener=null;
           }
           const pdf=window.HarborFlowOktbPdf;
@@ -532,7 +540,7 @@
             host._hfdPermitMail?.status('PDF ready. Tap Share PDF, then select Outlook if available.');return;
           }
           message(host,fileHandle?'บันทึก PDF ลงในเครื่องแล้ว':'ดาวน์โหลด PDF แล้ว');
-          if(outlook){outlook.location.href=url;host._hfdPermitMail.status('PDF downloaded. Copy the table, paste it in Outlook and attach the PDF.');}
+          if(outlook){outlook.location.href=url;host._hfdPermitMail.status(includeBody?'PDF downloaded. Review the Body in Outlook, paste the table and attach the PDF.':'PDF downloaded. Copy the Body and table into Outlook, then attach the PDF.');}
         }catch(error){if(outlook)outlook.close();if([401,403].includes(error.status)){clear();host.innerHTML='<p role="alert">สิทธิ์ถูกถอน กรุณาลงชื่อเข้าใช้และตรวจสิทธิ์อีกครั้ง</p>';}else if(host._hfdPermitMail&&(composing||preparing))host._hfdPermitMail.status(error.message||'Could not prepare PDF.',true);else if(host.querySelector('#hfdSaveStatus'))message(host,error.message||'สร้าง PDF ไม่สำเร็จ',true);else host.textContent=error.message;}finally{host.inert=false;}
         return;
       }
