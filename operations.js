@@ -62,7 +62,7 @@
     return '<option value="">Select Port / Terminal</option>' + option(choices, current);
   };
   const portSelect = (current, extra) => '<label class="hfo-field"><span>Port / Terminal</span><select name="port" ' + extra + '>' + portOptions(current) + '</select></label>';
-  let state = { login: '', grant: null, public: false, jobs: [], services: [], people: [], peopleLoadedFor: null, trips: [], view: 'month', anchor: new Date(), openJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…', documentBatch:{busy:false,category:'On-signers',completed:0,total:0,results:[]} };
+  let state = { login: '', grant: null, public: false, jobs: [], services: [], people: [], peopleLoadedFor: null, trips: [], view: 'month', anchor: new Date(), openJobId: null, editingJobId: null, openServiceId: null, tab: 'details', busy: false, error: '', sync: '', conflict: null, personDraft: null, tripDraft: null, modal: null, history: [], portChoices: [], portStatus: 'Loading Port / Terminal…', documentBatch:{busy:false,category:'On-signers',completed:0,total:0,results:[]} };
   let personSaveTimer = null, personSaveQueue = Promise.resolve(), personCreateInFlight = false;
   const isOwner = () => state.grant?.role === 'owner';
   const isEditor = () => isOwner() || state.grant?.role === 'editor';
@@ -93,7 +93,7 @@
     const key=details[type]?type:'Other';
     return `<svg class="hfo-vessel-icon" viewBox="0 0 28 22" aria-hidden="true" data-vessel-type="${escape(key)}"><g class="hfo-vessel-detail">${details[key]}</g><path class="hfo-vessel-hull" d="M3 11h22l-3.5 6H7z"/><path class="hfo-vessel-wave" d="M3 20c2-1.4 4-1.4 6 0 2-1.4 4-1.4 6 0 2-1.4 4-1.4 6 0 1.4-1 2.7-1.2 4-.6"/></svg>`;
   }
-  const vesselName=(j,fallback='Port Call')=>`<span class="hfo-vessel-name">${vesselIcon(j.data.vesselType)}<span>${escape(j.data.vessel||fallback)}</span></span>`;
+  const vesselName=(j,fallback='Husbandry Call')=>`<span class="hfo-vessel-name">${vesselIcon(j.data.vesselType)}<span>${escape(j.data.vessel||fallback)}</span></span>`;
   const serviceList = j => state.services.filter(x => x.job_id === j.id && !x.removed_at).sort((a,b) => a.seq-b.seq);
   const anyPeopleView = () => state.grant?.crewView || state.grant?.visitorView;
   const canPeople = kind => kind === 'crew' ? state.grant?.crewView : state.grant?.visitorView;
@@ -187,7 +187,7 @@
   }
   function monthlyCharts() {
     const {current,activeCurrent,currentLabel,previousLabel,currentPorts,previousPorts,ports,types,statuses}=monthlyChartData();
-    const vesselList=list=>list.length?list.sort((a,b)=>String(a.data.eta||'').localeCompare(String(b.data.eta||''))||String(a.data.vessel||'').localeCompare(String(b.data.vessel||''))).map(j=>`<button type="button" class="hfo-status-vessel" data-open-job="${escape(j.id)}"><b>${escape(j.data.vessel||'Port Call')}</b><small>${state.public?'':`${escape(j.data.jobNo||'No Job No.')} · `}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}</small></button>`).join(''):'<small class="hfo-chart-no-vessels">No Port Calls</small>';
+    const vesselList=list=>list.length?list.sort((a,b)=>String(a.data.eta||'').localeCompare(String(b.data.eta||''))||String(a.data.vessel||'').localeCompare(String(b.data.vessel||''))).map(j=>`<button type="button" class="hfo-status-vessel" data-open-job="${escape(j.id)}"><b>${escape(j.data.vessel||'Husbandry Call')}</b><small>${state.public?'':`${escape(j.data.jobNo||'No Job No.')} · `}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}</small></button>`).join(''):'<small class="hfo-chart-no-vessels">No Husbandry Calls</small>';
     const portMax=Math.max(1,...ports.flatMap(port=>[currentPorts.get(port)||0,previousPorts.get(port)||0]));
     const portRows=ports.length?ports.map(port=>{
       const now=currentPorts.get(port)||0,prior=previousPorts.get(port)||0;
@@ -195,17 +195,17 @@
         <span class="hfo-chart-track"><i class="hfo-bar current" style="width:${Math.round(now/portMax*100)}%"></i><b>${now}</b></span>
         <span class="hfo-chart-track"><i class="hfo-bar previous" style="width:${Math.round(prior/portMax*100)}%"></i><b>${prior}</b></span>
       </span></div>`;
-    }).join(''):'<div class="hfo-empty">No Port Calls in these two months.</div>';
+    }).join(''):'<div class="hfo-empty">No Husbandry Calls in these two months.</div>';
     const typeMax=Math.max(1,...types.map(([,count])=>count));
-    const typeRows=types.length?types.map(([type,count],index)=>`<details class="hfo-chart-group" data-vessel-chart-row data-count="${count}"><summary class="hfo-status-row" aria-label="${escape(type)}: ${count} vessels, show list"><span class="hfo-chart-label" title="${escape(type)}"><i class="hfo-status-caret" aria-hidden="true">▸</i>${escape(type)}</span><span class="hfo-chart-track"><i class="hfo-bar vessel-type type-${index%6}" style="width:${Math.round(count/typeMax*100)}%"></i><b>${count}</b></span></summary><div class="hfo-status-vessels">${vesselList(activeCurrent.filter(j=>(j.data.vesselType||'Other')===type))}</div></details>`).join(''):`<div class="hfo-empty">No Port Calls in ${escape(currentLabel)}.</div>`;
+    const typeRows=types.length?types.map(([type,count],index)=>`<details class="hfo-chart-group" data-vessel-chart-row data-count="${count}"><summary class="hfo-status-row" aria-label="${escape(type)}: ${count} vessels, show list"><span class="hfo-chart-label" title="${escape(type)}"><i class="hfo-status-caret" aria-hidden="true">▸</i>${escape(type)}</span><span class="hfo-chart-track"><i class="hfo-bar vessel-type type-${index%6}" style="width:${Math.round(count/typeMax*100)}%"></i><b>${count}</b></span></summary><div class="hfo-status-vessels">${vesselList(activeCurrent.filter(j=>(j.data.vesselType||'Other')===type))}</div></details>`).join(''):`<div class="hfo-empty">No Husbandry Calls in ${escape(currentLabel)}.</div>`;
     const statusMax=Math.max(1,...statuses.map(([,count])=>count));
     const statusRows=statuses.map(([status,count],index)=>{
       const vessels=current.filter(j=>jobStatus(j.data.status)===status);
       return `<details class="hfo-status-group" data-status-chart-row data-count="${count}"><summary class="hfo-status-row" aria-label="${escape(status)}: ${count} vessels, show list"><span class="hfo-chart-label" title="${escape(status)}"><i class="hfo-status-caret" aria-hidden="true">▸</i>${escape(status)}</span><span class="hfo-chart-track"><i class="hfo-bar status status-${index%6}" style="width:${Math.round(count/statusMax*100)}%"></i><b>${count}</b></span></summary><div class="hfo-status-vessels">${vesselList(vessels)}</div></details>`;
     }).join('');
     return `<section class="hfo-card hfo-analysis-card" data-chart="port-terminal"><div class="hfo-chart-head"><div><span>Port / Terminal volume</span><small>${escape(currentLabel)} vs ${escape(previousLabel)} · excludes Cancelled</small></div><div class="hfo-chart-legend"><span><i class="current"></i>${escape(currentLabel)}</span><span><i class="previous"></i>${escape(previousLabel)}</span></div></div><div class="hfo-chart-list">${portRows}</div></section>
-      <section class="hfo-card hfo-analysis-card" data-chart="vessel-type"><div class="hfo-chart-head"><div><span>Vessel type</span><small>${escape(currentLabel)} · ${activeCurrent.length} Port Calls · excludes Cancelled · Click a type to see vessels</small></div></div><div class="hfo-vessel-chart">${typeRows}</div></section>
-      <section class="hfo-card hfo-analysis-card" data-chart="status"><div class="hfo-chart-head"><div><span>Vessel status</span><small>${escape(currentLabel)} · ${current.length} Port Calls · Click a status to see vessels</small></div></div><div class="hfo-status-chart">${statusRows||`<div class="hfo-empty">No Port Calls in ${escape(currentLabel)}.</div>`}</div></section>`;
+      <section class="hfo-card hfo-analysis-card" data-chart="vessel-type"><div class="hfo-chart-head"><div><span>Vessel type</span><small>${escape(currentLabel)} · ${activeCurrent.length} Husbandry Calls · excludes Cancelled · Click a type to see vessels</small></div></div><div class="hfo-vessel-chart">${typeRows}</div></section>
+      <section class="hfo-card hfo-analysis-card" data-chart="status"><div class="hfo-chart-head"><div><span>Vessel status</span><small>${escape(currentLabel)} · ${current.length} Husbandry Calls · Click a status to see vessels</small></div></div><div class="hfo-status-chart">${statusRows||`<div class="hfo-empty">No Husbandry Calls in ${escape(currentLabel)}.</div>`}</div></section>`;
   }
   function startOfWeek(date) { const d = new Date(date); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d; }
   function periodFor(view, anchor) {
@@ -266,28 +266,28 @@
     const roundRect=(x,y,w,h,r=14,fill='#fff',stroke='#dbe3ed')=>{ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.stroke();};
     const fitText=(text,maxWidth)=>{let value=String(text||'');if(ctx.measureText(value).width<=maxWidth)return value;while(value.length&&ctx.measureText(value+'…').width>maxWidth)value=value.slice(0,-1);return value+'…';};
     const barList=(rows,x,y,w,color,compare=false)=>{const shown=rows.slice(0,16),max=Math.max(1,...rows.flatMap(row=>compare?[row[1],row[2]]:[row[1]]));shown.forEach((row,index)=>{const yy=y+index*34,labelWidth=Math.min(170,w*.42);font(15,400);ctx.fillStyle='#334155';ctx.fillText(fitText(row[0],labelWidth-8),x,yy+2);const bx=x+labelWidth,bw=w-labelWidth-30;ctx.fillStyle='#eef2f6';ctx.fillRect(bx,yy+3,bw,compare?10:18);ctx.fillStyle=color;ctx.fillRect(bx,yy+3,bw*row[1]/max,compare?10:18);font(13,700);ctx.fillStyle='#475569';ctx.fillText(String(row[1]),bx+bw+7,yy+3);if(compare){ctx.fillStyle='#eef2f6';ctx.fillRect(bx,yy+18,bw,10);ctx.fillStyle='#f59e0b';ctx.fillRect(bx,yy+18,bw*row[2]/max,10);ctx.fillStyle='#475569';ctx.fillText(String(row[2]),bx+bw+7,yy+16);}});if(rows.length>16){font(13,400);ctx.fillStyle='#64748b';ctx.fillText(`+ ${rows.length-16} more`,x,y+16*34);}};
-    font(32,700);ctx.fillStyle='#10233d';ctx.fillText('HarborFlow · Port Call Calendar',pad,40);
+    font(32,700);ctx.fillStyle='#10233d';ctx.fillText('HarborFlow · Husbandry Call Calendar',pad,40);
     font(18,400);ctx.fillStyle='#64748b';ctx.fillText(`${label} · Jobs by ETA · port local time`,pad,86);
     const generated=new Date().toLocaleString('en-GB',{hour12:false});font(14,400);ctx.textAlign='right';ctx.fillText(`Downloaded ${generated}`,width-pad,48);ctx.textAlign='left';
     const [metricLabel,metricValue,metricTrend]=metrics();
     const cards=[
       {title:metricLabel,subtitle:metricTrend,kind:'metric'},
       {title:'Port / Terminal volume',subtitle:`${chart.currentLabel} vs ${chart.previousLabel}`,kind:'ports'},
-      {title:'Vessel type',subtitle:`${chart.currentLabel} · ${chart.activeCurrent.length} Port Calls`,kind:'types'},
-      {title:'Vessel status',subtitle:`${chart.currentLabel} · ${chart.current.length} Port Calls`,kind:'statuses'}
+      {title:'Vessel type',subtitle:`${chart.currentLabel} · ${chart.activeCurrent.length} Husbandry Calls`,kind:'types'},
+      {title:'Vessel status',subtitle:`${chart.currentLabel} · ${chart.current.length} Husbandry Calls`,kind:'statuses'}
     ];
     cards.forEach((card,index)=>{const x=pad+index*(cardWidth+gap),y=130;roundRect(x,y,cardWidth,chartHeight);font(20,700);ctx.fillStyle='#172033';ctx.fillText(card.title,x+20,y+20);font(14,400);ctx.fillStyle='#64748b';ctx.fillText(fitText(card.subtitle,cardWidth-40),x+20,y+50);if(card.kind==='metric'){font(50,700);ctx.fillStyle='#10233d';ctx.fillText(String(metricValue),x+20,y+94);font(14,400);ctx.fillStyle='#64748b';ctx.fillText('Excludes Cancelled',x+20,y+158);}else if(card.kind==='ports'){barList(chart.ports.map(port=>[port,chart.currentPorts.get(port)||0,chart.previousPorts.get(port)||0]),x+20,y+86,cardWidth-40,'#0f8a78',true);}else if(card.kind==='types'){barList(chart.types,x+20,y+86,cardWidth-40,'#4978c8');}else{barList(chart.statuses,x+20,y+86,cardWidth-40,'#7857d8');}});
     let cy=150+chartHeight;font(26,700);ctx.fillStyle='#10233d';ctx.fillText('Calendar',pad,cy);font(16,400);ctx.fillStyle='#64748b';ctx.fillText(label,pad+125,cy+5);cy+=48;
     const portColors={'port-map-ta-phut':['#d8f3e6','#15583e'],'port-laem-chabang':['#dcecff','#214f82'],'port-sriracha':['#eee4ff','#654194'],'port-other':['#e8f0f5','#3e5361']};
     const drawVesselMark=(type,x,y,color)=>{ctx.save();ctx.translate(x,y);ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=1.5;ctx.lineCap='round';ctx.lineJoin='round';const rect=(rx,ry,rw,rh)=>ctx.fillRect(rx,ry,rw,rh);switch(type){case'Container Ship':rect(6,7,5,4);rect(12,7,5,4);rect(18,7,5,4);rect(9,2,5,4);rect(15,2,5,4);break;case'LNG/LPG Carrier':ctx.beginPath();ctx.arc(10,8,4,Math.PI,0);ctx.arc(19,8,4,Math.PI,0);ctx.stroke();break;case'Oil/Chemical Tanker':ctx.beginPath();ctx.roundRect(7,5,15,6,3);ctx.stroke();ctx.beginPath();ctx.moveTo(11,5);ctx.lineTo(11,2);ctx.moveTo(18,5);ctx.lineTo(18,2);ctx.stroke();break;case'Bulk Carrier':ctx.beginPath();ctx.moveTo(6,10);ctx.lineTo(10,3);ctx.lineTo(14,10);ctx.moveTo(14,10);ctx.lineTo(18,3);ctx.lineTo(23,10);ctx.stroke();break;case'General Cargo':ctx.beginPath();ctx.moveTo(9,10);ctx.lineTo(9,3);ctx.lineTo(17,3);ctx.moveTo(13,3);ctx.lineTo(20,10);ctx.moveTo(7,10);ctx.lineTo(22,10);ctx.stroke();break;case'Ro-Ro':ctx.strokeRect(7,3,15,8);rect(9,6,3,2);rect(14,6,3,2);rect(19,6,2,2);break;case'Passenger/Cruise':ctx.beginPath();ctx.moveTo(7,10);ctx.lineTo(9,3);ctx.lineTo(20,3);ctx.lineTo(23,10);ctx.stroke();[10,14,18].forEach(px=>rect(px,5,2,2));break;case'Tug/Offshore':ctx.beginPath();ctx.moveTo(9,10);ctx.lineTo(9,4);ctx.lineTo(18,4);ctx.lineTo(22,10);ctx.stroke();ctx.strokeRect(12,0,5,4);break;default:ctx.beginPath();ctx.moveTo(8,10);ctx.lineTo(9,4);ctx.lineTo(19,4);ctx.lineTo(22,10);ctx.stroke();ctx.strokeRect(12,1,5,3);}ctx.beginPath();ctx.moveTo(3,12);ctx.lineTo(26,12);ctx.lineTo(22,18);ctx.lineTo(7,18);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(3,21);ctx.bezierCurveTo(6,18,9,23,12,20);ctx.bezierCurveTo(15,18,18,23,21,20);ctx.bezierCurveTo(23,19,25,19,27,20);ctx.stroke();ctx.restore();};
-    const drawJob=(j,x,y,w)=>{const colors=portColors[portClass(j.data.port)]||portColors['port-other'];ctx.fillStyle=colors[0];ctx.fillRect(x,y,w,jobBoxHeight-4);drawVesselMark(j.data.vesselType,x+5,y+8,colors[1]);font(14,700);ctx.fillStyle=colors[1];ctx.fillText(fitText(j.data.vessel||'Port Call',w-44),x+39,y+6);font(10,400);ctx.fillText(fitText(`${j.data.port||'No port'} · ${jobStatus(j.data.status)}`,w-44),x+39,y+25);};
+    const drawJob=(j,x,y,w)=>{const colors=portColors[portClass(j.data.port)]||portColors['port-other'];ctx.fillStyle=colors[0];ctx.fillRect(x,y,w,jobBoxHeight-4);drawVesselMark(j.data.vesselType,x+5,y+8,colors[1]);font(14,700);ctx.fillStyle=colors[1];ctx.fillText(fitText(j.data.vessel||'Husbandry Call',w-44),x+39,y+6);font(10,400);ctx.fillText(fitText(`${j.data.port||'No port'} · ${jobStatus(j.data.status)}`,w-44),x+39,y+25);};
     if(state.view==='month'||state.view==='week'){
       const first=state.view==='month'?startOfWeek(start):start,days=state.view==='month'?42:7,cols=7,cellW=(width-pad*2)/cols,rows=Math.ceil(days/cols),cellH=(calendarHeight-38)/rows;
       ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((day,index)=>{font(15,700);ctx.textAlign='center';ctx.fillStyle='#64748b';ctx.fillText(day,pad+index*cellW+cellW/2,cy);});ctx.textAlign='left';cy+=30;
       Array.from({length:days},(_,index)=>{const d=new Date(first);d.setDate(first.getDate()+index);const x=pad+(index%cols)*cellW,y=cy+Math.floor(index/cols)*cellH,outside=state.view==='month'&&d.getMonth()!==start.getMonth();ctx.fillStyle=outside?'#f1f4f8':'#ffffff';ctx.strokeStyle='#dbe3ed';ctx.lineWidth=1;ctx.fillRect(x,y,cellW-4,cellH-4);ctx.strokeRect(x,y,cellW-4,cellH-4);font(13,400);ctx.fillStyle=outside?'#94a3b8':'#475569';ctx.fillText(`${d.getDate()}${state.view==='week'?' '+d.toLocaleDateString('en',{month:'short'}):''}`,x+9,y+8);jobsOnDate(d).forEach((j,i)=>drawJob(j,x+7,y+31+i*jobBoxHeight,cellW-18));});
     }else{
       const columns=state.view==='quarter'?3:4,months=[];let d=new Date(start);while(d<=end){months.push(new Date(d));d.setMonth(d.getMonth()+1);}const rows=Math.ceil(months.length/columns),cellW=(width-pad*2-gap*(columns-1))/columns,cellH=(calendarHeight-gap*(rows-1))/rows;
-      months.forEach((month,index)=>{const x=pad+(index%columns)*(cellW+gap),y=cy+Math.floor(index/columns)*(cellH+gap);roundRect(x,y,cellW,cellH,12);font(18,700);ctx.fillStyle='#172033';ctx.fillText(month.toLocaleDateString('en',{month:'long',year:'numeric'}),x+16,y+15);const jobs=monthJobs(month).filter(j=>j.data.status!=='Cancelled');font(14,400);ctx.fillStyle='#64748b';ctx.fillText(`${jobs.length} Port Calls`,x+16,y+44);jobs.forEach((j,i)=>drawJob(j,x+14,y+72+i*jobBoxHeight,cellW-28));});
+      months.forEach((month,index)=>{const x=pad+(index%columns)*(cellW+gap),y=cy+Math.floor(index/columns)*(cellH+gap);roundRect(x,y,cellW,cellH,12);font(18,700);ctx.fillStyle='#172033';ctx.fillText(month.toLocaleDateString('en',{month:'long',year:'numeric'}),x+16,y+15);const jobs=monthJobs(month).filter(j=>j.data.status!=='Cancelled');font(14,400);ctx.fillStyle='#64748b';ctx.fillText(`${jobs.length} Husbandry Calls`,x+16,y+44);jobs.forEach((j,i)=>drawJob(j,x+14,y+72+i*jobBoxHeight,cellW-28));});
     }
     font(13,400);ctx.fillStyle='#64748b';ctx.fillText('Generated from the HarborFlow calendar view. Verify operational details before use.',pad,height-34);
     return canvas;
@@ -312,7 +312,7 @@
   }
   function renderHome() {
     if (root.classList.contains('active')) document.getElementById('title').textContent='Operations · Trial';
-    createButton.textContent='+ Create Port Call'; createButton.hidden=!isOwner() || !root.classList.contains('active');
+    createButton.textContent='+ Create Husbandry Call'; createButton.hidden=!isOwner() || !root.classList.contains('active');
     root.innerHTML=`<div class="hfo-shell">
       <div class="hfo-banner">ระบบทดลองซิงค์ข้ามเครื่อง · ใช้ข้อมูลสมมติเท่านั้น ห้ามกรอกข้อมูลลูกเรือหรือผู้เยี่ยมจริง${state.public?' · ผู้ชมทั่วไปเห็นเฉพาะข้อมูลสรุป':''}</div>
       <div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>
@@ -320,7 +320,7 @@
       `${(()=>{const [label,value,indicator,trend]=metrics();return `<div class="hfo-overview-grid"><div class="hfo-card hfo-stat"><span>${escape(label)}</span><strong>${escape(value)}</strong><small class="hfo-trend ${trend}">${escape(indicator)}</small><small class="hfo-muted">By ETA · excludes Cancelled</small></div>${monthlyCharts()}</div>`;})()}
        ${state.public?'<div class="hfo-info">ดู Job และ Service แบบสรุปได้โดยไม่ต้องลงชื่อเข้าใช้ · <a href="/api/auth?mode=start">ลงชื่อเข้าใช้เพื่อดูรายละเอียดและแก้ไขตามสิทธิ์</a></div>':''}
        <div class="hfo-card hfo-calendar-card"><div class="hfo-toolbar"><h2>Husbandry Call Calendar</h2><div class="hfo-row"><div class="hfo-download"><button class="hfo-btn" data-download-toggle aria-haspopup="true" aria-expanded="false">Download ▾</button><div class="hfo-download-menu" data-download-menu hidden><button type="button" data-download="png">Image (PNG)</button><button type="button" data-download="pdf">PDF</button></div></div><button class="hfo-btn" data-shift="-1" aria-label="Previous period">‹</button><b>${escape(period()[2])}</b><button class="hfo-btn" data-shift="1" aria-label="Next period">›</button><select id="hfoView" aria-label="Calendar view">${option(['week','month','quarter','year'],state.view)}</select></div></div><p class="hfo-muted">Jobs appear on their ETA date · port local time</p>${calendar()}</div>
-       <details class="hfo-card hfo-calls"><summary><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Port Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(jobStatus(j.data.status))}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Port Call ในฐานข้อมูลทดลอง</div>'}</div></details>
+       <details class="hfo-card hfo-calls"><summary><span>All Husbandry Calls</span><span class="hfo-muted">${state.jobs.length} calls · ${escape(state.sync)}</span></summary><div class="hfo-list">${state.jobs.length ? state.jobs.map(j=>`<div class="hfo-list-row"><button data-open-job="${j.id}"><b>${escape(j.data.vessel||'Husbandry Call')}</b><small>${state.public?'':escape((j.data.jobNo||'No Job No.')+' · ')}${escape(j.data.port||'No port')} · ETA ${formatDate(j.data.eta)}${state.public?'':' – ETD '+formatDate(j.data.etd)}</small></button><span>${escape(jobStatus(j.data.status))}</span></div>`).join(''):'<div class="hfo-empty">ยังไม่มี Husbandry Call ในฐานข้อมูลทดลอง</div>'}</div></details>
        ${isOwner()?'<button class="hfo-btn" data-grants>Manage Operations access</button>':''}`}
     </div>`;
     document.querySelector('.top .actions select').style.display='none';
@@ -328,22 +328,22 @@
   function overlay(content, title, subtitle='') {
     document.querySelector('.hfo-overlay')?.remove();
     const el=document.createElement('div'); el.className='hfo-overlay';
-    el.innerHTML=`<div class="hfo-overlay-head"><div><b>${escape(title)}</b><small class="hfo-muted" style="display:block">${escape(subtitle)}</small></div><button class="hfo-btn" data-close>Close ×</button></div><div class="hfo-overlay-body"><div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>${content}</div>`;
+    el.innerHTML=`<div class="hfo-overlay-head"><div><b>${escape(title)}</b>${subtitle?`<small class="hfo-muted" style="display:block">${escape(subtitle)}</small>`: ''}</div><button class="hfo-btn" data-close>Close</button></div><div class="hfo-overlay-body"><div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>${content}</div>`;
     document.body.appendChild(el);
   }
   function renderPublicJob() {
   const j=job(); if (!j) return;
   const calls=serviceList(j);
   overlay(`<div class="hfo-banner">Public summary only · รายชื่อ Crew/Visitor และข้อมูลภายในต้องลงชื่อเข้าใช้</div>
-    <div class="hfo-section"><h2>${escape(j.data.vessel||'Port Call')}</h2><p>${escape(j.data.port||'—')} · ${escape(jobStatus(j.data.status))}</p><p>ETA: ${formatDate(j.data.eta)}</p></div>
+    <div class="hfo-section"><h2>${escape(j.data.vessel||'Husbandry Call')}</h2><p>${escape(j.data.port||'—')} · ${escape(jobStatus(j.data.status))}</p><p>ETA: ${formatDate(j.data.eta)}</p></div>
     <div class="hfo-section"><h3>Services</h3><div class="hfo-service-grid">${calls.length?calls.map(s=>serviceTile(s,true)).join(''):'<p class="hfo-muted">No Services yet.</p>'}</div></div>
-    <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`,j.data.vessel||'Port Call','Public view');
+    <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`,j.data.vessel||'Husbandry Call','Public view');
 }
   function renderPublicService() {
     const s = service(), j = job(); if (!s || !j) return;
     overlay(`<div class="hfo-banner">Public Service summary only · บุคคล เอกสาร และหมายเหตุไม่แสดง</div>
-      <div class="hfo-section"><button class="hfo-btn" data-back-job>← Job</button>
-      <h2>#${s.seq} · ${escape(s.data.type||'Service')}</h2><p>${escape(j.data.vessel||'Port Call')} · ${escape(s.data.status||'—')}</p></div>
+      <div class="hfo-section"><button class="hfo-btn" data-back-job>Back to Job</button>
+      <h2>#${s.seq} · ${escape(s.data.type||'Service')}</h2><p>${escape(j.data.vessel||'Husbandry Call')} · ${escape(s.data.status||'—')}</p></div>
       <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, `#${s.seq} · ${s.data.type||'Service'}`, 'Public view');
   }
   function render() {
@@ -363,8 +363,7 @@
     return `<div class="hfo-form-grid hfo-job-form-grid">
       ${f('Job No.',data.jobNo,'jobNo','text',`${disable} ${attr} ${create?'required':''}`)}
       ${f('Vessel',data.vessel,'vessel','text',`${disable} ${attr} ${create?'required':''}`)}
-      ${f('IMO',data.imo,'imo','text',`${disable} ${attr}`)}
-      <div class="hfo-field"><span>Find IMO from vessel name</span><button type="button" class="hfo-btn" data-lookup-imo ${disable}>Search IMO</button><small class="hfo-muted" data-imo-feedback></small><div class="hfo-imo-results" data-imo-results></div></div>
+      <div class="hfo-imo-field"><div class="hfo-imo-entry">${f('IMO',data.imo,'imo','text',`${disable} ${attr}`)}<button type="button" class="hfo-btn" data-lookup-imo ${disable}>Search IMO</button></div><small class="hfo-muted" data-imo-feedback role="status"></small><div class="hfo-imo-results" data-imo-results></div></div>
       ${portSelect(data.port,`${disable} ${attr}`)}
       ${f('Principal',data.principal,'principal','text',`${disable} ${attr}`)}
       ${jobDateTimeField('ETA',data.eta,'eta',disable,attr,create)}
@@ -405,9 +404,9 @@
     return hidden;
   }
   function renderCreate() {
-    overlay(`<div class="hfo-banner">Create an Open Port Call with Vessel, Job No., Port and ETA. Principal and Job PIC can be completed later.</div>
-      <form id="hfoCreateJob" class="hfo-section"><h2>New Port Call</h2>${jobFields({status:'Open'},true,true)}
-      <div class="hfo-actions" style="margin-top:16px"><button class="hfo-btn primary">Create Port Call</button></div></form>`, 'Create Port Call', 'Trial data only');
+    overlay(`<div class="hfo-banner">Create an Open Husbandry Call with Vessel, Job No., Port and ETA. Principal and Job PIC can be completed later.</div>
+      <form id="hfoCreateJob" class="hfo-section"><h2>New Husbandry Call</h2>${jobFields({status:'Open'},true,true)}
+      <div class="hfo-actions" style="margin-top:16px"><button class="hfo-btn primary">Create Husbandry Call</button></div></form>`, 'Create Husbandry Call', 'Trial data only');
   }
   function serviceTile(s, publicView=false) {
   const type=s.data.type||'Service';
@@ -428,14 +427,23 @@
   const services=serviceList(j), editable=mayEditJob(j);
   const folderUrl=j.data.documentsPath?'https://github.com/primoxy-dev/harborflow-job-documents/tree/main/'+j.data.documentsPath.split('/').map(encodeURIComponent).join('/'):'';
   const folderControl=folderUrl?`<a class="hfo-btn" href="${escape(folderUrl)}" target="_blank" rel="noopener noreferrer">Open GitHub folder</a>${isOwner()?'<button class="hfo-btn" data-sync-job-folder>Sync GitHub folders</button>':''}<small class="hfo-muted">Folder follows Vessel, Job No., ETA and Cancelled status.</small>`:isOwner()?'<button class="hfo-btn" data-sync-job-folder>Create GitHub folder</button>':'<small class="hfo-muted">GitHub folder not created</small>';
-  overlay(`<div class="hfo-banner">ข้อมูลทดลองเท่านั้น · ห้ามใช้ข้อมูลลูกเรือหรือผู้เยี่ยมจริง · Autosave เมื่อเปลี่ยนช่องข้อมูล</div>
-    <div class="hfo-section"><div class="hfo-toolbar"><div><h2>${escape(j.data.vessel||'Port Call')}</h2><span class="hfo-muted">${escape(j.data.jobNo||'No Job No.')} · ${escape(j.data.port||'No port')} · ${escape(jobStatus(j.data.status))}</span></div><span class="hfo-muted" id="hfoSync">${escape(state.sync)}</span></div>
-    ${jobFields(j.data,editable)}<div class="hfo-actions">${folderControl}</div><p class="hfo-muted">Job ID: ${escape(j.id)} · assigned PIC does not automatically grant access</p></div>
-    <div class="hfo-section"><div class="hfo-toolbar"><h3>Services</h3>${editable?'<button class="hfo-btn primary" data-add-service>+ Add Service</button>':''}</div>
-    <div class="hfo-service-grid">${services.length?services.map(s=>serviceTile(s)).join(''):'<div class="hfo-empty">No Services yet.</div>'}</div></div>
+  const detailsOpen=state.editingJobId===j.id;
+  overlay(`<div class="hfo-banner">ข้อมูลทดลองเท่านั้น · ห้ามใช้ข้อมูลลูกเรือหรือผู้เยี่ยมจริง</div>
+    <section class="hfo-section hfo-job-summary" aria-label="Job overview">
+      <div class="hfo-toolbar hfo-job-summary-heading"><h2>${escape(j.data.vessel||'Draft Husbandry Call')}</h2><span class="hfo-status">${escape(jobStatus(j.data.status))}</span></div>
+      <dl class="hfo-job-facts"><div><dt>Job No.</dt><dd>${escape(j.data.jobNo||'—')}</dd></div><div><dt>Port / Terminal</dt><dd>${escape(j.data.port||'—')}</dd></div><div><dt>ETA</dt><dd>${formatDate(j.data.eta)}</dd></div><div><dt>ETD</dt><dd>${formatDate(j.data.etd)}</dd></div></dl>
+      <div class="hfo-actions hfo-job-summary-actions"><button type="button" class="hfo-btn" data-toggle-job-details aria-controls="hfoJobDetails" aria-expanded="${detailsOpen}">${detailsOpen?'Hide Job Details':editable?'Edit Job':'View Job Details'}</button>${folderUrl?`<a class="hfo-btn" href="${escape(folderUrl)}" target="_blank" rel="noopener noreferrer">Open GitHub folder</a>`:''}</div>
+    </section>
+    <section class="hfo-section" id="hfoJobDetails" ${detailsOpen?'':'hidden'} aria-label="Job details">
+      <div class="hfo-toolbar"><h3>Job details</h3><span class="hfo-muted" id="hfoSync" role="status">${escape(state.sync)}</span></div>
+      ${editable?'<p class="hfo-muted">Changes save automatically.</p>':''}
+      ${jobFields(j.data,editable)}<div class="hfo-actions">${folderControl}</div><p class="hfo-muted">Job ID: ${escape(j.id)} · assigned PIC does not automatically grant access</p>
+    </section>
+    <section class="hfo-section"><div class="hfo-toolbar"><h3>Services</h3>${editable?'<button class="hfo-btn primary" data-add-service>+ Add Service</button>':''}</div>
+    <div class="hfo-service-grid">${services.length?services.map(s=>serviceTile(s)).join(''):'<div class="hfo-empty">No Services yet.</div>'}</div></section>
     <div class="hfo-section"><button type="button" class="hfo-btn primary" data-create-quotation>Create Quotation</button></div>
     <div class="hfo-section"><div class="hfo-toolbar"><h3>Activity</h3><button class="hfo-btn" data-history="job" data-history-id="${j.id}">View history</button></div><div id="hfoHistory">${historyHtml()}</div></div>
-    ${isOwner()?removedServices(j):''}`, j.data.vessel||'Draft Port Call', j.data.jobNo||j.id);
+    ${isOwner()?removedServices(j):''}`, 'Job');
 }
   function removedServices(j) {
     const removed=state.services.filter(s=>s.job_id===j.id && s.removed_at);
@@ -458,7 +466,7 @@
   function renderAddService() {
     const j=job(); if (!j) return;
     overlay(`<div class="hfo-banner">Each Service instance gets a permanent number. Repeated types are allowed.</div>
-      <form class="hfo-section" id="hfoAddService"><h2>Add Service to ${escape(j.data.vessel||'Port Call')}</h2>
+      <form class="hfo-section" id="hfoAddService"><h2>Add Service to ${escape(j.data.vessel||'Husbandry Call')}</h2>
        <div class="hfo-form-grid">${sel('Service type','Crew Change','type',TYPES)}${f('Description','','description')}${f('Service PIC (GitHub login)','','pic')}</div>
       <p class="hfo-muted">A PIC name does not grant account access. Other fields can be filled in the dedicated Service view.</p>
       <button class="hfo-btn primary">Add Service</button></form>`, 'Add Service', j.data.jobNo||j.id);
@@ -863,11 +871,11 @@
   const label={details:'Service details',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'Hotel',travel:'Travel',checklist:'Checklist',history:'History'};
   const documentTab=['oktb','permit','loi'].includes(state.tab);
   overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
-    <div class="hfo-toolbar"><div><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Port Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>← Job</button></div>
+    <div class="hfo-toolbar"><div><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Husbandry Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>Back to Job</button></div>
     ${isCrew||isVisitorService?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
     <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${label[t]}</button>`).join('')}</div>
     ${state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?serviceDetails(s,mayEditService(s)):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
-    '#'+s.seq+' · '+s.data.type,j.data.vessel||'Port Call');
+    '#'+s.seq+' · '+s.data.type,j.data.vessel||'Husbandry Call');
   if(state.tab==='hotel')window.HarborFlowHotels?.mount(document.getElementById('hfoHotel'),{serviceId:s.id,api});
   if (documentTab) window.HarborFlowDocuments?.mount(document.getElementById('hfoDocument'),{jobId:j.id,serviceId:s.id,type:state.tab,login:state.login});
   if(state.tab==='travel'&&state.tripDraft)setTimeout(mountTripMap,0);
@@ -1216,7 +1224,7 @@
     document.querySelectorAll('[data-time-picker-panel]').forEach(panel=>{if(!panel.closest('.hfo-time-entry')?.contains(event.target))panel.hidden=true;});
     document.querySelectorAll('[data-code-kind]').forEach(input=>{if(!input.closest('.hfo-code-field').contains(event.target))closeCodeSuggestions(input);});
     const downloadMenu=document.querySelector('[data-download-menu]');if(downloadMenu&&!event.target.closest('.hfo-download')){downloadMenu.hidden=true;document.querySelector('[data-download-toggle]')?.setAttribute('aria-expanded','false');}
-    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-download-toggle],[data-download],[data-grants],[data-close],[data-back-job],[data-add-service],[data-create-quotation],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item],[data-doc-choose],[data-doc-title]');
+    const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-download-toggle],[data-download],[data-grants],[data-close],[data-back-job],[data-toggle-job-details],[data-add-service],[data-create-quotation],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item],[data-doc-choose],[data-doc-title]');
     if(!b)return;
     if(b.dataset.docChoose){document.querySelector(`[data-doc-file="${b.dataset.docChoose}"]`)?.click();return;}
     if(b.dataset.docTitle){
@@ -1227,14 +1235,23 @@
     }
     if(b.hasAttribute('data-download-toggle')){const menu=b.parentElement.querySelector('[data-download-menu]'),open=menu.hidden;menu.hidden=!open;b.setAttribute('aria-expanded',String(open));return;}
     if(b.dataset.download){b.closest('[data-download-menu]').hidden=true;await downloadCalendarReport(b.dataset.download);return;}
-if(b.dataset.openJob){state.openJobId=b.dataset.openJob;state.openServiceId=null;state.documentBatch={busy:false,category:'On-signers',completed:0,total:0,results:[]};state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
+if(b.dataset.openJob){state.editingJobId=null;state.openJobId=b.dataset.openJob;state.openServiceId=null;state.documentBatch={busy:false,category:'On-signers',completed:0,total:0,results:[]};state.modal=null;state.people=[];state.peopleLoadedFor=null;state.history=[];state.error='';render();if(!state.public){await loadPortChoices();await loadPeople();}return;}
+    if(b.hasAttribute('data-toggle-job-details')){
+      const details=document.getElementById('hfoJobDetails');
+      const open=details.hidden;
+      state.editingJobId=open?job().id:null;
+      details.hidden=!open;
+      b.setAttribute('aria-expanded',String(open));
+      b.textContent=open?'Hide Job Details':mayEditJob(job())?'Edit Job':'View Job Details';
+      return;
+    }
     if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
     if(b.hasAttribute('data-sync-job-folder')){await perform('syncJobFolder',{id:job().id},out=>{Object.assign(job(),out.record);render();});return;}
     if(b.dataset.imoChoice){const grid=b.closest('.hfo-form-grid'),input=grid?.querySelector('[name="imo"]');if(input){input.value=b.dataset.imoChoice;grid.querySelector('[data-imo-feedback]').textContent='IMO selected. Verify with ship documents.';if(input.hasAttribute('data-job-field'))input.dispatchEvent(new Event('change',{bubbles:true}));}return;}
-if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.documentBatch={busy:false,category:'On-signers',completed:0,total:0,results:[]};state.tab=service()?.data.type==='Crew Change'?'crew':FLAT_VISITORS[service()?.data.type]?'visitors':'details';state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
+if(b.dataset.openService){state.editingJobId=null;state.openServiceId=b.dataset.openService;state.documentBatch={busy:false,category:'On-signers',completed:0,total:0,results:[]};state.tab=service()?.data.type==='Crew Change'?'crew':FLAT_VISITORS[service()?.data.type]?'visitors':'details';state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
     if(b.dataset.shift){shift(Number(b.dataset.shift));return;}
     if(b.hasAttribute('data-grants')){state.modal='grants';state.openJobId=null;state.openServiceId=null;render();return;}
-    if(b.hasAttribute('data-close')){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.modal=null;state.openJobId=null;state.openServiceId=null;state.people=[];state.peopleLoadedFor=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
+    if(b.hasAttribute('data-close')){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.modal=null;state.openJobId=null;state.editingJobId=null;state.openServiceId=null;state.people=[];state.peopleLoadedFor=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
     if(b.hasAttribute('data-back-job')){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.openServiceId=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];render();return;}
     if(b.hasAttribute('data-create-quotation')){window.HarborFlowJobQuotation.open(job().id);return;}
     if(b.hasAttribute('data-add-service')){state.modal='addService';render();return;}
