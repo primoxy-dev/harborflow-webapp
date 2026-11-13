@@ -592,7 +592,7 @@
   }
 
   const FLIGHT_FIELDS=[['airline','Airline'],['number','Flight No.'],['date','Date'],['from','From'],['to','To'],['departure','Departure'],['arrival','Arrival'],['booking','PNR']];
-  function flightCell(fl,i,key,label,editable,compact=false,showLabel=true) {
+  function flightCell(fl,i,key,label,editable,compact=false) {
     const kind=key==='airline'?'airlines':['from','to'].includes(key)?'airports':'';
     const raw=fl[key]||'',formattedDate=key==='date'?formatDdMmm(raw):'';
     const value=key==='date'&&formattedDate!=='DDMMM'?formattedDate:String(raw).toUpperCase();
@@ -602,7 +602,7 @@
     const input=`<input data-flight="${i}" data-flight-field="${key}" aria-label="${label}, flight ${i+1}" type="text" ${placeholder?`placeholder="${placeholder}"`:''} ${lookupAttrs} value="${escape(value)}" ${editable?'':'disabled'}>`;
     const row=kind?(flightCodes[kind]||[]).find(item=>item[0]===value):null;
     const field=kind?`<div class="hfo-code-field">${input}<div id="${id}" class="hfo-code-results" role="listbox" aria-label="${label} suggestions" hidden></div><small class="hfo-code-caption">${escape(row?codeLabel(row,kind):'')}</small></div>`:input;
-    if(compact)return `<div class="hfo-crew-flight-field">${showLabel?`<span class="hfo-crew-label">${label}</span>`:''}${field}</div>`;
+    if(compact)return `<div class="hfo-crew-flight-field"><span class="hfo-crew-label">${label}</span>${field}</div>`;
     return `<td data-label="${label}">${field}</td>`;
   }
   const DOCUMENT_TYPES=[
@@ -649,8 +649,8 @@
   const current=p.immigration?.codes||{};
   const checked=code=>Boolean(current[code]||code==='VISA'&&p.immigration?.visa||code==='OKTB'&&p.immigration?.oktb);
   const flightRow=(flight,i)=>`<span class="hfo-crew-flight-number" aria-label="Flight ${i+1}">#${i+1}</span>
-    ${FLIGHT_FIELDS.map(([key,label])=>flightCell(flight,i,key,label,edit,true,i===0)).join('')}
-    <div class="hfo-crew-flight-actions">${edit&&i===0?'<button type="button" class="hfo-btn" data-add-flight>+ Flight</button>':''}
+    ${FLIGHT_FIELDS.map(([key,label])=>flightCell(flight,i,key,label,edit,true)).join('')}
+    <div class="hfo-crew-flight-actions">${edit&&i===0?'<button type="button" class="hfo-btn hfo-flight-add-desktop" data-add-flight>+ Flight</button>':''}
       ${edit&&flights.length?`<button type="button" class="hfo-btn danger" data-remove-flight="${i}" aria-label="Remove flight ${i+1}">×</button>`:''}</div>`;
   return `<form id="hfoPersonForm" class="hfo-person-expanded hfo-crew-compact${crew?'':' hfo-visitor-compact'}" aria-label="${crew?'Immigration & flight details':'Flight details'} · ${escape(p.name)}">
     <div class="hfo-crew-detail-scroll">
@@ -662,6 +662,7 @@
       </div>
       ${displayFlights.slice(1).map((flight,i)=>`<div class="hfo-crew-detail-grid hfo-crew-extra">${flightRow(flight,i+1)}</div>`).join('')}
     </div>
+    ${edit?'<button type="button" class="hfo-btn hfo-flight-add-mobile" data-add-flight>+ Flight</button>':''}
     ${edit?'<small data-person-save-status role="status" class="hfo-muted">Changes save automatically</small>':''}
   </form>`;
   }
@@ -1247,7 +1248,17 @@ if(b.dataset.openService){state.openServiceId=b.dataset.openService;state.docume
     if(b.dataset.removePerson){const p=state.people.find(x=>x.id===b.dataset.removePerson),reason=prompt('Reason for removing this person:');if(reason)await perform('removePerson',{id:p.id,kind:p.kind,reason},()=>{state.people=state.people.filter(x=>x.id!==p.id);render();});return;}
     if(b.hasAttribute('data-close-person')){if(await savePerson()===false)return;state.personDraft=null;render();return;}
     if(b.hasAttribute('data-save-new-person')){await saveNewPerson();return;}
-    if(b.hasAttribute('data-add-flight')){capturePersonForm();state.personDraft.data.flights.push({airline:'',number:'',date:'',from:'',to:'',departure:'',arrival:'',booking:''});render();schedulePersonSave(0);return;}
+    if(b.hasAttribute('data-add-flight')){
+      capturePersonForm();
+      const flights=state.personDraft.data.flights;
+      const index=flights.length;
+      flights.push({airline:'',number:'',date:'',from:'',to:'',departure:'',arrival:'',booking:''});
+      const mobile=b.classList.contains('hfo-flight-add-mobile');
+      render();
+      if(mobile)document.querySelector(`#hfoPersonForm [data-flight="${index}"]`)?.closest('.hfo-crew-detail-grid')?.scrollIntoView({block:'nearest'});
+      schedulePersonSave(0);
+      return;
+    }
     if(b.hasAttribute('data-remove-flight')){capturePersonForm();state.personDraft.data.flights.splice(Number(b.dataset.removeFlight),1);render();schedulePersonSave(0);return;}
     if(b.dataset.placeSearch){await searchTripPlace(b.dataset.placeSearch);return;}
     if(b.dataset.pinTarget){tripPinTarget=b.dataset.pinTarget;updatePinButtons();return;}
