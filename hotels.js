@@ -6,6 +6,11 @@
   const nights=d=>d.checkIn&&d.checkOut?Math.max(0,Math.round((Date.parse(d.checkOut)-Date.parse(d.checkIn))/86400000)):0;
   async function mount(host,{serviceId,api}) {
     if(!host)return;
+    const compose = async (booking,trigger) => {
+      if (!booking) return;
+      try { const {openHotelEmail}=await import('./hotel-email.mjs'); if(host.isConnected)openHotelEmail({api,serviceId,booking,trigger}); }
+      catch(error){notice(error.message,true);}
+    };
     let bookings=[],people=[],editable=false,draft=null,saving=false,searchTimer=null,searchSerial=0;
     const input=(label,key,type='text',extra='')=>'<label class="hfo-field"><span>'+label+'</span><input name="'+key+'" type="'+type+'" value="'+esc(draft.data[key])+'" '+extra+'></label>';
     const notice=(text,failed=false)=>{const n=host.querySelector('[data-hotel-message]');if(n){n.textContent=text;n.classList.toggle('hfo-alert',failed);}};
@@ -26,7 +31,7 @@
         (people.length?people.map(p=>'<label><input type="checkbox" name="personIds" value="'+esc(p.id)+'" '+(d.personIds?.includes(p.id)?'checked':'')+'> '+esc(p.name)+'</label>').join(''):'<p>Add people in the roster first, then reopen Hotel to select guests.</p>')+
         '</fieldset><label class="hfo-field"><span>Notes / meals / special requests</span><textarea name="notes" maxlength="1000">'+esc(d.notes)+'</textarea></label>'+
         '<p class="hfo-muted">Estimated room total: <strong data-hotel-total></strong> · excludes taxes and extras</p>'+
-        '<div class="hfo-actions"><button class="hfo-btn" type="button" data-hotel-email-draft>Compose in Outlook</button><button class="hfo-btn primary" type="submit">Save booking</button><button class="hfo-btn" type="button" data-hotel-close>Close</button></div></form>';
+        '<div class="hfo-actions"><button class="hfo-btn primary" type="submit">Save booking</button><button class="hfo-btn" type="button" data-hotel-close>Close</button></div></form>';
     }
     function render(){
       host.innerHTML='<div class="hfo-toolbar"><div><h3>Hotel</h3><small class="hfo-muted">'+bookings.filter(b=>b.data.status!=='Cancelled').length+' active bookings</small></div>'+(editable&&!draft?'<button class="hfo-btn primary" data-hotel-add>+ Add hotel</button>':'')+'</div><p data-hotel-message role="status"></p>'+
@@ -34,7 +39,7 @@
         (bookings.length?bookings.map(b=>{
           const d=b.data,guestNames=(d.personIds||[]).map(id=>people.find(p=>p.id===id)?.name||'Guest no longer in roster');
           const cost=d.rate&&d.rooms&&nights(d)?Number(d.rate)*Number(d.rooms)*nights(d):null;
-          return '<article class="hfo-hotel-card"><div class="hfo-toolbar"><h4>'+esc(d.hotel)+'</h4><span class="hfo-status">'+esc(d.status)+'</span></div><p>'+esc(d.checkIn||'Check-in not set')+' → '+esc(d.checkOut||'Check-out not set')+' · '+nights(d)+' nights</p><p>'+esc(d.roomType||'Room type not set')+' · '+esc(d.rooms||'—')+' rooms</p><p><b>Guests:</b> '+esc(guestNames.join(', ')||'Not selected')+'</p><p><b>Reference:</b> '+esc(d.bookingRef||'—')+'</p><p>'+esc(d.address||'')+' '+esc(d.contact||'')+'</p>'+(cost===null?'':'<p>Estimated rooms: '+cost.toLocaleString(undefined,{maximumFractionDigits:2})+' '+esc(d.currency)+'</p>')+(d.notes?'<p>'+esc(d.notes)+'</p>':'')+'<button class="hfo-btn" data-hotel-email="'+esc(b.id)+'">Compose in Outlook</button>'+(editable?'<button class="hfo-btn" data-hotel-edit="'+esc(b.id)+'">Edit booking</button>':'')+'</article>';
+          return '<article class="hfo-hotel-card"><div class="hfo-toolbar"><h4>'+esc(d.hotel)+'</h4><span class="hfo-status">'+esc(d.status)+'</span></div><p>'+esc(d.checkIn||'Check-in not set')+' → '+esc(d.checkOut||'Check-out not set')+' · '+nights(d)+' nights</p><p>'+esc(d.roomType||'Room type not set')+' · '+esc(d.rooms||'—')+' rooms</p><p><b>Guests:</b> '+esc(guestNames.join(', ')||'Not selected')+'</p><p><b>Reference:</b> '+esc(d.bookingRef||'—')+'</p><p>'+esc(d.address||'')+' '+esc(d.contact||'')+'</p>'+(cost===null?'':'<p>Estimated rooms: '+cost.toLocaleString(undefined,{maximumFractionDigits:2})+' '+esc(d.currency)+'</p>')+(d.notes?'<p>'+esc(d.notes)+'</p>':'')+(editable?'<button class="hfo-btn" data-hotel-email="'+esc(b.id)+'">Compose Email</button>':'')+(editable?'<button class="hfo-btn" data-hotel-edit="'+esc(b.id)+'">Edit booking</button>':'')+'</article>';
         }).join(''):'<p class="hfo-muted">No hotel bookings yet.</p>')+'</div>';
       updateEstimate();
     }
@@ -63,17 +68,6 @@
         searchResults(items);
       }catch{if(serial===searchSerial)searchResults([]);}
     }
-    function composeEmail(data){
-      const to=String(data.email||'').trim();
-      if(to&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)){notice('Enter a valid hotel email address before opening Outlook.',true);return;}
-      const subject='Hotel room reservation enquiry'+(data.hotel?' - '+data.hotel:'');
-      const body=['Dear Reservations Team,','','Please advise availability and a quotation for the following booking:', 'Hotel: '+(data.hotel||'To be confirmed'), 'Check-in: '+(data.checkIn||'To be confirmed'), 'Check-out: '+(data.checkOut||'To be confirmed'), 'Room type: '+(data.roomType||'To be confirmed'), 'Number of rooms: '+(data.rooms||'To be confirmed'), '', 'Please confirm the rate, taxes, cancellation terms, and booking reference.','','Best regards,'].join('\n');
-      const url=new URL('https://outlook.office.com/mail/deeplink/compose');
-      if(to)url.searchParams.set('to',to);
-      url.searchParams.set('subject',subject);url.searchParams.set('body',body);
-      window.open(url.toString(),'_blank','noopener,noreferrer');
-      notice('Outlook draft opened. Review the details and send it there.');
-    }
     host.addEventListener('input',event=>{
       if(saving)return;
       capture();updateEstimate();
@@ -93,8 +87,7 @@
         if(item.address)host.querySelector('[name="address"]').value=item.address;
         searchSerial++;clearTimeout(searchTimer);searchResults([]);capture();return;
       }
-      if(b.hasAttribute('data-hotel-email-draft')){capture();composeEmail(draft.data);return;}
-      if(b.hasAttribute('data-hotel-email')){const record=bookings.find(r=>r.id===b.dataset.hotelEmail);if(record)composeEmail(record.data);return;}
+      if(b.hasAttribute('data-hotel-email')){void compose(bookings.find(r=>r.id===b.dataset.hotelEmail),b);return;}
       if(b.hasAttribute('data-hotel-add'))draft={data:{hotel:'',status:'Draft',currency:'THB',rooms:'1',personIds:[]}};
       else if(b.dataset.hotelEdit){const record=bookings.find(r=>r.id===b.dataset.hotelEdit);draft={id:record.id,version:record.version,data:structuredClone(record.data)};}
       else if(b.hasAttribute('data-hotel-close'))draft=null;

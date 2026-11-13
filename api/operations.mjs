@@ -10,8 +10,10 @@ const personFields = ['kind', 'category', 'name', 'nationality', 'rank', 'dob', 
 const tripFields = ['kind', 'origin', 'originName', 'originAddress', 'destination', 'destinationName', 'destinationAddress', 'originLat', 'originLon', 'destinationLat', 'destinationLon', 'plannedDeparture', 'plannedArrival', 'actualDeparture', 'actualArrival', 'routeDistanceMeters', 'routeDurationSeconds', 'provider', 'vehicle', 'purpose', 'status', 'personIds', 'cargo', 'cargoItems', 'notes'];
 const parse = async request => {
   const raw = await request.text();
-  if (raw.length > 24000) throw Error('Request too large');
-  return JSON.parse(raw || '{}');
+  if (raw.length > 60000) throw Error('Request too large');
+  const input = JSON.parse(raw || '{}');
+  if (raw.length > 24000 && !['saveHotelEmailDraft','saveHotelEmailTemplate'].includes(input?.action)) throw Error('Request too large');
+  return input;
 };
 const clean = (value, keys) => Object.fromEntries(Object.entries(value || {}).filter(([key]) => keys.includes(key)));
 const error = (message, code = 400, extra = {}) => json({ error: message, ...extra }, code);
@@ -156,6 +158,7 @@ return async function route(request) {
       const people = await rows(sql, 'SELECT * FROM operation_people WHERE job_id=$1 AND kind=ANY($2::text[]) AND removed_at IS NULL ORDER BY created_at', [jobId, kinds]);
       return json({ people, kinds });
     }
+    if(action==='hotelEmail')return hotelRoute({sql,grant,login,input:{action,serviceId:url.searchParams.get('serviceId'),bookingId:url.searchParams.get('bookingId')},read:true});
     if(action==='hotels')return hotelRoute({sql,grant,login,input:{serviceId:url.searchParams.get('serviceId')},read:true});
     if (action === 'trips') {
       if (!grant.crewView || !grant.visitorView) return error('Crew and Visitor view permissions required for linked travel', 403);
@@ -188,7 +191,7 @@ return async function route(request) {
   let input;
   try { input = await parse(request); } catch { return error('Invalid or oversized JSON'); }
   const action = input.action;
-  if(action==='saveHotel')return hotelRoute({sql,grant,login,input});
+  if(['saveHotel','saveHotelEmailDraft','saveHotelEmailTemplate','removeHotelEmailTemplate'].includes(action))return hotelRoute({sql,grant,login,input});
 
   if (action === 'grant') {
     if (grant.role !== 'owner') return error('Owner permission required', 403);
