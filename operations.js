@@ -420,7 +420,10 @@
   return `<div class="hfo-service-card"><button class="hfo-service-tile" type="button" data-open-service="${s.id}" aria-label="Open ${label}, ${status}">
     <span class="hfo-service-icon" aria-hidden="true">${icon}<small class="hfo-service-count">${personType && count!==null?count+'p':'1s'}</small></span><span class="hfo-service-name">${label}</span>
     <span class="hfo-service-meta"><small>#${s.seq}</small><small class="hfo-status">${status}</small>${personType && count!==null?`<small>${count} people</small>`:''}</span>
-    </button>${!publicView && mayEditService(s)?`<button class="hfo-btn danger hfo-remove-service" type="button" data-remove-service="${s.id}" aria-label="Remove ${label}">×</button>`:''}</div>`;
+    </button>${!publicView && mayEditService(s)?`<details class="hfo-service-menu">
+      <summary aria-label="Actions for ${label}">⋯</summary>
+      <div class="hfo-service-menu-panel"><button class="hfo-btn danger" type="button" data-remove-service="${s.id}">Remove Service</button></div>
+    </details>`:''}</div>`;
 }
   function renderJob() {
   const j=job(); if (!j) return;
@@ -1224,6 +1227,9 @@
     document.querySelectorAll('[data-time-picker-panel]').forEach(panel=>{if(!panel.closest('.hfo-time-entry')?.contains(event.target))panel.hidden=true;});
     document.querySelectorAll('[data-code-kind]').forEach(input=>{if(!input.closest('.hfo-code-field').contains(event.target))closeCodeSuggestions(input);});
     const downloadMenu=document.querySelector('[data-download-menu]');if(downloadMenu&&!event.target.closest('.hfo-download')){downloadMenu.hidden=true;document.querySelector('[data-download-toggle]')?.setAttribute('aria-expanded','false');}
+    for (const menu of document.querySelectorAll('.hfo-service-menu[open]')) {
+      if (!menu.contains(event.target)) menu.open=false;
+    }
     const b=event.target.closest('[data-open-job],[data-open-service],[data-shift],[data-download-toggle],[data-download],[data-grants],[data-close],[data-back-job],[data-toggle-job-details],[data-add-service],[data-create-quotation],[data-remove-service],[data-restore-service],[data-tab],[data-add-step],[data-remove-step],[data-add-person],[data-save-new-person],[data-edit-person],[data-remove-person],[data-close-person],[data-add-flight],[data-remove-flight],[data-add-trip],[data-edit-trip],[data-remove-trip],[data-close-trip],[data-history],[data-resolve],[data-revoke],[data-lookup-imo],[data-imo-choice],[data-sync-job-folder],[data-place-search],[data-pin-target],[data-open-time-picker],[data-add-cargo-item],[data-remove-cargo-item],[data-doc-choose],[data-doc-title]');
     if(!b)return;
     if(b.dataset.docChoose){document.querySelector(`[data-doc-file="${b.dataset.docChoose}"]`)?.click();return;}
@@ -1255,7 +1261,19 @@ if(b.dataset.openService){state.editingJobId=null;state.openServiceId=b.dataset.
     if(b.hasAttribute('data-back-job')){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.openServiceId=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];render();return;}
     if(b.hasAttribute('data-create-quotation')){window.HarborFlowJobQuotation.open(job().id);return;}
     if(b.hasAttribute('data-add-service')){state.modal='addService';render();return;}
-    if(b.dataset.removeService){const reason=prompt('Reason for removing this erroneous Service entry:');if(reason)await perform('removeService',{id:b.dataset.removeService,reason},out=>{const x=state.services.find(s=>s.id===out.service.id);Object.assign(x,out.service);render();});return;}
+    if(b.dataset.removeService){
+      const selected=serviceList(job()).find(s=>s.id===b.dataset.removeService);
+      const menu=b.closest('.hfo-service-menu');
+      menu.open=false;
+      if(!selected || !mayEditService(selected)) return;
+      menu.querySelector('summary').focus();
+      if (!window.confirm(`Remove ${selected.data.type||'Service'} #${selected.seq}?`)) return;
+      await perform('removeService',{id:selected.id,reason:'Removal confirmed in Operations'},out=>{
+        Object.assign(selected,out.service);
+        render();
+      });
+      return;
+    }
     if(b.dataset.restoreService){const reason=prompt('Reason for restoring this Service:');if(reason)await perform('restoreService',{id:b.dataset.restoreService,reason},out=>{const x=state.services.find(s=>s.id===out.service.id);Object.assign(x,out.service);render();});return;}
     if(b.dataset.tab){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.tab=b.dataset.tab;state.personDraft=null;state.tripDraft=null;state.history=[];render();if(['crew','visitors'].includes(state.tab))await loadPeople();if(state.tab==='travel'){await loadPeople();await loadTrips();}return;}
     if(b.hasAttribute('data-add-step')){const text=prompt('Checklist step:');if(text?.trim())await saveChecklist([...(service().data.checklist||[]),{text:text.trim(),done:false}]);return;}
@@ -1338,6 +1356,12 @@ if(b.dataset.openService){state.editingJobId=null;state.openServiceId=b.dataset.
   document.body.addEventListener('drop',event=>{const drop=event.target.closest('[data-doc-drop]');if(!drop)return;event.preventDefault();drop.classList.remove('is-dragging');const files=[...(event.dataTransfer?.files||[])];if(files.length)void importPersonDocuments(files,drop.dataset.docDrop);});
   document.body.addEventListener('keydown',event=>{
     const t=event.target;
+    const menu=t.closest('.hfo-service-menu[open]');
+    if (event.key==='Escape' && menu) {
+      menu.open=false;
+      menu.querySelector('summary').focus();
+      return;
+    }
     if(!t.dataset.codeKind)return;
     const list=document.getElementById(t.getAttribute('aria-controls'));
     if(event.key==='Escape'||event.key==='Tab'){closeCodeSuggestions(t);return;}
