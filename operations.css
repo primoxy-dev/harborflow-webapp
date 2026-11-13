@@ -334,3 +334,48 @@
   box-shadow: 0 4px 16px #10233d26;
 }
 .hfo-service-menu-panel button { min-height: 44px; }
+
+.hfo-hotel-mail {
+  width: min(720px, calc(100% - 24px));
+  max-width: none;
+  max-height: calc(100% - 24px);
+  box-sizing: border-box;
+  border: 1px solid #dbe3ed;
+  border-radius: 12px;
+  padding: 0 18px;
+  color: #10233d;
+}
+.hfo-hotel-mail::backdrop { background: #10233d70; }
+.hfo-hotel-mail header, .hfo-hotel-mail footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: #fff;
+}
+.hfo-hotel-mail header { position: sticky; top: 0; z-index: 1; padding: 16px 0 10px; }
+.hfo-hotel-mail header h2, .hfo-hotel-mail header p { margin: 0; }
+.hfo-hotel-mail header p { color: #52667a; margin-top: 4px; overflow-wrap: anywhere; }
+.hfo-hotel-mail footer { position: sticky; bottom: 0; justify-content: flex-end; padding: 12px 0; border-top: 1px solid #dbe3ed; }
+.hfo-hotel-mail button { min-height: 40px; cursor: pointer; }
+.hfo-hotel-mail input, .hfo-hotel-mail select { box-sizing: border-box; min-width: 0; width: 100%; padding: 8px; font: inherit; border: 1px solid #cbd5e1; border-radius: 6px; }
+.hfo-mail-line { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; margin: 8px 0; }
+.hfo-mail-templates { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; padding: 10px; background: #f1f6fa; border-radius: 8px; }
+.hfo-mail-templates small { grid-column: 1 / -1; }
+.hfo-mail-templates small:empty, .hfo-hotel-mail [data-mail-notice]:empty { display: none; }
+.hfo-mail-templates label, .hfo-hotel-mail [data-manage] label { display: grid; gap: 4px; }
+.hfo-mail-body, .hfo-hotel-mail [data-manage] { margin: 12px 0; border: 1px solid #cbd5e1; border-radius: 8px; }
+.hfo-hotel-mail [data-manage] { padding: 12px; }
+.hfo-hotel-mail [data-manage] summary { cursor: pointer; margin-bottom: 6px; }
+.hfo-mail-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; background: #f5f8fb; border-bottom: 1px solid #cbd5e1; padding: 6px; }
+.hfo-mail-tools button { min-width: 34px; padding: 5px 7px; border: 1px solid #cbd5e1; border-radius: 5px; background: white; color: #10233d; }
+.hfo-mail-tools select { width: auto; }
+.hfo-mail-editor { min-height: 210px; max-height: 50vh; overflow: auto; overflow-wrap: anywhere; padding: 12px; font: 15px/1.4 Arial,sans-serif; }
+.hfo-mail-editor p { margin: 0 0 .7em; }
+@media (max-width: 540px) {
+  .hfo-hotel-mail { padding-inline: 12px; }
+  .hfo-mail-line { grid-template-columns: 62px minmax(0, 1fr); }
+  .hfo-hotel-mail footer button { flex: 1 1 auto; }
+  .hfo-hotel-mail input { font-size: 16px; }
+}
