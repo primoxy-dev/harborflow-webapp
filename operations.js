@@ -474,6 +474,18 @@
       <p class="hfo-muted">A PIC name does not grant account access. Other fields can be filled in the dedicated Service view.</p>
       <button class="hfo-btn primary">Add Service</button></form>`, 'Add Service', j.data.jobNo||j.id);
   }
+  function provisionPanel(s) {
+    const d=s.data, j=job().data, editable=mayEditService(s);
+    const legacy=Boolean(d.description||d.supplier||Object.values(d.details||{}).some(value=>value!=null&&value!==''));
+    return `<div class="hfo-provision" data-provision-service>
+      <header class="hfo-provision-heading">
+        <div><h2>Provision &amp; Store</h2><p>${escape([j.vessel,j.port,j.jobNo].filter(Boolean).join(' · '))}</p></div>
+        <div>${sel('Service status',d.status,'status',SERVICE_STATUSES,editable?'data-service-field':'disabled')}<small data-provision-save role="status"></small></div>
+      </header>
+      <div data-provision-items>Loading items…</div>
+      <details class="hfo-section hfo-provision-settings"><summary>${legacy?'Service settings and previous delivery details':'Service settings'}</summary>${serviceDetails(s,editable)}</details>
+    </div>`;
+  }
   function serviceDetails(s, editable) {
     const d=s.data, dis=editable?'':'disabled';
     const attr='data-service-field';
@@ -867,6 +879,7 @@
   const s=service(), j=job(); if (!s || !j) return;
   if(tripMap){tripMap.remove();tripMap=null;}tripMarkers={};tripRouteLayer=null;
   const isCrew=s.data.type==='Crew Change';
+  const isProvision=['Provision & Store','Provisions'].includes(s.data.type);
   const isVisitorService=Boolean(FLAT_VISITORS[s.data.type]);
   const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
   const tabs=isCrew?['crew','oktb','permit','loi','hotel','travel','checklist','history']:isVisitorService?['visitors','hotel','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:['details','travel','checklist','history'];
@@ -874,11 +887,17 @@
   const label={details:'Service details',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'Hotel',travel:'Travel',checklist:'Checklist',history:'History'};
   const documentTab=['oktb','permit','loi'].includes(state.tab);
   overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
-    <div class="hfo-toolbar"><div><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Husbandry Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>Back to Job</button></div>
+    <div class="hfo-toolbar"><div ${state.tab==='details'&&isProvision?'hidden':''}><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Husbandry Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>Back to Job</button></div>
     ${isCrew||isVisitorService?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
     <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${label[t]}</button>`).join('')}</div>
-    ${state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?serviceDetails(s,mayEditService(s)):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
+    ${state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?(isProvision?provisionPanel(s):serviceDetails(s,mayEditService(s))):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
     '#'+s.seq+' · '+s.data.type,j.data.vessel||'Husbandry Call');
+  if(state.tab==='details'&&isProvision){
+    const host=document.querySelector('[data-provision-items]');
+    import('./provision-items.mjs').then(({mountProvisionItems})=>{
+      if(host.isConnected)return mountProvisionItems(host,{serviceId:s.id,api});
+    }).catch(error=>{if(host.isConnected)host.textContent=error.message;});
+  }
   if(state.tab==='hotel')window.HarborFlowHotels?.mount(document.getElementById('hfoHotel'),{serviceId:s.id,api});
   if (documentTab) window.HarborFlowDocuments?.mount(document.getElementById('hfoDocument'),{jobId:j.id,serviceId:s.id,type:state.tab,login:state.login});
   if(state.tab==='travel'&&state.tripDraft)setTimeout(mountTripMap,0);
@@ -893,8 +912,22 @@
     let reason='';
     if (name==='plannedEnd' && s.data.baselineDue) reason=prompt('Reason for changing a locked deadline:')||'';
     if (name==='status' && value==='Cancelled') reason=prompt('Reason for cancelling this requested Service:')||'';
-    try { const out=await api('updateService',{id:s.id,patch,base,reason}); Object.assign(s,out.record); state.sync='Saved '+new Date().toLocaleTimeString(); state.error=''; render(); }
-    catch(e){handleSaveError(e,{kind:'service',id:s.id,field:detail?'details.'+name:name,value,old,reason});}
+    const provision=target.closest('[data-provision-service]');
+    const status=provision?.querySelector('[data-provision-save]');
+    if(status)status.textContent='Saving…';
+    try {
+      const out=await api('updateService',{id:s.id,patch,base,reason});
+      Object.assign(s,out.record);
+      state.sync='Saved '+new Date().toLocaleTimeString();state.error='';
+      if(!provision || name==='type'){render();return;}
+      if(provision.isConnected){
+        status.textContent='Saved';
+
+      }
+    }catch(e){
+      if(status)status.textContent='Could not save';
+      handleSaveError(e,{kind:'service',id:s.id,field:detail?'details.'+name:name,value,old,reason});
+    }
   }
   async function saveChecklist(next) {
     const s=service(), old=Array.isArray(s.data.checklist)?s.data.checklist:[];

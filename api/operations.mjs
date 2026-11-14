@@ -1,3 +1,4 @@
+import { provisionRoute } from '../lib/provision.mjs';
 import { hotelRoute } from '../lib/hotels.mjs';
 import { randomUUID } from 'node:crypto';
 import { nodeHandler, gh, json, readJson, safeName, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
@@ -10,9 +11,10 @@ const personFields = ['kind', 'category', 'name', 'nationality', 'rank', 'dob', 
 const tripFields = ['kind', 'origin', 'originName', 'originAddress', 'destination', 'destinationName', 'destinationAddress', 'originLat', 'originLon', 'destinationLat', 'destinationLon', 'plannedDeparture', 'plannedArrival', 'actualDeparture', 'actualArrival', 'routeDistanceMeters', 'routeDurationSeconds', 'provider', 'vehicle', 'purpose', 'status', 'personIds', 'cargo', 'cargoItems', 'notes'];
 const parse = async request => {
   const raw = await request.text();
-  if (raw.length > 60000) throw Error('Request too large');
+  if (raw.length > 4100000) throw Error('Request too large');
   const input = JSON.parse(raw || '{}');
-  if (raw.length > 24000 && !['saveHotelEmailDraft','saveHotelEmailTemplate'].includes(input?.action)) throw Error('Request too large');
+  const limit=input?.action==='saveProvisionItem'?4100000:['saveHotelEmailDraft','saveHotelEmailTemplate'].includes(input?.action)?60000:24000;
+  if (raw.length > limit) throw Error('Request too large');
   return input;
 };
 const clean = (value, keys) => Object.fromEntries(Object.entries(value || {}).filter(([key]) => keys.includes(key)));
@@ -141,8 +143,14 @@ return async function route(request) {
   try { grant = await readPermission(login, sql); }
   catch { return error('Current authorization could not be verified', 503); }
   if (!grant) return error('Operations permission required', 403);
+  const provision = async input => {
+    const service = await loadService(sql,input.serviceId);
+    const job = service && await loadJob(sql,service.job_id);
+    return provisionRoute({sql,service,job,grant,login,input});
+  };
   if (request.method === 'GET') {
     const action = url.searchParams.get('action') || 'state';
+    if (['provisionItems','provisionEmail'].includes(action))return provision({action,serviceId:url.searchParams.get('serviceId'),id:url.searchParams.get('id')});
     if (action === 'state') {
       const [jobs, services] = await Promise.all([
         rows(sql, 'SELECT * FROM operation_jobs ORDER BY updated_at DESC LIMIT 100'),
@@ -191,6 +199,7 @@ return async function route(request) {
   let input;
   try { input = await parse(request); } catch { return error('Invalid or oversized JSON'); }
   const action = input.action;
+  if (['saveProvisionItem','removeProvisionItem'].includes(action))return provision(input);
   if(['saveHotel','saveHotelEmailDraft','saveHotelEmailTemplate','removeHotelEmailTemplate'].includes(action))return hotelRoute({sql,grant,login,input});
 
   if (action === 'grant') {
