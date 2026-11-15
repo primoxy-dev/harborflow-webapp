@@ -910,22 +910,28 @@
     if(validCoordinate(state.tripDraft.data.originLat)&&validCoordinate(state.tripDraft.data.destinationLat))void calculateTripRoute();
     setTimeout(()=>tripMap?.invalidateSize(),0);
   }
+  function initialServiceTab(type) {
+    if(type==='Crew Change')return 'crew';
+    if(FLAT_VISITORS[type])return 'visitors';
+    return ['Cash to Master','CTM'].includes(type)?'voucher':'details';
+  }
   function renderService() {
   const s=service(), j=job(); if (!s || !j) return;
   if(tripMap){tripMap.remove();tripMap=null;}tripMarkers={};tripRouteLayer=null;
   const isCrew=s.data.type==='Crew Change';
+  const hasVoucher=initialServiceTab(s.data.type)==='voucher';
   const hasItems=['Provision & Store','Provisions','Ship Spare & Courier & Offland'].includes(s.data.type);
   const isVisitorService=Boolean(FLAT_VISITORS[s.data.type]);
   const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
-  const tabs=isCrew?['crew','oktb','permit','loi','hotel','travel','checklist','history']:isVisitorService?['visitors','hotel','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:['details','travel','checklist','history'];
+  const tabs=isCrew?['crew','oktb','permit','loi','hotel','travel','checklist','history']:isVisitorService?['visitors','hotel','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:hasVoucher?['voucher','details','travel','checklist','history']:['details','travel','checklist','history'];
   if (!tabs.includes(state.tab)) state.tab=tabs[0];
-  const label={details:'Service details',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'Hotel',travel:'Travel',checklist:'Checklist',history:'History'};
+  const label={details:'Service details',voucher:'Payment Voucher',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'Hotel',travel:'Travel',checklist:'Checklist',history:'History'};
   const documentTab=['oktb','permit','loi'].includes(state.tab);
   overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
     <div class="hfo-toolbar"><div ${state.tab==='details'&&hasItems?'hidden':''}><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Husbandry Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>Back to Job</button></div>
     ${isCrew||isVisitorService?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
     <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${label[t]}</button>`).join('')}</div>
-    ${state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?(hasItems?itemServicePanel(s):serviceDetails(s,mayEditService(s))):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
+    ${state.tab==='voucher'?'<div class="hfo-section hfo-voucher" data-cash-voucher><p role="status">Loading voucher…</p></div>':state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?(hasItems?itemServicePanel(s):serviceDetails(s,mayEditService(s))):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
     '#'+s.seq+' · '+s.data.type,j.data.vessel||'Husbandry Call');
   if(state.tab==='details'&&hasItems){
     const host=document.querySelector('[data-provision-items]');
@@ -934,6 +940,12 @@
     }).catch(error=>{if(host.isConnected)host.textContent=error.message;});
   }
   if(state.tab==='hotel')window.HarborFlowHotels?.mount(document.getElementById('hfoHotel'),{serviceId:s.id,api});
+  if(state.tab==='voucher'){
+    const host=document.querySelector('[data-cash-voucher]');
+    import('./cash-voucher.mjs').then(({mountCashVoucher})=>{
+      if(host.isConnected)return mountCashVoucher(host,{job:j,service:s,editable:mayEditService(s),api});
+    }).catch(error=>{if(host.isConnected)host.textContent=error.message;});
+  }
   if (documentTab) window.HarborFlowDocuments?.mount(document.getElementById('hfoDocument'),{jobId:j.id,serviceId:s.id,type:state.tab,login:state.login});
   if(state.tab==='travel'&&state.tripDraft)setTimeout(mountTripMap,0);
 }
@@ -1352,7 +1364,7 @@ if(b.dataset.openJob){state.editingJobId=null;state.openJobId=b.dataset.openJob;
     if(b.hasAttribute('data-lookup-imo')){await lookupImo(b);return;}
     if(b.hasAttribute('data-sync-job-folder')){await perform('syncJobFolder',{id:job().id},out=>{Object.assign(job(),out.record);render();});return;}
     if(b.dataset.imoChoice){const grid=b.closest('.hfo-form-grid'),input=grid?.querySelector('[name="imo"]');if(input){input.value=b.dataset.imoChoice;grid.querySelector('[data-imo-feedback]').textContent='IMO selected. Verify with ship documents.';if(input.hasAttribute('data-job-field'))input.dispatchEvent(new Event('change',{bubbles:true}));}return;}
-if(b.dataset.openService){state.editingJobId=null;state.openServiceId=b.dataset.openService;state.documentBatch={busy:false,category:'On-signers',completed:0,total:0,results:[]};state.tab=service()?.data.type==='Crew Change'?'crew':FLAT_VISITORS[service()?.data.type]?'visitors':'details';state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
+if(b.dataset.openService){state.editingJobId=null;state.openServiceId=b.dataset.openService;state.documentBatch={busy:false,category:'On-signers',completed:0,total:0,results:[]};state.tab=initialServiceTab(service()?.data.type);state.history=[];state.error='';render();if(!state.public && anyPeopleView() && state.peopleLoadedFor!==job()?.id)await loadPeople();return;}
     if(b.dataset.shift){shift(Number(b.dataset.shift));return;}
     if(b.hasAttribute('data-grants')){state.modal='grants';state.openJobId=null;state.openServiceId=null;render();return;}
     if(b.hasAttribute('data-close')){if(await savePerson()===false)return;if(await saveNewPerson()===false)return;state.modal=null;state.openJobId=null;state.editingJobId=null;state.openServiceId=null;state.people=[];state.peopleLoadedFor=null;state.trips=[];state.personDraft=null;state.tripDraft=null;state.history=[];state.error='';render();await refresh();return;}
@@ -1482,7 +1494,7 @@ if(b.dataset.openService){state.editingJobId=null;state.openServiceId=b.dataset.
     if(!['hfoCreateJob','hfoAddService','hfoPersonForm','hfoTripForm','hfoGrantForm'].includes(form.id))return;
     event.preventDefault();const d=new FormData(form);
     if(form.id==='hfoCreateJob'){const data=Object.fromEntries(d.entries());await perform('createJob',{data},out=>{state.jobs.unshift(out.job);state.modal=null;state.openJobId=out.job.id;render();});}
-    if(form.id==='hfoAddService'){await perform('addService',{jobId:job().id,data:Object.fromEntries(d.entries())},out=>{state.services.push(out.service);state.modal=null;state.openServiceId=out.service.id;state.tab=out.service.data.type==='Crew Change'?'crew':FLAT_VISITORS[out.service.data.type]?'visitors':'details';render();});}
+    if(form.id==='hfoAddService'){await perform('addService',{jobId:job().id,data:Object.fromEntries(d.entries())},out=>{state.services.push(out.service);state.modal=null;state.openServiceId=out.service.id;state.tab=initialServiceTab(out.service.data.type);render();});}
     if(form.id==='hfoPersonForm')await savePerson();
     if(form.id==='hfoTripForm')await saveTrip();
     if(form.id==='hfoGrantForm'){const data=Object.fromEntries(d.entries());for(const key of ['crewView','crewEdit','visitorView','visitorEdit'])data[key]=d.has(key);await perform('grant',data,()=>renderGrants());}
