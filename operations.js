@@ -418,8 +418,8 @@
   const count=state.peopleLoadedFor===s.job_id && !publicView && personType && canPeople(personKind)
     ? state.people.filter(p=>p.kind===personKind && Array.isArray(p.data.serviceIds) && p.data.serviceIds.includes(s.id)).length : null;
   return `<div class="hfo-service-card"><button class="hfo-service-tile" type="button" data-open-service="${s.id}" aria-label="Open ${label}, ${status}">
-    <span class="hfo-service-icon" aria-hidden="true">${icon}<small class="hfo-service-count">${personType && count!==null?count+'p':'1s'}</small></span><span class="hfo-service-name">${label}</span>
-    <span class="hfo-service-meta"><small>#${s.seq}</small><small class="hfo-status">${status}</small>${personType && count!==null?`<small>${count} people</small>`:''}</span>
+    <span class="hfo-service-icon" aria-hidden="true">${icon}${publicView?'<small class="hfo-service-count">1s</small>':''}</span><span class="hfo-service-name">${label}</span>
+    <span class="hfo-service-meta"><small>#${s.seq}</small><small class="hfo-status" data-service-status="${status}">${status}</small>${personType && count!==null?`<small>${count} ${count===1?'person':'people'}</small>`:''}</span>
     </button>${!publicView && mayEditService(s)?`<details class="hfo-service-menu">
       <summary aria-label="Actions for ${label}">⋯</summary>
       <div class="hfo-service-menu-panel"><button class="hfo-btn danger" type="button" data-remove-service="${s.id}">Remove Service</button></div>
@@ -431,24 +431,35 @@
   const folderUrl=j.data.documentsPath?'https://github.com/primoxy-dev/harborflow-job-documents/tree/main/'+j.data.documentsPath.split('/').map(encodeURIComponent).join('/'):'';
   const folderControl=folderUrl?`<a class="hfo-btn" href="${escape(folderUrl)}" target="_blank" rel="noopener noreferrer">Open GitHub folder</a>${isOwner()?'<button class="hfo-btn" data-sync-job-folder>Sync GitHub folders</button>':''}<small class="hfo-muted">Folder follows Vessel, Job No., ETA and Cancelled status.</small>`:isOwner()?'<button class="hfo-btn" data-sync-job-folder>Create GitHub folder</button>':'<small class="hfo-muted">GitHub folder not created</small>';
   const detailsOpen=state.editingJobId===j.id;
-  overlay(`<div class="hfo-banner">ข้อมูลทดลองเท่านั้น · ห้ามใช้ข้อมูลลูกเรือหรือผู้เยี่ยมจริง</div>
+  const status=jobStatus(j.data.status);
+  overlay(`<div class="hfo-job-page"><div class="hfo-banner">ข้อมูลทดลองเท่านั้น · ห้ามใช้ข้อมูลลูกเรือหรือผู้เยี่ยมจริง</div>
     <section class="hfo-section hfo-job-summary" aria-label="Job overview">
-      <div class="hfo-toolbar hfo-job-summary-heading"><h2>${escape(j.data.vessel||'Draft Husbandry Call')}</h2><span class="hfo-status">${escape(jobStatus(j.data.status))}</span></div>
-      <dl class="hfo-job-facts"><div><dt>Job No.</dt><dd>${escape(j.data.jobNo||'—')}</dd></div><div><dt>Port / Terminal</dt><dd>${escape(j.data.port||'—')}</dd></div><div><dt>ETA</dt><dd>${formatDate(j.data.eta)}</dd></div><div><dt>ETD</dt><dd>${formatDate(j.data.etd)}</dd></div></dl>
-      <div class="hfo-actions hfo-job-summary-actions"><button type="button" class="hfo-btn" data-toggle-job-details aria-controls="hfoJobDetails" aria-expanded="${detailsOpen}">${detailsOpen?'Hide Job Details':editable?'Edit Job':'View Job Details'}</button>${folderUrl?`<a class="hfo-btn" href="${escape(folderUrl)}" target="_blank" rel="noopener noreferrer">Open GitHub folder</a>`:''}</div>
+      <div class="hfo-job-summary-heading">
+        <div>
+          <span class="hfo-status" data-job-status="${escape(status)}">${escape(status)}</span>
+          <h2>${escape(j.data.vessel||'Husbandry Call')}</h2>
+          <p>${escape(j.data.port||'Port / Terminal not set')}</p>
+        </div>
+        <div class="hfo-actions hfo-job-summary-actions"><button type="button" class="hfo-btn" data-toggle-job-details aria-controls="hfoJobDetails" aria-expanded="${detailsOpen}">${detailsOpen?'Hide Job Details':editable?'Edit Job':'View Job Details'}</button>${folderUrl?`<a class="hfo-btn" href="${escape(folderUrl)}" target="_blank" rel="noopener noreferrer">Open GitHub folder</a>`:''}</div>
+      </div>
+      <dl class="hfo-job-facts"><div><dt>Job No.</dt><dd>${escape(j.data.jobNo||'—')}</dd></div><div><dt>ETA</dt><dd>${formatDate(j.data.eta)}</dd></div><div><dt>ETD</dt><dd>${formatDate(j.data.etd)}</dd></div><div><dt>Principal</dt><dd>${escape(j.data.principal||'—')}</dd></div></dl>
     </section>
     <section class="hfo-section" id="hfoJobDetails" ${detailsOpen?'':'hidden'} aria-label="Job details">
       <div class="hfo-toolbar"><h3>Job details</h3><span class="hfo-muted" id="hfoSync" role="status">${escape(state.sync)}</span></div>
       ${editable?'<p class="hfo-muted">Changes save automatically.</p>':''}
       ${jobFields(j.data,editable)}<div class="hfo-actions">${folderControl}</div><p class="hfo-muted">Job ID: ${escape(j.id)} · assigned PIC does not automatically grant access</p>
     </section>
-    <section class="hfo-section"><div class="hfo-toolbar"><h3>Services</h3>${editable?'<button class="hfo-btn primary" data-add-service>+ Add Service</button>':''}</div>
-    <div class="hfo-service-grid">${services.length?services.map(s=>serviceTile(s)).join(''):'<div class="hfo-empty">No Services yet.</div>'}</div></section>
+    <section class="hfo-section hfo-job-services" aria-labelledby="hfoJobServices">
+      <div class="hfo-toolbar"><h3 id="hfoJobServices">Services <span class="hfo-job-service-total">${services.length}</span></h3>${editable?'<button class="hfo-btn primary" data-add-service>+ Add Service</button>':''}</div>
+      ${services.length?`<div class="hfo-service-grid">${services.map(s=>serviceTile(s)).join('')}</div>`:'<div class="hfo-empty">No Services yet.</div>'}
+    </section>
     ${editable?`<details class="hfo-section hfo-job-files" data-job-files><summary>File</summary>
       <div data-job-file-browser></div></details>`:''}
-    <div class="hfo-section"><button type="button" class="hfo-btn primary" data-create-quotation>Create Quotation</button></div>
-    <div class="hfo-section"><div class="hfo-toolbar"><h3>Activity</h3><button class="hfo-btn" data-history="job" data-history-id="${j.id}">View history</button></div><div id="hfoHistory">${historyHtml()}</div></div>
-    ${isOwner()?removedServices(j):''}`, 'Job');
+    <div class="hfo-job-related">
+      <section class="hfo-section" aria-labelledby="hfoJobQuotation"><div class="hfo-toolbar"><h3 id="hfoJobQuotation">Quotation</h3><button type="button" class="hfo-btn" data-create-quotation>Create Quotation</button></div></section>
+      <section class="hfo-section" aria-labelledby="hfoJobActivity"><div class="hfo-toolbar"><h3 id="hfoJobActivity">Activity</h3><button type="button" class="hfo-btn" data-history="job" data-history-id="${j.id}">View history</button></div><div id="hfoHistory" aria-live="polite"></div></section>
+    </div>
+    ${isOwner()?removedServices(j):''}</div>`, 'Job');
   const files=document.querySelector('[data-job-files]');
   files?.addEventListener('toggle',()=>{
     const host=files.querySelector('[data-job-file-browser]');
@@ -466,7 +477,7 @@
     const removed=state.services.filter(s=>s.job_id===j.id && s.removed_at);
     return removed.length?`<div class="hfo-section"><h3>Removed Services · owner restore</h3>${removed.map(s=>`<div class="hfo-list-row">#${s.seq} ${escape(s.data.type)} · ${escape(s.removed_reason)}<button class="hfo-btn" data-restore-service="${s.id}">Restore</button></div>`).join('')}</div>`:'';
   }
-  function historyHtml() { return state.history.map(e=>`<div class="hfo-list-row"><b>${escape(e.action)}</b><small>${escape(e.actor)} · ${formatDate(e.created_at)} · ${escape(e.reason||'')}</small></div>`).join('') || '<p class="hfo-muted">Select View history.</p>'; }
+  function historyHtml(events=state.history, emptyMessage='Select View history.') { return events.map(e=>`<div class="hfo-list-row"><b>${escape(e.action)}</b><small>${escape(e.actor)} · ${formatDate(e.created_at)} · ${escape(e.reason||'')}</small></div>`).join('') || `<p class="hfo-muted">${escape(emptyMessage)}</p>`; }
   async function saveJobField(target) {
     const j=job(); if (!j || !mayEditJob(j)) return;
     const field=target.name, value=target.value, old=j.data[field]??'';
@@ -1205,8 +1216,19 @@
     } catch(e){announce(e.message);}
   }
   async function loadHistory(scope,id) {
-    try {const out=await api('history',{scope,id},'GET');state.history=out.events;state.error='';render();}
-    catch(e){announce(e.message);}
+    const jobHistory=scope==='job'?document.getElementById('hfoHistory'):null;
+    try {
+      const out=await api('history',{scope,id},'GET');
+      if(jobHistory){
+        if(!jobHistory.isConnected)return;
+        announce('');
+        jobHistory.innerHTML=historyHtml(out.events,'No activity yet.');
+      } else {
+        state.history=out.events;
+        state.error='';
+        render();
+      }
+    } catch(e){if(!jobHistory || jobHistory.isConnected)announce(e.message);}
   }
   async function renderGrants() {
     overlay(`<div class="hfo-banner">Owner-only · verify the exact GitHub username out of band. PIC assignment does not grant access.</div>

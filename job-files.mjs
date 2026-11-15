@@ -19,21 +19,30 @@ export async function mountJobFiles(host,{jobId,api}) {
   let path='',entries=[],busy=false,loaded=false;
   const list=async path=>(await api('jobFiles',{jobId,path},'GET')).entries;
   const download=path=>'/api/operations?'+new URLSearchParams({action:'downloadJobFile',jobId,path});
-  host.innerHTML=`<div class="hfo-toolbar"><nav data-file-path aria-label="File location"></nav>
-    <div class="hfo-row hfo-file-tools">
-      <button class="hfo-btn" type="button" data-new-folder>New folder</button>
-      <button class="hfo-btn primary" type="button" data-upload-files>Upload files</button>
-      <button class="hfo-btn" type="button" data-copy-onedrive>Sync to OneDrive</button>
-      <button class="hfo-btn" type="button" data-refresh-files>Refresh</button>
-      <input type="file" multiple hidden data-file-input>
-    </div></div>
+  host.innerHTML=`<div class="hfo-file-browser">
+    <div class="hfo-file-command">
+      <nav data-file-path aria-label="File location"></nav>
+      <div class="hfo-file-tools">
+        <button class="hfo-btn" type="button" data-new-folder>New folder</button>
+        <button class="hfo-btn primary" type="button" data-upload-files><span aria-hidden="true">↑</span> Upload files</button>
+        <button class="hfo-btn" type="button" data-copy-onedrive>Sync to OneDrive</button>
+        <button class="hfo-btn" type="button" data-refresh-files>Refresh</button>
+        <input type="file" multiple hidden data-file-input>
+      </div>
+    </div>
+    <div class="hfo-file-filter">
+      <div data-file-count role="status" class="hfo-muted"></div>
+      <input type="search" data-file-search aria-label="Search this folder" placeholder="Search this folder">
+    </div>
     <p data-file-status role="status"></p>
     <div class="hfo-job-file-drop" data-file-drop>
       <div data-file-list></div>
-      <p class="hfo-file-drop-hint">Drop files here to upload · Up to 3 MB per file</p>
-    </div>`;
+      <div class="hfo-file-drop-hint"><span aria-hidden="true">↑</span><div><strong>Drop files here to upload</strong><small>Up to 3 MB per file</small></div></div>
+    </div></div>`;
   const crumbs=host.querySelector('[data-file-path]');
   const rows=host.querySelector('[data-file-list]');
+  const search=host.querySelector('[data-file-search]');
+  const count=host.querySelector('[data-file-count]');
   const dropZone=host.querySelector('[data-file-drop]');
   const status=host.querySelector('[data-file-status]');
   const fileInput=host.querySelector('[data-file-input]');
@@ -45,11 +54,21 @@ export async function mountJobFiles(host,{jobId,api}) {
   }
   async function refresh(next=path) {
     const nextEntries=await list(next);
+    if(path!==next)search.value='';
     path=next;
     entries=nextEntries.sort((a,b)=>a.kind===b.kind?a.name.localeCompare(b.name):a.kind==='folder'?-1:1);
     const parts=path?path.split('/'):[];
     crumbs.innerHTML=['Files',...parts].map((label,i)=>`<button class="hfo-btn" type="button" data-file-level="${i}" ${i===parts.length?'aria-current="page"':''}>${escape(label)}</button>`).join('<span aria-hidden="true">/</span>');
-    rows.innerHTML=entries.length?`<ul class="hfo-file-list">${entries.map((entry,index)=>{
+    loaded=true;
+    renderEntries();
+  }
+  function renderEntries(){
+    const query=search.value.trim().toLocaleLowerCase();
+    const visible=entries.map((entry,index)=>({entry,index})).filter(({entry})=>entry.name.toLocaleLowerCase().includes(query));
+    const folders=entries.filter(entry=>entry.kind==='folder').length;
+    const files=entries.length-folders;
+    count.textContent=query?visible.length+' of '+entries.length+' items':folders+' '+(folders===1?'folder':'folders')+' · '+files+' '+(files===1?'file':'files');
+    rows.innerHTML=visible.length?`<ul class="hfo-file-list">${visible.map(({entry,index})=>{
       const name=escape(entry.name);
       if(entry.kind==='folder')return `<li class="hfo-file-tile">
         <button class="hfo-file-name" type="button" data-file-open="${index}">
@@ -71,9 +90,10 @@ export async function mountJobFiles(host,{jobId,api}) {
           <button type="button" class="hfo-btn" data-file-view="${index}" aria-label="View ${name}">View</button>
         </div>
       </li>`;
-    }).join('')}</ul>`:'<p class="hfo-file-empty hfo-muted">This folder is empty.</p>';
-    loaded=true;
+    }).join('')}</ul>`:`<p class="hfo-file-empty hfo-muted">${query?'No files or folders match your search.':'This folder is empty.'}</p>`;
+    controls();
   }
+  search.addEventListener('input',renderEntries);
   async function run(action,{loading='Working…'}={}) {
     if(busy)return;
     busy=true;controls();report(loading);
@@ -92,6 +112,8 @@ export async function mountJobFiles(host,{jobId,api}) {
           await api('uploadJobFile',{jobId,path,name:file.name,content:await encodeFile(file)});
         }catch(error){failures.push(file.name+' · '+error.message);}
       }
+      if(!host.isConnected)return;
+      if(failures.length!==files.length)search.value='';
       await refresh();
       report('Uploaded '+(files.length-failures.length)+' of '+files.length+'. '+failures.join(' · '),Boolean(failures.length));
     },{loading:'Uploading files…'});
@@ -177,7 +199,7 @@ export async function mountJobFiles(host,{jobId,api}) {
     if(button.hasAttribute('data-new-folder')){
       const name=window.prompt('Folder name')?.trim();
       if(!name)return;
-      void run(async()=>{await api('createJobFileFolder',{jobId,path,name});await refresh();report('Folder created.');});return;
+      void run(async()=>{await api('createJobFileFolder',{jobId,path,name});search.value='';await refresh();report('Folder created.');});return;
     }
     const next=button.hasAttribute('data-file-level')?path.split('/').slice(0,Number(button.dataset.fileLevel)).join('/'):
       button.hasAttribute('data-file-open')?join(path,entries[Number(button.dataset.fileOpen)].name):null;
