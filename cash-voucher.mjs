@@ -1,4 +1,4 @@
-import { amountInCents, calculateCtmPricing, ctmCurrencies, ctmFeeLabels, defaultCtmPricing, validateCashVoucher, validateCtmPricing, voucherFields, voucherLineFields, voucherRowLimit } from './lib/cash-voucher.mjs';
+import { amountInCents, banknoteDenominations, banknoteRows, calculateCtmPricing, ctmCurrencies, ctmFeeLabels, defaultCtmPricing, emptyBanknotes, validateCashVoucher, validateCtmPricing, voucherFields, voucherLineFields, voucherRowLimit } from './lib/cash-voucher.mjs';
 
 const width = 612, height = 792;
 const money = new Intl.NumberFormat('en-US');
@@ -11,8 +11,14 @@ function drawVoucher(ctx, voucher, paintLogo) {
   const ink = '#153149', muted = '#42586c', grid = '#adbdc9', tint = '#edf3f7';
   const left = 48, right = width - left;
   const jobEnd = 144, descriptionEnd = 460, centsStart = 538;
-  const tableTop = 174, rowsTop = 198, rowHeight = 20;
-  const totalTop = rowsTop + voucherRowLimit * rowHeight, totalEnd = totalTop + 26;
+  const groups = ctmCurrencies.map(currency => ({
+    currency, rows: banknoteRows(voucher.banknotes, currency).filter(row => row.quantity > 0)
+  })).filter(group => group.rows.length);
+  const banknoteLines = Math.max(0, ...groups.map(group => group.rows.length));
+  const banknoteSlots = banknoteLines ? banknoteLines + 3 : 0;
+  const tableTop = 174, rowsTop = 198, bodyHeight = 400;
+  const slots = Math.max(voucherRowLimit, voucher.lines.length + banknoteSlots);
+  const rowHeight = bodyHeight / slots, totalTop = rowsTop + bodyHeight, totalEnd = totalTop + 26;
   function text(value, x, y, { size = 10, bold = false, color = ink, align = 'left', limit = Infinity } = {}) {
     if (!value) return;
     const weight = bold ? 'bold ' : '';
@@ -42,7 +48,7 @@ function drawVoucher(ctx, voucher, paintLogo) {
   ctx.strokeStyle = grid;
   ctx.lineWidth = .5;
   ctx.beginPath();
-  for (let i = 0; i <= voucherRowLimit; i++) line(left, rowsTop + i * rowHeight, right, rowsTop + i * rowHeight);
+  for (let i = 0; i <= slots; i++) line(left, rowsTop + i * rowHeight, right, rowsTop + i * rowHeight);
   line(jobEnd, tableTop, jobEnd, totalTop);
   line(descriptionEnd, tableTop, descriptionEnd, totalEnd);
   line(centsStart, rowsTop, centsStart, totalEnd);
@@ -76,7 +82,7 @@ function drawVoucher(ctx, voucher, paintLogo) {
 
   let total = 0, hasAmount = false;
   voucher.lines.forEach(({ jobNo, description, amount }, index) => {
-    const top = rowsTop + index * rowHeight, y = top + 14;
+    const top = rowsTop + index * rowHeight, y = top + rowHeight / 2 + 3.5;
     if (/^[A-Za-z0-9]{1,8}$/.test(jobNo)) {
       [...jobNo].forEach((char, i) => text(char, left + (i + .5) * (jobEnd - left) / 8, y, { align: 'center' }));
     } else if (jobNo) {
@@ -94,6 +100,41 @@ function drawVoucher(ctx, voucher, paintLogo) {
   });
   text('TOTAL', descriptionEnd - 10, totalTop + 17, { align: 'right', bold: true });
   if (hasAmount) splitAmount(total, totalTop + 17, true);
+  if (groups.length) {
+    const groupWidth = (descriptionEnd - jobEnd) / groups.length;
+    const start = rowsTop + voucher.lines.length * rowHeight;
+    const headingTop = start + rowHeight, dataTop = headingTop + rowHeight;
+    const subtotalTop = dataTop + banknoteLines * rowHeight;
+    const baseline = rowHeight / 2 + 3;
+    const fillBand = top => ctx.fillRect(jobEnd + .35, top + .35, descriptionEnd - jobEnd - .7, rowHeight - .7);
+    ctx.fillStyle = tint;
+    fillBand(start);
+    fillBand(headingTop);
+    fillBand(subtotalTop);
+    text('BANKNOTE BREAKDOWN', jobEnd + 10, start + baseline, { size: 9, bold: true });
+    if (groups.length > 1) {
+      ctx.strokeStyle = grid;
+      ctx.lineWidth = .5;
+      ctx.beginPath();
+      line(jobEnd + groupWidth, headingTop, jobEnd + groupWidth, subtotalTop + rowHeight);
+      ctx.stroke();
+    }
+    groups.forEach(({currency, rows}, index) => {
+      const x = jobEnd + index * groupWidth, end = x + groupWidth;
+      const quantityX = x + groupWidth * .56;
+      text(currency + ' note', x + 10, headingTop + baseline, { size: 8.5, bold: true });
+      text('Qty', quantityX, headingTop + baseline, { size: 8.5, bold: true, align: 'right' });
+      text('Amount', end - 7, headingTop + baseline, { size: 8.5, bold: true, align: 'right' });
+      rows.forEach(({denomination, quantity, amount}, i) => {
+        const y = dataTop + i * rowHeight + baseline;
+        text(money.format(denomination), x + 10, y, { size: 8.5 });
+        text(money.format(quantity), quantityX, y, { size: 8.5, align: 'right' });
+        text(money.format(amount), end - 7, y, { size: 8.5, align: 'right' });
+      });
+      text(currency + ' TOTAL', x + 10, subtotalTop + baseline, { size: 8.5, bold: true });
+      text(money.format(rows.reduce((sum, row) => sum + row.amount, 0)), end - 7, subtotalTop + baseline, { size: 8.5, bold: true, align: 'right' });
+    });
+  }
   text('Received by', left, 648, { bold: true, color: muted });
   text(header.receivedBy, left, 665, { limit: 286 });
   text('Received date', 356, 648, { bold: true, color: muted });
@@ -206,6 +247,42 @@ function mountCtmPricing(host, pricing, editable, onEdit) {
   update();
 }
 
+function mountBanknotes(host, banknotes, editable, onEdit) {
+  const disabled = editable ? '' : 'disabled';
+  host.innerHTML = `<h4>Banknote breakdown</h4><div class="hfo-voucher-banknote-grid">
+    ${ctmCurrencies.map(currency => `<table aria-label="${currency} banknotes" data-banknote-currency="${currency}">
+      <thead><tr><th scope="col">${currency} note</th><th scope="col">Qty</th><th scope="col">Amount</th></tr></thead>
+      <tbody>${banknoteDenominations[currency].map((denomination,index) => `<tr>
+        <th scope="row">${denomination}</th>
+        <td><input type="text" inputmode="numeric" maxlength="7" aria-label="${currency} ${denomination} quantity" data-banknote-index="${index}" value="${escape(banknotes[currency][index])}" ${disabled}></td>
+        <td class="hfo-voucher-price" data-banknote-amount></td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr><th scope="row" colspan="2">${currency} total</th><td class="hfo-voucher-price" data-banknote-total></td></tr></tfoot>
+    </table>`).join('')}
+  </div><p class="hfo-muted">Denominations with a quantity above zero appear in the Description column.</p>
+  <p class="hfo-muted" data-banknote-status role="status"></p>`;
+  const status = host.querySelector('[data-banknote-status]');
+  function updateTable(table) {
+    const rows = banknoteRows(banknotes, table.dataset.banknoteCurrency);
+    table.querySelectorAll('[data-banknote-amount]').forEach((cell, index) => {
+      cell.textContent = rows[index].quantity ? money.format(rows[index].amount) : '—';
+    });
+    table.querySelector('[data-banknote-total]').textContent = money.format(rows.reduce((sum, row) => sum + row.amount, 0));
+  }
+  host.querySelectorAll('table').forEach(updateTable);
+  host.addEventListener('input', event => {
+    const input = event.target;
+    if (!editable || !input.hasAttribute('data-banknote-index')) return;
+    const table = input.closest('table');
+    const invalid = input.value !== '' && !/^\d{1,7}$/.test(input.value);
+    input.setAttribute('aria-invalid', String(invalid));
+    banknotes[table.dataset.banknoteCurrency][Number(input.dataset.banknoteIndex)] = input.value;
+    status.textContent = host.querySelector('[aria-invalid="true"]') ? 'Enter a whole number of banknotes.' : '';
+    updateTable(table);
+    onEdit();
+  });
+}
+
 export async function mountCashVoucher(host, { job, service, editable, api }) {
   const pdf = window.HarborFlowVectorPdf;
   if (!pdf) throw Error('PDF tools are unavailable. Reload this page to try again.');
@@ -219,6 +296,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
     lines: [{ jobNo, description: '', amount: amountInCents(String(legacy.amount ?? '')) === null ? '' : String(legacy.amount) }]
   };
   draft.pricing ??= defaultCtmPricing(legacy);
+  draft.banknotes ??= emptyBanknotes();
   const disabled = editable ? '' : 'disabled';
   const input = (key, [label, max, type = 'text'], value, row) => `<label class="hfo-field">${label}
     <input data-voucher-field="${key}" ${row === undefined ? '' : `data-voucher-row="${row}"`} type="${type === 'date' ? 'date' : 'text'}"
@@ -235,6 +313,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
         <div class="hfo-toolbar hfo-voucher-line-heading"><h4>Voucher lines</h4>${editable ? '<button type="button" class="hfo-btn" data-voucher-add>+ Add line</button>' : ''}</div>
         <div data-voucher-lines></div>
         <section class="hfo-voucher-pricing" aria-label="CTM pricing" data-voucher-pricing></section>
+        <section class="hfo-voucher-pricing hfo-voucher-banknotes" aria-label="Banknote breakdown" data-voucher-banknotes></section>
         <div class="hfo-form-grid hfo-voucher-fields hfo-voucher-approval">
           ${['receivedBy','receivedDate','preparedBy','checkedBy','approvedBy'].map(key => input(key, voucherFields[key], draft.header[key])).join('')}
         </div>
@@ -289,6 +368,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => { if (host.isConnected) draw(preview); });
   }
+  mountBanknotes(host.querySelector('[data-voucher-banknotes]'), draft.banknotes, editable, changed);
   host.addEventListener('input', event => {
     const { voucherField, voucherRow } = event.target.dataset;
     if (!editable || !voucherField) return;
@@ -330,7 +410,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
     }
   };
   download.onclick = () => {
-    const invalid = validateCashVoucher({header: draft.header, lines: draft.lines});
+    const invalid = validateCashVoucher({header: draft.header, lines: draft.lines, banknotes: draft.banknotes});
     if (invalid) return report(invalid, true);
     try {
       const canvas = document.createElement('canvas');
