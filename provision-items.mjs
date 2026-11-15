@@ -1,6 +1,5 @@
 import { CURRENCIES } from './lib/price-master-money.mjs';
 const units=['pcs','sets','boxes','cartons','packs','bags','pallets','kg','g','MT','L','m','rolls','bottles'];
-const categories=['Provision','Store'];
 const escape=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const dateLabel=value=>{
   if(!value)return '';
@@ -17,7 +16,7 @@ const fileBase64=file=>new Promise((resolve,reject)=>{
 });
 
 export async function mountProvisionItems(host,{serviceId,api}) {
-  let items=[],editable=false,draft=null,busy=false,selectedFile=null;
+  let items=[],categories=[],editable=false,draft=null,busy=false,selectedFile=null;
   function notify(message,error=false) {
     const status=host.querySelector('[data-item-status]');
     if(status){status.textContent=message;status.classList.toggle('hfo-alert',error);}
@@ -74,7 +73,7 @@ export async function mountProvisionItems(host,{serviceId,api}) {
     </article>`;
   }
   function render() {
-    host.innerHTML='<p data-item-status role="status" class="hfo-muted"></p><div class="hfo-provision-lists">'+categories.map(category=>{
+    host.innerHTML='<p data-item-status role="status" class="hfo-muted"></p><div class="hfo-provision-lists" data-columns="'+categories.length+'">'+categories.map(category=>{
       const list=items.filter(item=>item.data.category===category);
       return `<section class="hfo-section hfo-provision-list" aria-label="${category}">
         <div class="hfo-toolbar"><h3>${category} <small>${list.length}</small></h3>
@@ -89,7 +88,7 @@ export async function mountProvisionItems(host,{serviceId,api}) {
     try {
       const result=await api('provisionItems',{serviceId},'GET');
       if(!host.isConnected)return;
-      ({items,editable}=result);
+      ({items,categories,editable}=result);
       render();
     } catch(error) {
       if(!host.isConnected)return;

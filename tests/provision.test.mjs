@@ -34,3 +34,24 @@ test('provision attachments are scoped to the service and require edit access',a
   assert.match(downloaded.headers.get('content-disposition'),/attachment/);
   assert.equal((await request('saveProvisionItem',{version:1,data})).status,409);
 });
+
+test('shipment services use their own categories and reject Provision and Store categories',async()=>{
+  const categories=['Ship Spare','Courier','Offland'];
+  const writes=[];
+  const sql={query:async(query,args)=>{
+    if(query.startsWith('SELECT'))return [];
+    writes.push(args);
+    return [{id,data:JSON.parse(args[2]),version:1}];
+  }};
+  const context={sql,service:{id:'shipment',data:{type:'Ship Spare & Courier & Offland'}},grant:{role:'owner'},login:'owner'};
+  const request=(action,input={})=>provisionRoute({...context,input:{action,id,...input}});
+  assert.deepEqual((await (await request('provisionItems')).json()).categories,categories);
+  assert.equal((await request('saveProvisionItem',{version:0,data})).status,400);
+  assert.equal(writes.length,0);
+  for(const category of categories){
+    const response=await request('saveProvisionItem',{version:0,data:{...data,category,currency:'USD'}});
+    assert.equal(response.status,200);
+    assert.equal((await response.json()).item.data.category,category);
+    assert.equal(writes.at(-1)[0],'shipment');
+  }
+});
