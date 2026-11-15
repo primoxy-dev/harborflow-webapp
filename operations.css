@@ -466,8 +466,8 @@
 .hfo-job-files { --file-border:#dce7e9; --file-ink:#123644; --file-muted:#52667a; }
 .hfo-job-files > summary { cursor:pointer; font-weight:700; color:var(--file-ink); }
 .hfo-job-files[open] > summary { margin-bottom:14px; }
-.hfo-file-browser { border:1px solid var(--file-border); border-radius:12px; overflow:hidden; background:#fff; }
-.hfo-file-command { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:13px 16px; background:#153845; }
+.hfo-file-browser { border:1px solid var(--file-border); border-radius:12px; background:#fff; }
+.hfo-file-command { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:13px 16px; border-radius:11px 11px 0 0; background:#153845; }
 .hfo-job-files [data-file-path] { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; color:#c4dadf; }
 .hfo-job-files [data-file-level] { overflow-wrap:anywhere; color:#e5f3f5; background:transparent; border-color:transparent; }
 .hfo-job-files [data-file-level]:hover,.hfo-job-files [data-file-level][aria-current] { background:#28505c; border-color:#466876; color:#fff; }
@@ -508,12 +508,60 @@
 .hfo-file-drop-hint strong,.hfo-file-drop-hint small { display:block; }
 .hfo-file-drop-hint small { margin-top:2px; }
 .hfo-file-empty { margin:12px 0; text-align:center; }
+.hfo-file-filter-actions { display:flex; flex:1; justify-content:flex-end; align-items:center; min-width:0; gap:8px; }
+.hfo-file-filter-actions input { min-width:0; }
+.hfo-file-display { position:relative; flex:none; }
+.hfo-file-display > summary { display:flex; align-items:center; gap:7px; min-height:36px; box-sizing:border-box; list-style:none; cursor:pointer; }
+.hfo-file-display > summary::-webkit-details-marker { display:none; }
+.hfo-file-display[open] > summary { background:#e7f4f2; border-color:#8fbab4; }
+.hfo-file-display-options { position:absolute; z-index:1; top:calc(100% + 6px); right:0; min-width:182px; padding:5px; border:1px solid var(--file-border); border-radius:9px; background:#fff; box-shadow:0 8px 22px #15384526; }
+.hfo-file-display-options button { display:grid; grid-template-columns:16px 15px 1fr; gap:6px; align-items:center; width:100%; padding:8px 6px; border:0; border-radius:5px; background:transparent; color:var(--file-ink); font:inherit; text-align:left; }
+.hfo-file-display-options button::before { content:""; width:6px; height:6px; border-radius:50%; margin:auto; }
+.hfo-file-display-options button[aria-pressed="true"]::before { background:#107a72; }
+.hfo-file-display-options button[aria-pressed="true"] { background:#e7f4f2; font-weight:700; }
+.hfo-file-display-options button:hover { background:#eef5f7; }
+[data-file-view-mode] { --file-card-width:155px; --file-glyph:40px; }
+[data-file-view-mode="extra-large"] { --file-card-width:218px; --file-glyph:78px; }
+[data-file-view-mode="large"] { --file-card-width:178px; --file-glyph:58px; }
+[data-file-view-mode="small"] { --file-card-width:126px; --file-glyph:26px; }
+[data-file-view-mode="tiles"] { --file-card-width:248px; }
+[data-file-view-mode]:is([data-file-view-mode="list"],[data-file-view-mode="details"]) { --file-glyph:23px; }
+[data-file-view-mode] .hfo-file-list { grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--file-card-width)),1fr)); }
+[data-file-view-mode] .hfo-file-icon-folder { width:var(--file-glyph); height:calc(var(--file-glyph)*.72); margin-top:5px; }
+[data-file-view-mode] .hfo-file-icon-folder::before { width:43%; }
+[data-file-view-mode] .hfo-file-icon-document { width:calc(var(--file-glyph)*.85); height:var(--file-glyph); padding-bottom:3px; font-size:clamp(7px,calc(var(--file-glyph)*.22),14px); }
+[data-file-view-mode="small"] .hfo-file-tile { min-height:100px; }
+[data-file-view-mode="medium"] .hfo-file-tile { min-height:124px; }
+[data-file-view-mode="large"] .hfo-file-tile { min-height:148px; }
+[data-file-view-mode="extra-large"] .hfo-file-tile { min-height:170px; }
+[data-file-view-mode]:is([data-file-view-mode="list"],[data-file-view-mode="content"]) .hfo-file-list { grid-template-columns:1fr; gap:5px; }
+[data-file-view-mode]:is([data-file-view-mode="list"],[data-file-view-mode="tiles"],[data-file-view-mode="content"]) .hfo-file-tile { min-height:0; }
+[data-file-view-mode]:is([data-file-view-mode="list"],[data-file-view-mode="content"]) .hfo-file-tile { flex-direction:row; align-items:center; gap:8px; }
+[data-file-view-mode]:is([data-file-view-mode="list"],[data-file-view-mode="tiles"],[data-file-view-mode="content"],[data-file-view-mode="details"]) .hfo-file-name { display:flex; align-items:center; gap:8px; }
+[data-file-view-mode] .hfo-file-icon { flex:none; }
+[data-file-view-mode="list"] .hfo-file-row-actions small { display:none; }
+.hfo-file-details { width:100%; table-layout:fixed; border-collapse:collapse; color:var(--file-ink); font-size:.83rem; }
+.hfo-file-details :is(th,td) { padding:6px 4px; border-bottom:1px solid var(--file-border); text-align:left; overflow-wrap:anywhere; }
+.hfo-file-details th { background:#e7f0f3; }
+.hfo-file-details th:first-child { width:52%; }
+.hfo-file-details th:last-child { width:60px; }
+.hfo-file-details tr[data-file-drag] { cursor:grab; }
+.hfo-file-details tbody tr:hover { background:#fff; }
 @media (max-width:600px) {
   .hfo-file-command,.hfo-file-filter { padding:10px; }
   .hfo-job-files button { min-height:44px; }
   .hfo-file-filter input { width:100%; min-height:44px; font-size:16px; }
   .hfo-job-file-drop { padding:8px; margin:8px; }
-  .hfo-file-list { grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+  .hfo-file-filter-actions { flex-basis:100%; justify-content:space-between; }
+  .hfo-file-display > summary { min-height:44px; }
+  [data-file-view-mode] .hfo-file-list { grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; }
+  [data-file-view-mode]:is([data-file-view-mode="extra-large"],[data-file-view-mode="tiles"]) .hfo-file-list { grid-template-columns:1fr; }
+  [data-file-view-mode="content"] .hfo-file-tile { flex-direction:column; align-items:stretch; gap:0; }
+  .hfo-file-details .hfo-file-type { display:none; }
+  .hfo-file-details th:first-child { width:auto; }
+  .hfo-file-details th:nth-child(3) { width:51px; }
+  .hfo-file-details th:last-child { width:48px; }
+  .hfo-file-details .hfo-btn { padding-inline:6px; }
   .hfo-file-tile { padding:6px; }
 }
 .hfo-job-file-view { box-sizing:border-box; width:min(880px,calc(100% - 24px)); max-height:90vh; border:1px solid #dbe3ed; border-radius:12px; padding:16px; color:#10233d; }
