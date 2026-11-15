@@ -444,9 +444,23 @@
     </section>
     <section class="hfo-section"><div class="hfo-toolbar"><h3>Services</h3>${editable?'<button class="hfo-btn primary" data-add-service>+ Add Service</button>':''}</div>
     <div class="hfo-service-grid">${services.length?services.map(s=>serviceTile(s)).join(''):'<div class="hfo-empty">No Services yet.</div>'}</div></section>
+    ${editable?`<details class="hfo-section hfo-job-files" data-job-files><summary>File</summary>
+      <div data-job-file-browser></div></details>`:''}
     <div class="hfo-section"><button type="button" class="hfo-btn primary" data-create-quotation>Create Quotation</button></div>
     <div class="hfo-section"><div class="hfo-toolbar"><h3>Activity</h3><button class="hfo-btn" data-history="job" data-history-id="${j.id}">View history</button></div><div id="hfoHistory">${historyHtml()}</div></div>
     ${isOwner()?removedServices(j):''}`, 'Job');
+  const files=document.querySelector('[data-job-files]');
+  files?.addEventListener('toggle',()=>{
+    const host=files.querySelector('[data-job-file-browser]');
+    if(!files.open||host.dataset.mounted)return;
+    host.dataset.mounted='true';
+    if(!j.data.documentsPath){host.textContent='Create the GitHub Job folder in Job details to use File.';return;}
+    host.textContent='Loading files…';
+    import('./job-files.mjs').then(({mountJobFiles})=>{
+      if(host.isConnected)return mountJobFiles(host,{jobId:j.id,api});
+    }).catch(error=>{host.textContent=error.message;delete host.dataset.mounted;});
+  });
+
 }
   function removedServices(j) {
     const removed=state.services.filter(s=>s.job_id===j.id && s.removed_at);
