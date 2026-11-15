@@ -596,6 +596,10 @@
 .hfo-voucher-price { text-align:right; font-weight:650; font-variant-numeric:tabular-nums; }
 .hfo-voucher-pricing p { margin:8px 0 0; font-size:.8rem; }
 .hfo-voucher-pricing p:empty { display:none; }
+.hfo-voucher-banknote-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:8px; margin-top:10px; }
+.hfo-voucher-banknotes thead th:nth-child(2) { width:28%; }
+.hfo-voucher-banknotes thead th:last-child { width:34%; }
+.hfo-voucher-banknotes [aria-invalid="true"] { border-color:#b42338; }
 .hfo-voucher-preview { position:sticky; top:72px; padding:12px; border:1px solid #dce7eb; border-radius:10px; background:#eef3f5; }
 .hfo-voucher-preview canvas { display:block; width:100%; max-width:650px; height:auto; margin:10px auto 0; background:#fff; box-shadow:0 1px 8px #1835481a; }
 @media (max-width:800px) {
@@ -609,4 +613,5 @@
   .hfo-voucher-pricing { padding:8px; }
   .hfo-voucher-pricing :is(th,td) { padding:5px 3px; }
   .hfo-voucher-pricing tbody input { padding-inline:2px; }
+  .hfo-voucher-banknote-grid { grid-template-columns:1fr; }
 }
