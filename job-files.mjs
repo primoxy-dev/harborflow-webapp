@@ -8,6 +8,11 @@ const previewTypes=new Map(Object.entries({
   json:'text/plain', xml:'text/plain', html:'text/plain', svg:'text/plain'
 }));
 const fileSize=bytes=>bytes<1000?bytes+' B':bytes<1000000?(bytes/1000).toFixed(1)+' KB':(bytes/1000000).toFixed(1)+' MB';
+const fileViews=new Map([
+  ['extra-large','Extra large icons'], ['large','Large icons'], ['medium','Medium icons'],
+  ['small','Small icons'], ['list','List'], ['details','Details'], ['tiles','Tiles'], ['content','Content']
+]);
+const viewPreference='harborflow-job-file-view';
 const encodeFile=file=>new Promise((resolve,reject)=>{
   const reader=new FileReader();
   reader.onload=()=>resolve(String(reader.result).split(',')[1]);
@@ -17,6 +22,11 @@ const encodeFile=file=>new Promise((resolve,reject)=>{
 
 export async function mountJobFiles(host,{jobId,api}) {
   let path='',entries=[],busy=false,loaded=false;
+  let view='medium';
+  try {
+    const saved=localStorage.getItem(viewPreference);
+    if(fileViews.has(saved))view=saved;
+  } catch {}
   const list=async path=>(await api('jobFiles',{jobId,path},'GET')).entries;
   const download=path=>'/api/operations?'+new URLSearchParams({action:'downloadJobFile',jobId,path});
   host.innerHTML=`<div class="hfo-file-browser">
@@ -32,7 +42,15 @@ export async function mountJobFiles(host,{jobId,api}) {
     </div>
     <div class="hfo-file-filter">
       <div data-file-count role="status" class="hfo-muted"></div>
-      <input type="search" data-file-search aria-label="Search this folder" placeholder="Search this folder">
+      <div class="hfo-file-filter-actions">
+        <input type="search" data-file-search aria-label="Search this folder" placeholder="Search this folder">
+        <details class="hfo-file-display">
+          <summary class="hfo-btn" aria-label="View options"><span aria-hidden="true">☰</span> View <span aria-hidden="true">⌄</span></summary>
+          <div class="hfo-file-display-options" role="group" aria-label="File layout">
+            ${[...fileViews].map(([mode,label])=>`<button type="button" data-file-layout="${mode}" aria-pressed="${mode===view}"><span aria-hidden="true">${['extra-large','large','medium','small'].includes(mode)?'▦':'☷'}</span>${label}</button>`).join('')}
+          </div>
+        </details>
+      </div>
     </div>
     <p data-file-status role="status"></p>
     <div class="hfo-job-file-drop" data-file-drop>
@@ -42,6 +60,17 @@ export async function mountJobFiles(host,{jobId,api}) {
   const crumbs=host.querySelector('[data-file-path]');
   const rows=host.querySelector('[data-file-list]');
   const search=host.querySelector('[data-file-search]');
+  const viewMenu=host.querySelector('.hfo-file-display');
+  const viewToggle=viewMenu.querySelector('summary');
+  viewMenu.addEventListener('focusout',event=>{
+    if(event.relatedTarget&&!viewMenu.contains(event.relatedTarget))viewMenu.open=false;
+  });
+  viewMenu.addEventListener('keydown',event=>{
+    if(event.key!=='Escape'||!viewMenu.open)return;
+    event.stopPropagation();
+    viewToggle.focus();
+    viewMenu.open=false;
+  });
   const count=host.querySelector('[data-file-count]');
   const dropZone=host.querySelector('[data-file-drop]');
   const status=host.querySelector('[data-file-status]');
@@ -68,29 +97,25 @@ export async function mountJobFiles(host,{jobId,api}) {
     const folders=entries.filter(entry=>entry.kind==='folder').length;
     const files=entries.length-folders;
     count.textContent=query?visible.length+' of '+entries.length+' items':folders+' '+(folders===1?'folder':'folders')+' · '+files+' '+(files===1?'file':'files');
-    rows.innerHTML=visible.length?`<ul class="hfo-file-list">${visible.map(({entry,index})=>{
-      const name=escape(entry.name);
-      if(entry.kind==='folder')return `<li class="hfo-file-tile">
-        <button class="hfo-file-name" type="button" data-file-open="${index}">
-          <span class="hfo-file-icon hfo-file-icon-folder" aria-hidden="true"></span>
-          <span>${name}</span>
-        </button>
-        <small>Folder</small>
-      </li>`;
+    rows.dataset.fileViewMode=view;
+    const items=visible.map(({entry,index})=>{
+      const name=escape(entry.name),folder=entry.kind==='folder';
       const suffix=entry.name.includes('.')?entry.name.split('.').at(-1).toUpperCase():'';
       const extension=/^[A-Z0-9]{1,5}$/.test(suffix)?suffix:'FILE';
-      const url=escape(download(join(path,entry.name)));
-      return `<li class="hfo-file-tile" draggable="true" data-file-drag="${index}">
-        <a class="hfo-file-name" href="${url}" download="${name}" draggable="false" title="Download ${name}">
-          <span class="hfo-file-icon hfo-file-icon-document" data-file-extension="${extension}" aria-hidden="true">${extension}</span>
-          <span>${name}</span>
-        </a>
-        <div class="hfo-file-row-actions">
-          <small>${fileSize(entry.size||0)}</small>
-          <button type="button" class="hfo-btn" data-file-view="${index}" aria-label="View ${name}">View</button>
-        </div>
-      </li>`;
-    }).join('')}</ul>`:`<p class="hfo-file-empty hfo-muted">${query?'No files or folders match your search.':'This folder is empty.'}</p>`;
+      const title=folder
+        ? `<button class="hfo-file-name" type="button" data-file-open="${index}"><span class="hfo-file-icon hfo-file-icon-folder" aria-hidden="true"></span><span>${name}</span></button>`
+        : `<a class="hfo-file-name" href="${escape(download(join(path,entry.name)))}" download="${name}" draggable="false" title="Download ${name}"><span class="hfo-file-icon hfo-file-icon-document" data-file-extension="${extension}" aria-hidden="true">${extension}</span><span>${name}</span></a>`;
+      const type=folder?'Folder':extension==='FILE'?'File':extension+' file';
+      const size=folder?'—':fileSize(entry.size||0);
+      const preview=folder?'':`<button type="button" class="hfo-btn" data-file-view="${index}" aria-label="View ${name}">View</button>`;
+      const drag=folder?'':` draggable="true" data-file-drag="${index}"`;
+      if(view==='details')return `<tr${drag}><td>${title}</td><td class="hfo-file-type">${type}</td><td>${size}</td><td>${preview}</td></tr>`;
+      const metadata=folder?type:view==='content'?type+' · '+size:size;
+      return `<li class="hfo-file-tile"${drag}>${title}<div class="hfo-file-row-actions"><small>${metadata}</small>${preview}</div></li>`;
+    }).join('');
+    rows.innerHTML=!items?`<p class="hfo-file-empty hfo-muted">${query?'No files or folders match your search.':'This folder is empty.'}</p>`
+      :view==='details'?`<table class="hfo-file-details" aria-label="Folder contents"><thead><tr><th scope="col">Name</th><th scope="col" class="hfo-file-type">Type</th><th scope="col">Size</th><th scope="col">Preview</th></tr></thead><tbody>${items}</tbody></table>`
+      :`<ul class="hfo-file-list">${items}</ul>`;
     controls();
   }
   search.addEventListener('input',renderEntries);
@@ -186,8 +211,19 @@ export async function mountJobFiles(host,{jobId,api}) {
       (failures.length?' · '+failures.join(' · '):''),Boolean(failures.length));
   }
   host.onclick=event=>{
+    if(!viewMenu.contains(event.target))viewMenu.open=false;
     const button=event.target.closest('button');
-    if(!button||busy)return;
+    if(!button)return;
+    if(button.hasAttribute('data-file-layout')){
+      view=button.dataset.fileLayout;
+      viewMenu.querySelectorAll('[data-file-layout]').forEach(option=>option.setAttribute('aria-pressed',String(option===button)));
+      try{localStorage.setItem(viewPreference,view);}catch{}
+      viewToggle.focus();
+      viewMenu.open=false;
+      if(loaded)renderEntries();
+      return;
+    }
+    if(busy)return;
     if(button.hasAttribute('data-file-view')){
       const entry=entries[Number(button.dataset.fileView)],filePath=join(path,entry.name);
       void viewJobFile(host,button,entry,download(filePath),()=>api('previewJobEmail',{jobId,path:filePath},'GET'));
