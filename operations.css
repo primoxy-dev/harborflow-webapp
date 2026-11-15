@@ -582,6 +582,20 @@
 .hfo-voucher-line { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr) auto; align-items:end; gap:8px; padding:8px; margin-bottom:6px; background:#f5f8fa; border:1px solid #dce7eb; border-radius:8px; }
 .hfo-voucher-line .hfo-btn { min-height:32px; }
 .hfo-voucher-approval { margin-top:14px; }
+.hfo-voucher-pricing { margin-top:16px; padding:12px; border:1px solid #dce7eb; border-radius:9px; background:#f5f8fa; }
+.hfo-voucher-pricing-fields { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,92px); gap:8px; margin:10px 0 12px; }
+.hfo-voucher-pricing table { table-layout:fixed; width:100%; border-collapse:collapse; font-size:.8rem; color:#153149; }
+.hfo-voucher-pricing :is(th,td) { padding:6px 5px; border:1px solid #dce7eb; overflow-wrap:anywhere; }
+.hfo-voucher-pricing thead,.hfo-voucher-pricing tfoot { background:#e7f0f3; }
+.hfo-voucher-pricing th { text-align:left; }
+.hfo-voucher-pricing thead th:nth-child(2) { width:13%; }
+.hfo-voucher-pricing thead th:nth-child(3) { width:17%; }
+.hfo-voucher-pricing thead th:last-child { width:22%; text-align:right; }
+.hfo-voucher-pricing tbody th { font-weight:600; }
+.hfo-voucher-pricing tbody input { box-sizing:border-box; width:100%; padding:5px; border:1px solid #becdd8; border-radius:5px; background:#fff; font-variant-numeric:tabular-nums; }
+.hfo-voucher-price { text-align:right; font-weight:650; font-variant-numeric:tabular-nums; }
+.hfo-voucher-pricing p { margin:8px 0 0; font-size:.8rem; }
+.hfo-voucher-pricing p:empty { display:none; }
 .hfo-voucher-preview { position:sticky; top:72px; padding:12px; border:1px solid #dce7eb; border-radius:10px; background:#eef3f5; }
 .hfo-voucher-preview canvas { display:block; width:100%; max-width:650px; height:auto; margin:10px auto 0; background:#fff; box-shadow:0 1px 8px #1835481a; }
 @media (max-width:800px) {
@@ -592,4 +606,7 @@
   .hfo-voucher-line { grid-template-columns:repeat(2,minmax(0,1fr)) auto; }
   .hfo-voucher-line .hfo-field:nth-child(2) { grid-column:1 / -1; grid-row:1; }
   .hfo-voucher .hfo-btn { min-height:44px; }
+  .hfo-voucher-pricing { padding:8px; }
+  .hfo-voucher-pricing :is(th,td) { padding:5px 3px; }
+  .hfo-voucher-pricing tbody input { padding-inline:2px; }
 }
