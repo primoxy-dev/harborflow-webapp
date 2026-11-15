@@ -314,10 +314,12 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
   const vessel = String(job.data.vessel || '').trim();
   const intro = 'PLEASE ARRANGE CTM TO MASTER OF "';
   const vesselLimit = voucherLineFields.description[1] - intro.length - 1;
+  const payToPrefix = 'MASTER OF "';
+  const payToLimit = voucherFields.payTo[1];
   const draft = saved && !validateCashVoucher(saved) ? structuredClone(saved) : {
     header: {
       ...emptyFields(voucherFields),
-      payTo: String(legacy.recipient ?? '').slice(0, 100),
+      payTo: vessel ? payToPrefix + vessel.slice(0, payToLimit - payToPrefix.length - 1) + '"' : String(legacy.recipient ?? '').slice(0, payToLimit),
       preparedBy: defaultPreparerAndChecker,
       checkedBy: defaultPreparerAndChecker,
       approvedBy: defaultApprover
