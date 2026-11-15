@@ -22,57 +22,58 @@ function drawLetter(ctx, fields, drawLogo) {
     ctx.textAlign = align;
     ctx.fillText(value, x, y);
   }
-  const left = 90, right = 510;
+  const left = 72, right = pageWidth - left;
+  const contentWidth = right - left;
+  const letterhead = left + 82;
+  const paragraphIndent = left + 24;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, pageWidth, pageHeight);
-  drawLogo(101, 42, 74, 63);
-  text('บริษัท กัลฟ์ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด', 183, 56, { bold: true });
-  text('GULF AGENCY COMPANY (THAILAND) LTD.', 183, 72, { size: 8.4, bold: true });
-  text('26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330', 183, 87, { size: 7, limit: 332 });
-  text('Tel (+66) 2 650 7400   Fax (+66) 2 650 7401   E-mail shipping.thailand@gac.com', 183, 102, { size: 7 });
+  drawLogo(left, 46, 68, 58);
+  text('บริษัท กัลฟ์ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด', letterhead, 58, { size: 10, bold: true });
+  text('GULF AGENCY COMPANY (THAILAND) LTD.', letterhead, 73, { size: 9, bold: true });
+  text('26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330', letterhead, 88, { size: 7.5, limit: right - letterhead });
+  text('Tel (+66) 2 650 7400   Fax (+66) 2 650 7401   E-mail shipping.thailand@gac.com', letterhead, 102, { size: 7.5 });
 
   ctx.strokeStyle = '#334154';
   ctx.lineWidth = .7;
-  ctx.strokeRect(350, 113, 131, 59);
-  text('อธิบายสภาพอาการของผู้ป่วย', 415.5, 132, { size: 8, align: 'center' });
-  text('และการตรวจรักษาเป็นภาษาอังกฤษ', 415.5, 155, { size: 8, align: 'center' });
-  text('ใบส่งตัว', pageWidth / 2, 195, { size: 17, bold: true, align: 'center' });
-  text(letterDate(fields.issueDate), right, 215, { align: 'right', size: 9.5 });
-  text('เรียน  ผู้อำนวยการ' + (fields.hospital || '________________________'), left, 237, { limit: 420 });
-  text('ด้วยบริษัท GULF AGENCY COMPANY (THAILAND) LTD. ซึ่งเป็นตัวแทนเรือ ขอส่งตัวลูกเรือของเรือชื่อ', 123, 256, { limit: 387 });
-  text('"' + (fields.vessel || '________________________') + '" ตามรายชื่อด้านล่างนี้', left, 276, { limit: 420 });
+  const noteWidth = 154, noteCenter = right - noteWidth / 2;
+  ctx.strokeRect(right - noteWidth, 120, noteWidth, 45);
+  text('อธิบายสภาพอาการของผู้ป่วย', noteCenter, 138, { size: 8, align: 'center' });
+  text('และการตรวจรักษาเป็นภาษาอังกฤษ', noteCenter, 153, { size: 8, align: 'center' });
+  text('ใบส่งตัว', pageWidth / 2, 192, { size: 17, bold: true, align: 'center' });
+  text(letterDate(fields.issueDate), right, 214, { align: 'right', size: 9.5 });
+  text('เรียน  ผู้อำนวยการ' + fields.hospital, left, 239, { size: 10, limit: contentWidth });
+  text('ด้วยบริษัท GULF AGENCY COMPANY (THAILAND) LTD. ซึ่งเป็นตัวแทนเรือ ขอส่งตัวลูกเรือ', paragraphIndent, 259, { size: 10, limit: right - paragraphIndent });
+  const vesselLine = fields.vessel ? 'ของเรือ "' + fields.vessel + '" ตามรายชื่อด้านล่างนี้' : 'ตามรายชื่อด้านล่างนี้';
+  text(vesselLine, left, 277, { size: 10, limit: contentWidth });
 
   const personFields = [
-    ['Name - Surname', fields.personName, 102, 310, 112],
-    ['Nationality', fields.nationality, 305, 310, 128],
-    ['DOB', letterDate(fields.birthDate, englishDateFormat), 102, 337, 150],
-    ['PP. NO.', fields.passport, 305, 337, 150]
+    ['Name - Surname', fields.personName, left, 310, 91, 158],
+    ['Nationality', fields.nationality, left + 267, 310, 71, 124],
+    ['DOB', letterDate(fields.birthDate, englishDateFormat), left, 333, 91, 158],
+    ['PP. NO.', fields.passport, left + 267, 333, 71, 124]
   ];
-  for (const [label, value, x, y, maxWidth] of personFields) {
-    text(label + ':', x, y, { size: 9, bold: true });
-    text(value, x + (label === 'Name - Surname' ? 79 : 57), y, { size: 9, limit: maxWidth });
+  for (const [label, value, x, y, offset, maxWidth] of personFields) {
+    text(label + ':', x, y, { size: 9.5, bold: true });
+    text(value, x + offset, y, { size: 9.5, limit: maxWidth });
   }
 
-  text('เข้ารับการตรวจรักษา วันที่ ' + (letterDate(fields.appointmentDate) || '____________________') +
-    ' โดยบริษัทฯ จะเป็นผู้ชำระค่าพยาบาลจนกระทั่งสิ้นสุดการรักษา', 123, 387, { limit: 387 });
-  text('ตามข้อตกลงระหว่างบริษัทฯ กับโรงพยาบาลฯ โดยขอให้ส่งใบแจ้งหนี้ไปตามชื่อและที่อยู่ด้านล่างนี้', left, 408, { limit: 420 });
-  text('และกรุณาจัดทำเอกสารเป็นภาษาอังกฤษ', left, 428);
-  text('C/O GULF AGENCY COMPANY (THAILAND) LTD. 26/30-31 9th Floor, Orakarn Building, Soi Chidlom,', left, 463, { limit: 420 });
-  text('Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330', left, 484);
-  text('จึงเรียนมาเพื่อโปรดดำเนินการ', 123, 512);
+  const appointment = letterDate(fields.appointmentDate);
+  text('เข้ารับการตรวจรักษา' + (appointment ? ' วันที่ ' + appointment : '') +
+    ' โดยบริษัทฯ จะเป็นผู้ชำระค่าพยาบาลจนกระทั่งสิ้นสุดการรักษา', paragraphIndent, 371, { size: 10, limit: right - paragraphIndent });
+  text('ตามข้อตกลงระหว่างบริษัทฯ กับโรงพยาบาลฯ โดยขอให้ส่งใบแจ้งหนี้ไปตามชื่อและที่อยู่ด้านล่างนี้', left, 390, { size: 10, limit: contentWidth });
+  text('และกรุณาจัดทำเอกสารเป็นภาษาอังกฤษ', left, 409, { size: 10 });
+  text('C/O GULF AGENCY COMPANY (THAILAND) LTD. 26/30-31 9th Floor, Orakarn Building, Soi Chidlom,', left, 446, { size: 9.5, limit: contentWidth });
+  text('Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330', left, 464, { size: 9.5 });
+  text('จึงเรียนมาเพื่อโปรดดำเนินการ', paragraphIndent, 500, { size: 10 });
 
-  const signatureCenter = 435;
-  text('ขอแสดงความนับถือ', signatureCenter, 553, { align: 'center' });
-  ctx.strokeStyle = '#334154';
-  ctx.beginPath();
-  ctx.moveTo(365, 600);
-  ctx.lineTo(505, 600);
-  ctx.stroke();
-  text(fields.signatory ? '(' + fields.signatory + ')' : '', signatureCenter, 619, { align: 'center', limit: 165 });
-  text(fields.position, signatureCenter, 638, { align: 'center', limit: 165 });
-  text(fields.phone ? 'Mobile: ' + fields.phone : '', signatureCenter, 655, { align: 'center', limit: 165 });
-  text('All business is undertaken subject to our Standard Trading Conditions of Carriage, which are incorporated into', left, 695, { size: 6.6, limit: 420 });
-  text('all contracts of carriage to which we are a party. Our Standard Trading Conditions are available on request.', left, 707, { size: 6.6, limit: 420 });
+  const signatureCenter = right - 93;
+  text('ขอแสดงความนับถือ', signatureCenter, 543, { size: 10, align: 'center' });
+  text(fields.signatory ? '(' + fields.signatory + ')' : '', signatureCenter, 604, { align: 'center', limit: 184 });
+  text(fields.position, signatureCenter, 622, { align: 'center', limit: 184 });
+  text(fields.phone ? 'Mobile: ' + fields.phone : '', signatureCenter, 640, { align: 'center', limit: 184 });
+  text('All business is undertaken subject to our Standard Trading Conditions of Carriage, which are incorporated into', left, 693, { size: 7, limit: contentWidth });
+  text('all contracts of carriage to which we are a party. Our Standard Trading Conditions are available on request.', left, 705, { size: 7, limit: contentWidth });
 }
 
 export async function mountReferralLetter(host, { job, service }) {
