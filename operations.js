@@ -408,18 +408,23 @@
       <form id="hfoCreateJob" class="hfo-section"><h2>New Husbandry Call</h2>${jobFields({status:'Open'},true,true)}
       <div class="hfo-actions" style="margin-top:16px"><button class="hfo-btn primary">Create Husbandry Call</button></div></form>`, 'Create Husbandry Call', 'Trial data only');
   }
+  function servicePeopleLabel(s) {
+    const type=s.data.type;
+    const kind=type==='Crew Change'?'crew':'visitor';
+    if(state.peopleLoadedFor!==s.job_id || !canPeople(kind) ||
+      !['Crew Change','Visitor','SIRE Inspector','Surveyor','Medical Visit','Inspection/Technical Visit','Medical'].includes(type))return '';
+    const count=state.people.filter(p=>p.kind===kind && Array.isArray(p.data.serviceIds) && p.data.serviceIds.includes(s.id)).length;
+    return count===1?'1 person':count+' people';
+  }
   function serviceTile(s, publicView=false) {
   const type=s.data.type||'Service';
   const icon=SERVICE_ICONS[type]||'⚙️';
   const label=escape(type);
   const status=escape(s.data.status||'—');
-  const personType=['Crew Change','Visitor','SIRE Inspector','Surveyor','Medical Visit','Inspection/Technical Visit','Medical'].includes(type);
-  const personKind=type==='Crew Change'?'crew':'visitor';
-  const count=state.peopleLoadedFor===s.job_id && !publicView && personType && canPeople(personKind)
-    ? state.people.filter(p=>p.kind===personKind && Array.isArray(p.data.serviceIds) && p.data.serviceIds.includes(s.id)).length : null;
+  const people=publicView?'':servicePeopleLabel(s);
   return `<div class="hfo-service-card"><button class="hfo-service-tile" type="button" data-open-service="${s.id}" aria-label="Open ${label}, ${status}">
     <span class="hfo-service-icon" aria-hidden="true">${icon}${publicView?'<small class="hfo-service-count">1s</small>':''}</span><span class="hfo-service-name">${label}</span>
-    <span class="hfo-service-meta"><small>#${s.seq}</small><small class="hfo-status" data-service-status="${status}">${status}</small>${personType && count!==null?`<small>${count} ${count===1?'person':'people'}</small>`:''}</span>
+    <span class="hfo-service-meta"><small>#${s.seq}</small><small class="hfo-status" data-service-status="${status}">${status}</small>${publicView?'':`<small data-service-people ${people?'':'hidden'}>${people}</small>`}</span>
     </button>${!publicView && mayEditService(s)?`<details class="hfo-service-menu">
       <summary aria-label="Actions for ${label}">⋯</summary>
       <div class="hfo-service-menu-panel"><button class="hfo-btn danger" type="button" data-remove-service="${s.id}">Remove Service</button></div>
@@ -999,13 +1004,32 @@
   } catch(e){state.conflict=null;document.getElementById('hfoConflict')?.remove();handleSaveError(e,c);}
 }
   function loadPeople() {
-  if (!job() || !anyPeopleView()) return;
-  const id=job().id;
-  return api('people',{jobId:id},'GET').then(out=>{
-    if (job()?.id!==id) return;
-    state.people=out.people;state.peopleLoadedFor=id;state.error='';render();
-  }).catch(e=>{state.people=[];state.peopleLoadedFor=null;announce(e.message);});
-}
+    const currentJob=job();
+    if(!currentJob || !anyPeopleView())return;
+    return api('people',{jobId:currentJob.id},'GET').then(out=>{
+      if(job()!==currentJob || !anyPeopleView())return;
+      state.people=out.people;
+      state.peopleLoadedFor=currentJob.id;
+      const jobPage=document.querySelector('.hfo-job-page');
+      if(jobPage){
+        const services=new Map(serviceList(currentJob).map(s=>[String(s.id),s]));
+        jobPage.querySelectorAll('[data-service-people]').forEach(badge=>{
+          const item=services.get(badge.closest('[data-open-service]').dataset.openService);
+          const label=item?servicePeopleLabel(item):'';
+          badge.textContent=label;
+          badge.hidden=!label;
+        });
+      } else if(service() && ['crew','visitors','travel'].includes(state.tab)){
+        state.error='';
+        render();
+      }
+    }).catch(error=>{
+      if(job()!==currentJob)return;
+      state.people=[];
+      state.peopleLoadedFor=null;
+      announce(error.message);
+    });
+  }
   async function loadTrips() {
     if (!job() || !state.grant.crewView || !state.grant.visitorView) return;
     try {const out=await api('trips',{jobId:job().id},'GET');state.trips=out.trips;state.error='';render();}
