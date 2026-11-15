@@ -413,3 +413,16 @@
   .hfo-provision-fields { grid-template-columns:minmax(0,1fr); }
   .hfo-provision-heading .hfo-field { min-width:0; }
 }
+
+.hfo-msg-drop { margin-top:12px; padding:12px; background:#fff; border:1px dashed #8ba6af; border-radius:8px; }
+.hfo-msg-drop.is-dragging { background:#e7f4ef; border-color:#107a72; }
+.hfo-msg-drop small { color:#52667a; }
+.hfo-msg-drop input { box-sizing:border-box; width:100%; }
+.hfo-msg-preview { box-sizing:border-box; width:min(720px,calc(100% - 24px)); max-height:85vh; border:1px solid #dbe6ea; border-radius:12px; padding:18px; color:#10233d; }
+.hfo-msg-preview::backdrop { background:#10233d66; }
+.hfo-msg-preview h3 { margin:0; }
+.hfo-msg-preview h4, .hfo-msg-preview dd { overflow-wrap:anywhere; }
+.hfo-msg-preview dl:not([hidden]) { display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 12px; }
+.hfo-msg-preview dt { color:#52667a; }
+.hfo-msg-preview dd { margin:0; }
+.hfo-msg-preview pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; padding-top:12px; border-top:1px solid #dbe6ea; }
