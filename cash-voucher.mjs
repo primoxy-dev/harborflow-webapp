@@ -1,13 +1,21 @@
-import { amountInCents, banknoteDenominations, banknoteRows, calculateCtmPricing, ctmCurrencies, ctmFeeLabels, defaultCtmPricing, emptyBanknotes, validateCashVoucher, validateCtmPricing, voucherFields, voucherLineFields, voucherRowLimit } from './lib/cash-voucher.mjs';
+import { amountInCents, banknoteDenominations, banknoteRows, calculateCtmPricing, ctmCurrencies, ctmFeeLabels, defaultCtmPricing, emptyBanknotes, validateCashVoucher, validateCtmPricing, voucherDueDateField, voucherFields, voucherLineFields, voucherRowLimit } from './lib/cash-voucher.mjs';
 
 const width = 612, height = 792;
 const defaultApprover = 'Mr. Jarun Soisuwan';
 const defaultPreparerAndChecker = 'Mr. Thanaphon Boonkaewsuk';
 const money = new Intl.NumberFormat('en-US');
 const priceMoney = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
-const printableDate = value => value ? new Intl.DateTimeFormat('en-GB', {
-  day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC'
-}).format(new Date(value + 'T00:00:00Z')).replaceAll(' ', '-') : '';
+function printableDate(value, year = 'numeric') {
+  const date = new Date(value + 'T00:00:00Z');
+  return Number.isNaN(date.valueOf()) ? '' : new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit', month: 'short', year, timeZone: 'UTC'
+  }).format(date).replace('Sept', 'Sep').replaceAll(' ', '-');
+}
+const closingLine = line => line.kind === 'remark' || line.kind === 'dueDate';
+const banknotePosition = lines => {
+  const closing = lines.findIndex(closingLine);
+  return closing < 0 ? lines.length : closing;
+};
 
 function drawVoucher(ctx, voucher, paintLogo) {
   const ink = '#153149', muted = '#42586c', grid = '#adbdc9', tint = '#edf3f7';
@@ -18,8 +26,15 @@ function drawVoucher(ctx, voucher, paintLogo) {
   })).filter(group => group.rows.length);
   const banknoteLines = Math.max(0, ...groups.map(group => group.rows.length));
   const banknoteSlots = banknoteLines ? banknoteLines + 3 : 0;
+  const banknoteIndex = banknotePosition(voucher.lines);
+  const hasClosingLines = banknoteIndex < voucher.lines.length;
+  const banknoteRow = banknoteIndex + (hasClosingLines && banknoteIndex > 0 ? 1 : 0);
+  const closingRow = banknoteRow + banknoteSlots + (hasClosingLines && banknoteSlots ? 1 : 0);
+  const lineRows = voucher.lines.map((_, index) =>
+    index < banknoteIndex ? index : closingRow + (index - banknoteIndex) * 2
+  );
   const tableTop = 174, rowsTop = 198, bodyHeight = 400;
-  const slots = Math.max(voucherRowLimit, voucher.lines.length + banknoteSlots);
+  const slots = Math.max(voucherRowLimit, (lineRows.at(-1) ?? -1) + 1, banknoteRow + banknoteSlots);
   const rowHeight = bodyHeight / slots, totalTop = rowsTop + bodyHeight, totalEnd = totalTop + 26;
   function text(value, x, y, { size = 10, bold = false, color = ink, align = 'left', limit = Infinity } = {}) {
     if (!value) return;
@@ -79,12 +94,12 @@ function drawVoucher(ctx, voucher, paintLogo) {
   text('Date', 465, 136, { bold: true, color: muted });
   text(printableDate(header.date), 465, 153);
   text('JOB NO.', (left + jobEnd) / 2, 190, { align: 'center', bold: true });
-  text('DESCRIPTION', jobEnd + 10, 190, { bold: true });
+  text('DESCRIPTION', (jobEnd + descriptionEnd) / 2, 190, { align: 'center', bold: true });
   text('AMOUNT', (descriptionEnd + right) / 2, 190, { align: 'center', bold: true });
 
   let total = 0, hasAmount = false;
-  voucher.lines.forEach(({ jobNo, description, amount }, index) => {
-    const top = rowsTop + index * rowHeight, y = top + rowHeight / 2 + 3.5;
+  voucher.lines.forEach(({ jobNo, description, amount, kind }, index) => {
+    const top = rowsTop + lineRows[index] * rowHeight, y = top + rowHeight / 2 + 3.5;
     if (/^[A-Za-z0-9]{1,8}$/.test(jobNo)) {
       [...jobNo].forEach((char, i) => text(char, left + (i + .5) * (jobEnd - left) / 8, y, { align: 'center' }));
     } else if (jobNo) {
@@ -92,7 +107,10 @@ function drawVoucher(ctx, voucher, paintLogo) {
       ctx.fillRect(left + .5, top + .5, jobEnd - left - 1, rowHeight - 1);
       text(jobNo, left + 5, y, { limit: jobEnd - left - 10 });
     }
-    text(description, jobEnd + 10, y, { limit: descriptionEnd - jobEnd - 20 });
+    const label = kind === 'dueDate'
+      ? 'DUE DATE : ' + (printableDate(description, '2-digit').toUpperCase() || 'DD-MMM-YY')
+      : description;
+    text(label, jobEnd + 10, y, { limit: descriptionEnd - jobEnd - 20 });
     const cents = amountInCents(amount);
     if (cents !== null) {
       hasAmount = true;
@@ -104,7 +122,7 @@ function drawVoucher(ctx, voucher, paintLogo) {
   if (hasAmount) splitAmount(total, totalTop + 17, true);
   if (groups.length) {
     const groupWidth = (descriptionEnd - jobEnd) / groups.length;
-    const start = rowsTop + voucher.lines.length * rowHeight;
+    const start = rowsTop + banknoteRow * rowHeight;
     const headingTop = start + rowHeight, dataTop = headingTop + rowHeight;
     const subtotalTop = dataTop + banknoteLines * rowHeight;
     const baseline = rowHeight / 2 + 3;
@@ -293,6 +311,9 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
   const legacy = service.data.details || {};
   let saved = legacy.paymentVoucher;
   const jobNo = job.data.jobNo || '';
+  const vessel = String(job.data.vessel || '').trim();
+  const intro = 'PLEASE ARRANGE CTM TO MASTER OF "';
+  const vesselLimit = voucherLineFields.description[1] - intro.length - 1;
   const draft = saved && !validateCashVoucher(saved) ? structuredClone(saved) : {
     header: {
       ...emptyFields(voucherFields),
@@ -301,7 +322,11 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
       checkedBy: defaultPreparerAndChecker,
       approvedBy: defaultApprover
     },
-    lines: [{ jobNo, description: '', amount: amountInCents(String(legacy.amount ?? '')) === null ? '' : String(legacy.amount) }]
+    lines: [
+      { jobNo, description: intro + vessel.slice(0, vesselLimit) + '"', amount: amountInCents(String(legacy.amount ?? '')) === null ? '' : String(legacy.amount) },
+      { jobNo: '', description: 'REMARK : PLEASE ARRANGE WITH NEW NOTES AND NO STAMPS', amount: '', kind: 'remark' },
+      { jobNo: '', description: '', amount: '', kind: 'dueDate' }
+    ]
   };
   draft.pricing ??= defaultCtmPricing(legacy);
   draft.banknotes ??= emptyBanknotes();
@@ -369,7 +394,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
   }
   function renderLines() {
     lines.innerHTML = draft.lines.map((line, index) => `<div class="hfo-voucher-line" role="group" aria-label="Line ${index + 1}">
-      ${Object.entries(voucherLineFields).map(([key, field]) => input(key, field, line[key], index)).join('')}
+      ${Object.entries(voucherLineFields).map(([key, field]) => input(key, key === 'description' && line.kind === 'dueDate' ? voucherDueDateField : field, line[key], index)).join('')}
       ${editable ? `<button type="button" class="hfo-btn danger" aria-label="Remove line ${index + 1}" data-voucher-remove="${index}">×</button>` : ''}
     </div>`).join('');
     if (add) add.disabled = draft.lines.length >= voucherRowLimit;
@@ -397,9 +422,10 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
   });
   if (add) add.onclick = () => {
     if (draft.lines.length >= voucherRowLimit) return;
-    draft.lines.push({ ...emptyFields(voucherLineFields), jobNo });
+    const index = banknotePosition(draft.lines);
+    draft.lines.splice(index, 0, { ...emptyFields(voucherLineFields), jobNo });
     renderLines();
-    lines.querySelector('[data-voucher-row="' + (draft.lines.length - 1) + '"][data-voucher-field="description"]')?.focus();
+    lines.querySelector('[data-voucher-row="' + index + '"][data-voucher-field="description"]')?.focus();
     changed();
   };
   if (save) save.onclick = async () => {
