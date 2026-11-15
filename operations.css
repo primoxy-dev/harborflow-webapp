@@ -429,3 +429,45 @@
 @media (min-width:1100px) {
   .hfo-provision-lists[data-columns="3"] { grid-template-columns:repeat(3,minmax(0,1fr)); }
 }
+
+.hfo-job-files summary { cursor:pointer; font-weight:700; }
+.hfo-job-files[open] summary { margin-bottom:12px; }
+.hfo-job-files .hfo-toolbar { flex-wrap:wrap; align-items:flex-start; gap:12px; }
+.hfo-job-files [data-file-path] { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; }
+.hfo-job-files [data-file-level] { overflow-wrap:anywhere; }
+.hfo-job-files [data-file-level][aria-current] { background:#e8f5f2; border-color:#b5d3cd; font-weight:700; }
+.hfo-file-tools { flex-wrap:wrap; gap:8px; }
+.hfo-file-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,145px),1fr)); gap:10px; margin:0; padding:0; list-style:none; }
+.hfo-file-tile { display:flex; flex-direction:column; min-width:0; min-height:135px; background:#fff; border:1px solid #dbe3ed; border-radius:9px; padding:9px; }
+.hfo-file-tile:hover,.hfo-file-tile:focus-within { border-color:#86b6ae; background:#f5fbf9; }
+.hfo-file-tile[draggable] { cursor:grab; }
+.hfo-file-tile[draggable]:active { cursor:grabbing; }
+.hfo-file-name { display:grid; justify-items:start; align-content:start; gap:9px; flex:1; min-width:0; padding:6px; border:0; background:none; overflow-wrap:anywhere; color:#0b6f68; font:inherit; text-align:left; }
+.hfo-file-name[download] { cursor:inherit; }
+.hfo-file-icon { display:grid; position:relative; width:37px; height:34px; place-items:end center; box-sizing:border-box; }
+.hfo-file-icon-folder { height:25px; margin:9px 0 0; border-radius:4px; background:#f2ca73; border:1px solid #d9ab52; }
+.hfo-file-icon-folder::before { content:""; position:absolute; width:17px; height:6px; top:-6px; left:-1px; border-radius:4px 4px 0 0; background:#d9ab52; }
+.hfo-file-icon-document { width:31px; padding-bottom:5px; border:1px solid #aebfd3; border-radius:4px; background:#eaf2fa; color:#315778; font-size:8px; font-weight:700; }
+.hfo-file-icon-document[data-file-extension="PDF"] { background:#fce9eb; color:#a63649; border-color:#e5b3ba; }
+.hfo-file-icon-document[data-file-extension="XLSX"] { background:#e6f5eb; color:#266b46; border-color:#a8d0b7; }
+.hfo-file-tile small { color:#52667a; font-size:.78rem; }
+.hfo-file-tile > small { padding-inline:6px; }
+.hfo-file-row-actions { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:4px 0 0 6px; }
+.hfo-file-row-actions .hfo-btn { padding:5px 9px; }
+.hfo-job-files [data-file-status]:empty { display:none; }
+.hfo-job-file-drop { padding:12px; min-height:125px; border:1px dashed #8ba6af; border-radius:8px; margin-top:10px; background:#f8fafc; }
+.hfo-job-file-drop.is-dragging { background:#e8f5f2; border-color:#107a72; }
+.hfo-file-drop-hint { margin:10px 0 0; color:#52667a; font-size:.84rem; }
+.hfo-file-empty { margin:12px 0; }
+@media (max-width:600px) {
+  .hfo-job-files button { min-height:44px; }
+  .hfo-file-list { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+.hfo-job-file-view { box-sizing:border-box; width:min(880px,calc(100% - 24px)); max-height:90vh; border:1px solid #dbe3ed; border-radius:12px; padding:16px; color:#10233d; }
+.hfo-job-file-view::backdrop { background:#10233d66; }
+.hfo-job-file-view h3 { margin:0; overflow-wrap:anywhere; }
+.hfo-job-file-view [data-preview-body]:not(:empty) { margin:12px 0; }
+.hfo-job-file-view pre,.hfo-job-file-view p { white-space:pre-wrap; overflow-wrap:anywhere; }
+.hfo-job-file-view img { display:block; max-width:100%; max-height:65vh; margin:auto; object-fit:contain; }
+.hfo-job-file-view iframe { width:100%; height:62vh; border:1px solid #dbe3ed; box-sizing:border-box; }
+.hfo-job-file-view > a { display:inline-block; }

@@ -1,3 +1,4 @@
+import { jobFilesRoute } from '../lib/job-files.mjs';
 import { provisionRoute } from '../lib/provision.mjs';
 import { hotelRoute } from '../lib/hotels.mjs';
 import { randomUUID } from 'node:crypto';
@@ -13,7 +14,7 @@ const parse = async request => {
   const raw = await request.text();
   if (raw.length > 4100000) throw Error('Request too large');
   const input = JSON.parse(raw || '{}');
-  const limit=['saveProvisionItem','previewProvisionEmailFile'].includes(input?.action)?4100000:['saveHotelEmailDraft','saveHotelEmailTemplate'].includes(input?.action)?60000:24000;
+  const limit=['saveProvisionItem','previewProvisionEmailFile','uploadJobFile'].includes(input?.action)?4100000:['saveHotelEmailDraft','saveHotelEmailTemplate'].includes(input?.action)?60000:24000;
   if (raw.length > limit) throw Error('Request too large');
   return input;
 };
@@ -148,9 +149,11 @@ return async function route(request) {
     const job = service && await loadJob(sql,service.job_id);
     return provisionRoute({sql,service,job,grant,login,input});
   };
+  const jobFiles = async input => jobFilesRoute({job:await loadJob(sql,input.jobId),grant,login,input});
   if (request.method === 'GET') {
     const action = url.searchParams.get('action') || 'state';
     if (['provisionItems','provisionEmail','provisionEmailPreview'].includes(action))return provision({action,serviceId:url.searchParams.get('serviceId'),id:url.searchParams.get('id')});
+    if (['jobFiles','downloadJobFile','previewJobEmail'].includes(action))return jobFiles({action,jobId:url.searchParams.get('jobId'),path:url.searchParams.get('path')??''});
     if (action === 'state') {
       const [jobs, services] = await Promise.all([
         rows(sql, 'SELECT * FROM operation_jobs ORDER BY updated_at DESC LIMIT 100'),
@@ -199,6 +202,7 @@ return async function route(request) {
   let input;
   try { input = await parse(request); } catch { return error('Invalid or oversized JSON'); }
   const action = input.action;
+  if (['createJobFileFolder','uploadJobFile'].includes(action))return jobFiles(input);
   if (['saveProvisionItem','removeProvisionItem','previewProvisionEmailFile'].includes(action))return provision(input);
   if(['saveHotel','saveHotelEmailDraft','saveHotelEmailTemplate','removeHotelEmailTemplate'].includes(action))return hotelRoute({sql,grant,login,input});
 
