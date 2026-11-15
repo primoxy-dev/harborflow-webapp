@@ -13,7 +13,7 @@ const parse = async request => {
   const raw = await request.text();
   if (raw.length > 4100000) throw Error('Request too large');
   const input = JSON.parse(raw || '{}');
-  const limit=input?.action==='saveProvisionItem'?4100000:['saveHotelEmailDraft','saveHotelEmailTemplate'].includes(input?.action)?60000:24000;
+  const limit=['saveProvisionItem','previewProvisionEmailFile'].includes(input?.action)?4100000:['saveHotelEmailDraft','saveHotelEmailTemplate'].includes(input?.action)?60000:24000;
   if (raw.length > limit) throw Error('Request too large');
   return input;
 };
@@ -150,7 +150,7 @@ return async function route(request) {
   };
   if (request.method === 'GET') {
     const action = url.searchParams.get('action') || 'state';
-    if (['provisionItems','provisionEmail'].includes(action))return provision({action,serviceId:url.searchParams.get('serviceId'),id:url.searchParams.get('id')});
+    if (['provisionItems','provisionEmail','provisionEmailPreview'].includes(action))return provision({action,serviceId:url.searchParams.get('serviceId'),id:url.searchParams.get('id')});
     if (action === 'state') {
       const [jobs, services] = await Promise.all([
         rows(sql, 'SELECT * FROM operation_jobs ORDER BY updated_at DESC LIMIT 100'),
@@ -199,7 +199,7 @@ return async function route(request) {
   let input;
   try { input = await parse(request); } catch { return error('Invalid or oversized JSON'); }
   const action = input.action;
-  if (['saveProvisionItem','removeProvisionItem'].includes(action))return provision(input);
+  if (['saveProvisionItem','removeProvisionItem','previewProvisionEmailFile'].includes(action))return provision(input);
   if(['saveHotel','saveHotelEmailDraft','saveHotelEmailTemplate','removeHotelEmailTemplate'].includes(action))return hotelRoute({sql,grant,login,input});
 
   if (action === 'grant') {

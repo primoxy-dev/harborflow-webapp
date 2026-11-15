@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@kenjiuno/msgreader": "1.28.0",
     "@neondatabase/serverless": "1.1.0"
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs"
   }
 }
-
