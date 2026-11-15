@@ -476,14 +476,12 @@
   }
   function provisionPanel(s) {
     const d=s.data, j=job().data, editable=mayEditService(s);
-    const legacy=Boolean(d.description||d.supplier||Object.values(d.details||{}).some(value=>value!=null&&value!==''));
     return `<div class="hfo-provision" data-provision-service>
       <header class="hfo-provision-heading">
         <div><h2>Provision &amp; Store</h2><p>${escape([j.vessel,j.port,j.jobNo].filter(Boolean).join(' · '))}</p></div>
         <div>${sel('Service status',d.status,'status',SERVICE_STATUSES,editable?'data-service-field':'disabled')}<small data-provision-save role="status"></small></div>
       </header>
       <div data-provision-items>Loading items…</div>
-      <details class="hfo-section hfo-provision-settings"><summary>${legacy?'Service settings and previous delivery details':'Service settings'}</summary>${serviceDetails(s,editable)}</details>
     </div>`;
   }
   function serviceDetails(s, editable) {
