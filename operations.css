@@ -575,7 +575,7 @@
 
 .hfo-voucher h3,.hfo-voucher h4 { margin:0; }
 .hfo-voucher > [role="status"]:empty { margin:0; }
-.hfo-voucher-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:18px; margin-top:14px; }
+.hfo-voucher-layout,.hfo-referral-layout { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; gap:18px; margin-top:14px; }
 .hfo-voucher-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
 .hfo-voucher-fields input,.hfo-voucher-line input { width:100%; box-sizing:border-box; }
 .hfo-voucher-line-heading { margin:16px 0 8px; }
@@ -600,11 +600,17 @@
 .hfo-voucher-banknotes thead th:nth-child(2) { width:28%; }
 .hfo-voucher-banknotes thead th:last-child { width:34%; }
 .hfo-voucher-banknotes [aria-invalid="true"] { border-color:#b42338; }
-.hfo-voucher-preview { position:sticky; top:72px; padding:12px; border:1px solid #dce7eb; border-radius:10px; background:#eef3f5; }
-.hfo-voucher-preview canvas { display:block; width:100%; max-width:650px; height:auto; margin:10px auto 0; background:#fff; box-shadow:0 1px 8px #1835481a; }
+.hfo-voucher-preview,.hfo-referral-preview { position:sticky; top:72px; padding:12px; border:1px solid #dce7eb; border-radius:10px; background:#eef3f5; }
+:is(.hfo-voucher-preview,.hfo-referral-preview) canvas { display:block; width:100%; max-width:650px; height:auto; margin:10px auto 0; background:#fff; box-shadow:0 1px 8px #1835481a; }
+.hfo-referral h3,.hfo-referral h4 { margin:0; }
+.hfo-referral-form { display:grid; gap:12px; }
+.hfo-referral-form fieldset { min-width:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:0; padding:12px; border:1px solid #dce7eb; border-radius:8px; }
+.hfo-referral-form legend { padding:0 5px; font-weight:650; }
+.hfo-referral-form input { width:100%; box-sizing:border-box; }
+.hfo-referral [data-referral-status]:empty { display:none; }
 @media (max-width:800px) {
-  .hfo-voucher-layout { grid-template-columns:1fr; }
-  .hfo-voucher-preview { position:static; }
+  .hfo-voucher-layout,.hfo-referral-layout { grid-template-columns:1fr; }
+  .hfo-voucher-preview,.hfo-referral-preview { position:static; }
 }
 @media (max-width:480px) {
   .hfo-voucher-line { grid-template-columns:repeat(2,minmax(0,1fr)) auto; }

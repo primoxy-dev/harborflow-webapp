@@ -920,18 +920,21 @@
   if(tripMap){tripMap.remove();tripMap=null;}tripMarkers={};tripRouteLayer=null;
   const isCrew=s.data.type==='Crew Change';
   const hasVoucher=initialServiceTab(s.data.type)==='voucher';
+  const hasReferral=['Medical Visit','Medical'].includes(s.data.type);
   const hasItems=['Provision & Store','Provisions','Ship Spare & Courier & Offland'].includes(s.data.type);
   const isVisitorService=Boolean(FLAT_VISITORS[s.data.type]);
   const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
   const tabs=isCrew?['crew','oktb','permit','loi','hotel','travel','checklist','history']:isVisitorService?['visitors','hotel','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:hasVoucher?['voucher','details','travel','checklist','history']:['details','travel','checklist','history'];
+  if(hasReferral)tabs.splice(1,0,'referral');
   if (!tabs.includes(state.tab)) state.tab=tabs[0];
-  const label={details:'Service details',voucher:'Payment Voucher',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'Hotel',travel:'Travel',checklist:'Checklist',history:'History'};
+  const label={details:'Service details',voucher:'Payment Voucher',referral:'Referral Letter',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'Hotel',travel:'Travel',checklist:'Checklist',history:'History'};
   const documentTab=['oktb','permit','loi'].includes(state.tab);
+  const serviceDocument=state.tab==='voucher'||state.tab==='referral';
   overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
     <div class="hfo-toolbar"><div ${state.tab==='details'&&hasItems?'hidden':''}><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Husbandry Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>Back to Job</button></div>
     ${isCrew||isVisitorService?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
     <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${label[t]}</button>`).join('')}</div>
-    ${state.tab==='voucher'?'<div class="hfo-section hfo-voucher" data-cash-voucher><p role="status">Loading voucher…</p></div>':state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?(hasItems?itemServicePanel(s):serviceDetails(s,mayEditService(s))):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
+    ${serviceDocument?`<div class="hfo-section hfo-${state.tab}" data-service-document ${state.tab==='voucher'?'data-cash-voucher':'data-referral-letter'}><p role="status">Loading document…</p></div>`:state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?(hasItems?itemServicePanel(s):serviceDetails(s,mayEditService(s))):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
     '#'+s.seq+' · '+s.data.type,j.data.vessel||'Husbandry Call');
   if(state.tab==='details'&&hasItems){
     const host=document.querySelector('[data-provision-items]');
@@ -940,10 +943,12 @@
     }).catch(error=>{if(host.isConnected)host.textContent=error.message;});
   }
   if(state.tab==='hotel')window.HarborFlowHotels?.mount(document.getElementById('hfoHotel'),{serviceId:s.id,api});
-  if(state.tab==='voucher'){
-    const host=document.querySelector('[data-cash-voucher]');
-    import('./cash-voucher.mjs').then(({mountCashVoucher})=>{
-      if(host.isConnected)return mountCashVoucher(host,{job:j,service:s,editable:mayEditService(s),api});
+  if(serviceDocument){
+    const host=document.querySelector('[data-service-document]');
+    const mount=state.tab==='voucher'?import('./cash-voucher.mjs').then(module=>module.mountCashVoucher):
+      import('./referral-letter.mjs').then(module=>module.mountReferralLetter);
+    mount.then(renderDocument=>{
+      if(host.isConnected)return renderDocument(host,{job:j,service:s,editable:mayEditService(s),api});
     }).catch(error=>{if(host.isConnected)host.textContent=error.message;});
   }
   if (documentTab) window.HarborFlowDocuments?.mount(document.getElementById('hfoDocument'),{jobId:j.id,serviceId:s.id,type:state.tab,login:state.login});
