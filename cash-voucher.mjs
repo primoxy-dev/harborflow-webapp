@@ -1,6 +1,7 @@
 import { amountInCents, banknoteDenominations, banknoteRows, calculateCtmPricing, ctmCurrencies, ctmFeeLabels, defaultCtmPricing, emptyBanknotes, validateCashVoucher, validateCtmPricing, voucherFields, voucherLineFields, voucherRowLimit } from './lib/cash-voucher.mjs';
 
 const width = 612, height = 792;
+const defaultApprover = 'Mr. Jarun Soisuwan';
 const money = new Intl.NumberFormat('en-US');
 const priceMoney = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
 const printableDate = value => value ? new Intl.DateTimeFormat('en-GB', {
@@ -292,7 +293,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
   let saved = legacy.paymentVoucher;
   const jobNo = job.data.jobNo || '';
   const draft = saved && !validateCashVoucher(saved) ? structuredClone(saved) : {
-    header: { ...emptyFields(voucherFields), payTo: String(legacy.recipient ?? '').slice(0, 100) },
+    header: { ...emptyFields(voucherFields), payTo: String(legacy.recipient ?? '').slice(0, 100), approvedBy: defaultApprover },
     lines: [{ jobNo, description: '', amount: amountInCents(String(legacy.amount ?? '')) === null ? '' : String(legacy.amount) }]
   };
   draft.pricing ??= defaultCtmPricing(legacy);
@@ -300,7 +301,8 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
   const disabled = editable ? '' : 'disabled';
   const input = (key, [label, max, type = 'text'], value, row) => `<label class="hfo-field">${label}
     <input data-voucher-field="${key}" ${row === undefined ? '' : `data-voucher-row="${row}"`} type="${type === 'date' ? 'date' : 'text'}"
-      maxlength="${max}" ${type === 'decimal' ? 'inputmode="decimal"' : ''} value="${escape(value)}" ${disabled}></label>`;
+      maxlength="${max}" ${type === 'decimal' ? 'inputmode="decimal"' : ''} ${key === 'approvedBy' ? 'list="hfoVoucherApprovers"' : ''}
+      value="${escape(value)}" ${disabled}></label>`;
   host.innerHTML = `
     <div class="hfo-toolbar"><h3>Payment Voucher</h3><div class="hfo-actions">
       ${editable ? '<button type="button" class="hfo-btn" data-voucher-save>Save voucher</button>' : ''}
@@ -316,6 +318,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
         <section class="hfo-voucher-pricing hfo-voucher-banknotes" aria-label="Banknote breakdown" data-voucher-banknotes></section>
         <div class="hfo-form-grid hfo-voucher-fields hfo-voucher-approval">
           ${['receivedBy','receivedDate','preparedBy','checkedBy','approvedBy'].map(key => input(key, voucherFields[key], draft.header[key])).join('')}
+          <datalist id="hfoVoucherApprovers"><option value="${escape(defaultApprover)}"></option></datalist>
         </div>
       </div>
       <section class="hfo-voucher-preview" aria-label="PDF Live">
