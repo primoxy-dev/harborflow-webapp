@@ -1,7 +1,8 @@
-import { amountInCents, validateCashVoucher, voucherFields, voucherLineFields, voucherRowLimit } from './lib/cash-voucher.mjs';
+import { amountInCents, calculateCtmPricing, ctmCurrencies, ctmFeeLabels, defaultCtmPricing, validateCashVoucher, validateCtmPricing, voucherFields, voucherLineFields, voucherRowLimit } from './lib/cash-voucher.mjs';
 
 const width = 612, height = 792;
 const money = new Intl.NumberFormat('en-US');
+const priceMoney = new Intl.NumberFormat('en-US', {maximumFractionDigits: 2});
 const printableDate = value => value ? new Intl.DateTimeFormat('en-GB', {
   day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC'
 }).format(new Date(value + 'T00:00:00Z')).replaceAll(' ', '-') : '';
@@ -109,6 +110,102 @@ const escape = value => String(value).replace(/[&<>"']/g, char => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]
 ));
 
+function mountCtmPricing(host, pricing, editable, onEdit) {
+  const disabled = editable ? '' : 'disabled';
+  host.innerHTML = `
+    <div class="hfo-toolbar"><h4>CTM pricing</h4><button type="button" class="hfo-btn" data-copy-pricing>Copy table</button></div>
+    <div class="hfo-voucher-pricing-fields">
+      <label class="hfo-field">CTM amount<input data-ctm-amount inputmode="decimal" maxlength="13" value="${escape(pricing.amount)}" ${disabled}></label>
+      <label class="hfo-field">Currency<select data-ctm-currency ${disabled}>${ctmCurrencies.map(currency => `<option>${currency}</option>`).join('')}</select></label>
+    </div>
+    <table aria-label="CTM fee calculation">
+      <thead><tr><th scope="col">Charge</th><th scope="col">%</th><th scope="col">Minimum</th><th scope="col" data-ctm-fee-heading></th></tr></thead>
+      <tbody>${ctmFeeLabels.map((label, index) => `<tr>
+        <th scope="row">${label}</th>
+        <td><input data-ctm-rate="${index}" aria-label="${label} percentage" inputmode="decimal" maxlength="7" value="${escape(pricing.rates[index])}" ${disabled}></td>
+        <td><input data-ctm-minimum="${index}" aria-label="${label} minimum" inputmode="decimal" maxlength="13" ${disabled}></td>
+        <td class="hfo-voucher-price" data-ctm-fee></td>
+      </tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="3" scope="row">TOTAL</th><td class="hfo-voucher-price" data-ctm-total></td></tr></tfoot>
+    </table>
+    <p class="hfo-muted hfo-voucher-pricing-note">Fees use the higher of the percentage or the minimum in the selected currency.</p>
+    <p class="hfo-muted" data-copy-status role="status"></p>`;
+  const currency = host.querySelector('[data-ctm-currency]');
+  currency.value = pricing.currency;
+  const amount = host.querySelector('[data-ctm-amount]');
+  const minimums = [...host.querySelectorAll('[data-ctm-minimum]')];
+  const fees = [...host.querySelectorAll('[data-ctm-fee]')];
+  const heading = host.querySelector('[data-ctm-fee-heading]');
+  const total = host.querySelector('[data-ctm-total]');
+  const status = host.querySelector('[data-copy-status]');
+  const copy = host.querySelector('[data-copy-pricing]');
+  const format = cents => cents === undefined ? '—' : priceMoney.format(cents / 100);
+  const report = (message, error = false) => {
+    status.textContent = message;
+    status.classList.toggle('hfo-alert', error);
+  };
+  function showMinimums() {
+    minimums.forEach((input, index) => { input.value = pricing.minimums[pricing.currency][index]; });
+    heading.textContent = pricing.currency;
+  }
+  function update() {
+    const result = calculateCtmPricing(pricing);
+    fees.forEach((cell, index) => { cell.textContent = format(result?.fees[index]); });
+    total.textContent = format(result?.total);
+    copy.disabled = !result;
+    const error = validateCtmPricing(pricing);
+    report(error || '', Boolean(error));
+  }
+  host.addEventListener('input', event => {
+    const { ctmRate, ctmMinimum } = event.target.dataset;
+    if (event.target === amount) pricing.amount = amount.value;
+    else if (ctmRate !== undefined) pricing.rates[Number(ctmRate)] = event.target.value;
+    else if (ctmMinimum !== undefined) pricing.minimums[pricing.currency][Number(ctmMinimum)] = event.target.value;
+    else return;
+    update();
+    onEdit();
+  });
+  currency.onchange = () => {
+    pricing.currency = currency.value;
+    showMinimums();
+    update();
+    onEdit();
+  };
+  copy.onclick = async () => {
+    const result = calculateCtmPricing(pricing);
+    if (!result) return;
+    const selected = pricing.currency;
+    const header = ['Charge', '%', 'Minimum (' + selected + ')', 'Amount (' + selected + ')'];
+    const rows = [
+      ['CTM', '', '', format(result.principal)],
+      ...ctmFeeLabels.map((label, index) => {
+        const minimum = amountInCents(pricing.minimums[selected][index]);
+        return [label, pricing.rates[index], minimum === null ? '' : format(minimum), format(result.fees[index])];
+      }),
+      ['TOTAL', '', '', format(result.total)]
+    ];
+    const plain = [header, ...rows].map(row => row.join('\t')).join('\n');
+    const cells = (row, tag) => row.map(value => `<${tag} style="border:1px solid #a9baca;padding:4px 8px">${escape(value)}</${tag}>`).join('');
+    const html = `<table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse"><thead><tr>${cells(header,'th')}</tr></thead><tbody>${rows.map(row => `<tr>${cells(row,'td')}</tr>`).join('')}</tbody></table>`;
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([html], {type:'text/html'}),
+        'text/plain': new Blob([plain], {type:'text/plain'})
+      })]);
+      report('Table copied.');
+    } catch {
+      try {
+        await navigator.clipboard.writeText(plain);
+        report('Table copied as tab-separated text.');
+      } catch {
+        report('Clipboard unavailable. Select and copy the values from the table.', true);
+      }
+    }
+  };
+  showMinimums();
+  update();
+}
+
 export async function mountCashVoucher(host, { job, service, editable, api }) {
   const pdf = window.HarborFlowVectorPdf;
   if (!pdf) throw Error('PDF tools are unavailable. Reload this page to try again.');
@@ -121,6 +218,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
     header: { ...emptyFields(voucherFields), payTo: String(legacy.recipient ?? '').slice(0, 100) },
     lines: [{ jobNo, description: '', amount: amountInCents(String(legacy.amount ?? '')) === null ? '' : String(legacy.amount) }]
   };
+  draft.pricing ??= defaultCtmPricing(legacy);
   const disabled = editable ? '' : 'disabled';
   const input = (key, [label, max, type = 'text'], value, row) => `<label class="hfo-field">${label}
     <input data-voucher-field="${key}" ${row === undefined ? '' : `data-voucher-row="${row}"`} type="${type === 'date' ? 'date' : 'text'}"
@@ -136,6 +234,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
         <div class="hfo-form-grid hfo-voucher-fields">${['number', 'payTo', 'date'].map(key => input(key, voucherFields[key], draft.header[key])).join('')}</div>
         <div class="hfo-toolbar hfo-voucher-line-heading"><h4>Voucher lines</h4>${editable ? '<button type="button" class="hfo-btn" data-voucher-add>+ Add line</button>' : ''}</div>
         <div data-voucher-lines></div>
+        <section class="hfo-voucher-pricing" aria-label="CTM pricing" data-voucher-pricing></section>
         <div class="hfo-form-grid hfo-voucher-fields hfo-voucher-approval">
           ${['receivedBy','receivedDate','preparedBy','checkedBy','approvedBy'].map(key => input(key, voucherFields[key], draft.header[key])).join('')}
         </div>
@@ -154,6 +253,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
     status.textContent = message;
     status.classList.toggle('hfo-alert', error);
   };
+  mountCtmPricing(host.querySelector('[data-voucher-pricing]'), draft.pricing, editable, () => report('Unsaved changes'));
   function draw(canvas, exporting = false) {
     const scale = 3.5;
     if (canvas.width !== width * scale || canvas.height !== height * scale) {
@@ -230,7 +330,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
     }
   };
   download.onclick = () => {
-    const invalid = validateCashVoucher(draft);
+    const invalid = validateCashVoucher({header: draft.header, lines: draft.lines});
     if (invalid) return report(invalid, true);
     try {
       const canvas = document.createElement('canvas');
