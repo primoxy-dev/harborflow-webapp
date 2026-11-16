@@ -912,6 +912,7 @@
   }
   function initialServiceTab(type) {
     if(type==='Crew Change')return 'crew';
+    if(type==='Medical Visit')return 'referral';
     if(FLAT_VISITORS[type])return 'visitors';
     return ['Cash to Master','CTM'].includes(type)?'voucher':'details';
   }
@@ -920,19 +921,20 @@
   if(tripMap){tripMap.remove();tripMap=null;}tripMarkers={};tripRouteLayer=null;
   const isCrew=s.data.type==='Crew Change';
   const hasVoucher=initialServiceTab(s.data.type)==='voucher';
-  const hasReferral=['Medical Visit','Medical'].includes(s.data.type);
+  const isMedicalVisit=s.data.type==='Medical Visit';
   const hasItems=['Provision & Store','Provisions','Ship Spare & Courier & Offland'].includes(s.data.type);
   const isVisitorService=Boolean(FLAT_VISITORS[s.data.type]);
   const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
   const tabs=isCrew?['crew','oktb','permit','loi','hotel','travel','checklist','history']:isVisitorService?['visitors','hotel','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:hasVoucher?['voucher','details','travel','checklist','history']:['details','travel','checklist','history'];
-  if(hasReferral)tabs.splice(1,0,'referral');
+  if(isMedicalVisit)tabs[0]='referral';
+  if(s.data.type==='Medical')tabs.splice(1,0,'referral');
   if (!tabs.includes(state.tab)) state.tab=tabs[0];
   const label={details:'Service details',voucher:'Payment Voucher',referral:'Referral Letter',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'Hotel',travel:'Travel',checklist:'Checklist',history:'History'};
   const documentTab=['oktb','permit','loi'].includes(state.tab);
   const serviceDocument=state.tab==='voucher'||state.tab==='referral';
   overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
     <div class="hfo-toolbar"><div ${state.tab==='details'&&hasItems?'hidden':''}><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Husbandry Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>Back to Job</button></div>
-    ${isCrew||isVisitorService?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
+    ${isCrew||isVisitorService||isMedicalVisit?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
     <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${label[t]}</button>`).join('')}</div>
     ${serviceDocument?`<div class="hfo-section hfo-${state.tab}" data-service-document ${state.tab==='voucher'?'data-cash-voucher':'data-referral-letter'}><p role="status">Loading document…</p></div>`:state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?(hasItems?itemServicePanel(s):serviceDetails(s,mayEditService(s))):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
     '#'+s.seq+' · '+s.data.type,j.data.vessel||'Husbandry Call');
@@ -971,6 +973,7 @@
       const out=await api('updateService',{id:s.id,patch,base,reason});
       Object.assign(s,out.record);
       state.sync='Saved '+new Date().toLocaleTimeString();state.error='';
+      if(name==='status' && service()===s && state.tab==='referral'){announce('');return;}
       if(!provision || name==='type'){render();return;}
       if(provision.isConnected){
         status.textContent='Saved';
