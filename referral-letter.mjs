@@ -1,4 +1,5 @@
 const pageWidth = 612, pageHeight = 792, scale = 3.5;
+const defaultHospital = 'โรงพยาบาลกรุงเทพระยอง';
 const thaiDateFormat = new Intl.DateTimeFormat('th-TH', {
   year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC'
 });
@@ -83,7 +84,7 @@ export async function mountReferralLetter(host, { job, service }) {
   if (!host.isConnected) return;
   const fields = {
     vessel: String(job.data.vessel || '').slice(0, 100),
-    hospital: '',
+    hospital: defaultHospital,
     issueDate: new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10),
     appointmentDate: String(service.data.details?.appointment || service.data.plannedStart || '').match(/^\d{4}-\d{2}-\d{2}/)?.[0] || '',
     personName: '', nationality: '', birthDate: '', passport: '', signatory: '', position: '', phone: ''
@@ -111,12 +112,17 @@ export async function mountReferralLetter(host, { job, service }) {
       wrapper.className = 'hfo-field';
       const input = document.createElement('input');
       Object.assign(input, { name, type, maxLength: 100, value: fields[name] });
+      if (name === 'hospital') input.setAttribute('list', 'hfoReferralHospitals');
       fields[name] = input.value;
       wrapper.append(label, input);
       fieldset.append(wrapper);
     }
     form.append(fieldset);
   }
+  const hospitals = document.createElement('datalist');
+  hospitals.id = 'hfoReferralHospitals';
+  hospitals.append(new Option(defaultHospital, defaultHospital));
+  form.append(hospitals);
   const preview = host.querySelector('canvas');
   const status = host.querySelector('[data-referral-status]');
   function render(canvas, exporting = false) {
