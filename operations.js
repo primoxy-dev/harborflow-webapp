@@ -325,10 +325,18 @@
     </div>`;
     document.querySelector('.top .actions select').style.display='none';
   }
-  function overlay(content, title, subtitle='') {
+  function overlay(content, title, subtitle='', {backToJob=false}={}) {
     document.querySelector('.hfo-overlay')?.remove();
     const el=document.createElement('div'); el.className='hfo-overlay';
-    el.innerHTML=`<div class="hfo-overlay-head"><div><b>${escape(title)}</b>${subtitle?`<small class="hfo-muted" style="display:block">${escape(subtitle)}</small>`: ''}</div><button class="hfo-btn" data-close>Close</button></div><div class="hfo-overlay-body"><div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>${content}</div>`;
+    const back=backToJob?`<button type="button" class="hfo-btn hfo-service-nav-back" data-back-job>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>Back to Job
+    </button>`:'';
+    const close=backToJob?`<button type="button" class="hfo-btn hfo-service-nav-close" data-close aria-label="Close" title="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+    </button>`:'<button type="button" class="hfo-btn" data-close>Close</button>';
+    el.innerHTML=`<div class="hfo-overlay-head${backToJob?' hfo-service-nav':''}">
+      ${back}<div class="hfo-overlay-title"><b>${escape(title)}</b>${subtitle?`<small class="hfo-muted" style="display:block">${escape(subtitle)}</small>`:''}</div>${close}
+    </div><div class="hfo-overlay-body"><div id="hfoNotice" class="hfo-alert" ${state.error?'':'hidden'}>${escape(state.error)}</div>${content}</div>`;
     document.body.appendChild(el);
   }
   function renderPublicJob() {
@@ -342,9 +350,9 @@
   function renderPublicService() {
     const s = service(), j = job(); if (!s || !j) return;
     overlay(`<div class="hfo-banner">Public Service summary only · บุคคล เอกสาร และหมายเหตุไม่แสดง</div>
-      <div class="hfo-section"><button class="hfo-btn" data-back-job>Back to Job</button>
+      <div class="hfo-section">
       <h2>#${s.seq} · ${escape(s.data.type||'Service')}</h2><p>${escape(j.data.vessel||'Husbandry Call')} · ${escape(s.data.status||'—')}</p></div>
-      <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, `#${s.seq} · ${s.data.type||'Service'}`, 'Public view');
+      <a class="hfo-btn primary" href="/api/auth?mode=start">Sign in for permitted details and editing</a>`, `#${s.seq} · ${s.data.type||'Service'}`, 'Public view', {backToJob:true});
   }
   function render() {
     renderHome();
@@ -504,16 +512,23 @@
       <p class="hfo-muted">A PIC name does not grant account access. Other fields can be filled in the dedicated Service view.</p>
       <button class="hfo-btn primary">Add Service</button></form>`, 'Add Service', j.data.jobNo||j.id);
   }
-  function itemServicePanel(s) {
-    const d=s.data, j=job().data, editable=mayEditService(s);
+  function serviceHeading(s, j) {
+    const d=s.data;
     const title=d.type==='Provisions'?'Provision & Store':d.type;
+    const context=[j.data.vessel||'Husbandry Call',j.data.port,j.data.jobNo||j.id].filter(Boolean);
+    return `<header class="hfo-service-heading">
+      <div><h2>${escape(title)}</h2><p>${escape(context.join(' · '))}</p></div>
+      <div class="hfo-service-heading-status">
+        ${sel('Service status',d.status,'status',SERVICE_STATUSES,mayEditService(s)?'data-service-field':'disabled')}
+        <small data-service-save role="status"></small>
+      </div>
+    </header>`;
+  }
+  function itemServicePanel(s) {
+    const d=s.data, editable=mayEditService(s);
     const shipmentFields=d.type==='Ship Spare & Courier & Offland'
       ?TYPE_FIELDS[d.type].filter(([name])=>String(d.details?.[name]??'').trim()):[];
     return `<div class="hfo-provision" data-provision-service>
-      <header class="hfo-provision-heading">
-        <div><h2>${escape(title)}</h2><p>${escape([j.vessel,j.port,j.jobNo].filter(Boolean).join(' · '))}</p></div>
-        <div>${sel('Service status',d.status,'status',SERVICE_STATUSES,editable?'data-service-field':'disabled')}<small data-provision-save role="status"></small></div>
-      </header>
       <div data-provision-items>Loading items…</div>
       ${shipmentFields.length?`<details class="hfo-section">
         <summary>Previous shipment details</summary>
@@ -527,7 +542,6 @@
     const specifics=(TYPE_FIELDS[d.type]||TYPE_FIELDS.Others).map(([name,label,type])=>f(label,d.details?.[name],name,type||'text',`${dis} data-detail-field`)).join('');
     return `<div class="hfo-section"><h3>Shared details</h3><div class="hfo-form-grid">
        ${sel('Type',d.type,'type',TYPES.includes(d.type)?TYPES:[d.type,...TYPES],`${dis} ${attr}`)}
-      ${sel('Status',d.status,'status',SERVICE_STATUSES,`${dis} ${attr}`)}
       ${f('Description',d.description,'description','text',`${dis} ${attr}`)}
       ${f('Service PIC (GitHub login)',d.pic,'pic','text',`${isOwner()||mayEditJob(job())?'':'disabled'} ${attr}`)}
       ${f('Supplier',d.supplier,'supplier','text',`${dis} ${attr}`)}
@@ -932,11 +946,10 @@
   const documentTab=['oktb','permit','loi'].includes(state.tab);
   const serviceDocument=state.tab==='voucher'||state.tab==='referral';
   overlay(`<div class="hfo-banner">Trial only · fictional/de-identified people. Terminal restrictions must be confirmed before execution.</div>
-    <div class="hfo-toolbar"><div ${state.tab==='details'&&hasItems?'hidden':''}><h2>#${s.seq} · ${escape(s.data.type)}</h2><span class="hfo-muted">${escape(j.data.vessel||'Husbandry Call')} · ${escape(j.data.jobNo||j.id)}</span></div><button class="hfo-btn" data-back-job>Back to Job</button></div>
-    ${isCrew||isVisitorService||isMedicalVisit||hasVoucher?`<div class="hfo-service-status">${sel('Service status',s.data.status,'status',SERVICE_STATUSES,`${mayEditService(s)?'':'disabled'} data-service-field`)}</div>`:''}
+    ${serviceHeading(s,j)}
     <div class="hfo-tabs">${tabs.map(t=>`<button class="${state.tab===t?'active':''}" data-tab="${t}">${label[t]}</button>`).join('')}</div>
     ${serviceDocument?`<div class="hfo-section hfo-${state.tab}" data-service-document ${state.tab==='voucher'?'data-cash-voucher':'data-referral-letter'}><p role="status">Loading document…</p></div>`:state.tab==='hotel'?'<div id="hfoHotel" class="hfo-section">Loading hotel bookings…</div>':documentTab?'<div class="hfo-section" id="hfoDocument"><p role="status">กำลังโหลดเอกสาร…</p></div>':state.tab==='details'?(hasItems?itemServicePanel(s):serviceDetails(s,mayEditService(s))):['crew','visitors'].includes(state.tab)?rosterHtml(s):state.tab==='travel'?tripsHtml(s):state.tab==='checklist'?checklistHtml(s):`<div class="hfo-section"><button class="hfo-btn" data-history="service" data-history-id="${s.id}">Load history</button>${historyHtml()}</div>`}`,
-    '#'+s.seq+' · '+s.data.type,j.data.vessel||'Husbandry Call');
+    '#'+s.seq+' · '+s.data.type,j.data.vessel||'Husbandry Call',{backToJob:true});
   if(state.tab==='details'&&hasItems){
     const host=document.querySelector('[data-provision-items]');
     import('./provision-items.mjs').then(({mountProvisionItems})=>{
@@ -966,18 +979,16 @@
     if (name==='plannedEnd' && s.data.baselineDue) reason=prompt('Reason for changing a locked deadline:')||'';
     if (name==='status' && value==='Cancelled') reason=prompt('Reason for cancelling this requested Service:')||'';
     const provision=target.closest('[data-provision-service]');
-    const status=provision?.querySelector('[data-provision-save]');
+    const keepView=name==='status'||(provision&&name!=='type');
+    const status=keepView?target.closest('.hfo-overlay')?.querySelector('[data-service-save]'):null;
     if(status)status.textContent='Saving…';
     try {
       const out=await api('updateService',{id:s.id,patch,base,reason});
       Object.assign(s,out.record);
       state.sync='Saved '+new Date().toLocaleTimeString();state.error='';
-      if(name==='status' && service()===s && ['referral','voucher'].includes(state.tab)){announce('');return;}
-      if(!provision || name==='type'){render();return;}
-      if(provision.isConnected){
-        status.textContent='Saved';
-
-      }
+      if(!keepView){render();return;}
+      if(service()===s)announce('');
+      if(status?.isConnected)status.textContent='Saved';
     }catch(e){
       if(status)status.textContent='Could not save';
       handleSaveError(e,{kind:'service',id:s.id,field:detail?'details.'+name:name,value,old,reason});
