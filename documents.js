@@ -679,7 +679,7 @@
     const ctx = contexts.get([options.login, options.jobId, options.serviceId, options.type].join(':')) || {};
     return { draft: JSON.parse(JSON.stringify(ctx, (_, value) => value instanceof Set ? [...value] : value)), preferences: { ...(account?.values || {}) } };
   }
-  window.HarborFlowDocuments = { mount, clear, snapshot, request: get };
+  window.HarborFlowDocuments = { mount, clear, snapshot, request: get, readSignature };
   function queueDocument(host,ctx,options){
     if(!host._hfdSaver||!formState)return;const sections=formState.encodeDocumentContext(ctx,options.type);
     for(const [section,data] of Object.entries(sections))if(host._hfdCanEdit?.[section]){

@@ -615,6 +615,10 @@
 .hfo-referral-form fieldset { min-width:0; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:0; padding:12px; border:1px solid #dce7eb; border-radius:8px; }
 .hfo-referral-form legend { padding:0 5px; font-weight:650; }
 .hfo-referral-form input { width:100%; box-sizing:border-box; }
+.hfo-referral-signature { grid-column:1 / -1; }
+.hfo-referral-signature .hfo-actions { margin-top:8px; }
+.hfo-referral-signature p { margin:8px 0 0; }
+.hfo-referral-signature p:empty { display:none; }
 .hfo-referral [data-referral-status]:empty { display:none; }
 @media (max-width:800px) {
   .hfo-voucher-layout,.hfo-referral-layout { grid-template-columns:1fr; }
