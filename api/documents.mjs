@@ -23,8 +23,23 @@ export function createDocumentsRoute(deps = {}) {
       const grant = await getPermission(login, sql);
       if (!grant) return fail('Operations access required', 403);
       const crew = canPeople(grant, 'crew'), visitor = canPeople(grant, 'visitor');
-      if (!crew && !visitor) return fail('Separate Crew or Visitor view permission required', 403);
       const url = new URL(request.url);
+      if (url.searchParams.get('action') === 'referralSignature') {
+        if (!['owner','editor'].includes(grant.role)) return fail('Operations editing permission required', 403);
+        if (request.method === 'GET') {
+          const {referralSignature = ''} = await readSettings(sql, login);
+          return json({login, signature:referralSignature});
+        }
+        const raw = await request.text();
+        if (raw.length > 1410000) return fail('Request too large', 413);
+        let input;
+        try { input = JSON.parse(raw); } catch { return fail('Invalid JSON', 400); }
+        if (input?.login !== login) return fail('Account changed; reopen the document', 409);
+        if (typeof input.base !== 'string' || input.base.length > 700000) return fail('Original signature is required', 400);
+        const result = await saveSettings(sql, login, {referralSignature:input.signature}, {referralSignature:input.base});
+        return result.status === 200 ? json({login, signature:result.preferences.referralSignature}) : fail(result.error,result.status);
+      }
+      if (!crew && !visitor) return fail('Separate Crew or Visitor view permission required', 403);
       if (request.method === 'POST') {
         const raw = await request.text();
         if (raw.length > 710000) return fail('Request too large', 413);
@@ -44,7 +59,9 @@ export function createDocumentsRoute(deps = {}) {
         if (!crew || !['owner','editor'].includes(grant.role)) return fail('Crew view and Operations editing permission required', 403);
         if (input.action !== 'savePreferences') return fail('Unknown action', 404);
         if (input.login !== login) return fail('Account changed; reopen the document', 409);
+        if (Object.hasOwn(input.patch || {}, 'referralSignature')) return fail('Use the Referral Letter signature settings',400);
         const result = await saveSettings(sql, login, input.patch, input.base);
+        if (result.preferences) delete result.preferences.referralSignature;
         const { status, ...body } = result;
         return json(body, status);
       }
@@ -58,7 +75,8 @@ export function createDocumentsRoute(deps = {}) {
       }
       if (action === 'preferences') {
         if (!crew) return fail('Separate Crew view permission required', 403);
-        return json({ login, preferences: await readSettings(sql, login), canSave: ['owner','editor'].includes(grant.role) });
+        const {referralSignature, ...preferences} = await readSettings(sql, login);
+        return json({ login, preferences, canSave: ['owner','editor'].includes(grant.role) });
       }
       if (action === 'jobs') {
         const jobs = await sql.query('SELECT id,data FROM operation_jobs ORDER BY updated_at DESC LIMIT 100');

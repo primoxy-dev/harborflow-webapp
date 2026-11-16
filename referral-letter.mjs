@@ -12,7 +12,7 @@ function letterDate(value, format = thaiDateFormat) {
   return Number.isNaN(date.valueOf()) ? '' : format.format(date);
 }
 
-function drawLetter(ctx, fields, drawLogo) {
+function drawLetter(ctx, fields, drawLogo, signature) {
   function text(value, x, y, { size = 9, bold = false, align = 'left', limit = Infinity, color = '#161e27' } = {}) {
     if (!value) return;
     const weight = bold ? 'bold ' : '';
@@ -70,6 +70,11 @@ function drawLetter(ctx, fields, drawLogo) {
 
   const signatureCenter = right - 93;
   text('ขอแสดงความนับถือ', signatureCenter, 543, { size: 10, align: 'center' });
+  if (signature) {
+    const ratio = Math.min(155 / signature.naturalWidth, 44 / signature.naturalHeight);
+    const w = signature.naturalWidth * ratio, h = signature.naturalHeight * ratio;
+    ctx.drawImage(signature, signatureCenter - w / 2, 572 - h / 2, w, h);
+  }
   text(fields.signatory ? '(' + fields.signatory + ')' : '', signatureCenter, 604, { align: 'center', limit: 184 });
   text(fields.position, signatureCenter, 622, { align: 'center', limit: 184 });
   text(fields.phone ? 'Mobile: ' + fields.phone : '', signatureCenter, 640, { align: 'center', limit: 184 });
@@ -77,7 +82,7 @@ function drawLetter(ctx, fields, drawLogo) {
   text('all contracts of carriage to which we are a party. Our Standard Trading Conditions are available on request.', left, 705, { size: 7, limit: contentWidth });
 }
 
-export async function mountReferralLetter(host, { job, service }) {
+export async function mountReferralLetter(host, { job, service, editable, login }) {
   const pdf = window.HarborFlowVectorPdf;
   if (!pdf) throw Error('PDF tools are unavailable. Reload to try again.');
   const logo = await pdf.prepareImage(new Image(), 'logo');
@@ -117,6 +122,15 @@ export async function mountReferralLetter(host, { job, service }) {
       wrapper.append(label, input);
       fieldset.append(wrapper);
     }
+    if (legend === 'Contact and signatory' && editable) {
+      const signatureControls = document.createElement('div');
+      signatureControls.className = 'hfo-referral-signature';
+      signatureControls.innerHTML = `<label class="hfo-field">Signature (PNG or JPEG)<input type="file" accept="image/png,image/jpeg" data-referral-signature disabled></label>
+        <div class="hfo-actions"><button type="button" class="hfo-btn" data-save-referral-signature disabled>Save signature</button>
+        <button type="button" class="hfo-btn" data-remove-referral-signature disabled>Remove signature</button></div>
+        <p class="hfo-muted" role="status" data-referral-signature-status></p>`;
+      fieldset.append(signatureControls);
+    }
     form.append(fieldset);
   }
   const hospitals = document.createElement('datalist');
@@ -125,6 +139,7 @@ export async function mountReferralLetter(host, { job, service }) {
   form.append(hospitals);
   const preview = host.querySelector('canvas');
   const status = host.querySelector('[data-referral-status]');
+  let signatureImage = null;
   function render(canvas, exporting = false) {
     if (canvas.width !== pageWidth * scale || canvas.height !== pageHeight * scale) {
       canvas.width = pageWidth * scale;
@@ -147,14 +162,18 @@ export async function mountReferralLetter(host, { job, service }) {
         ctx.fill(new Path2D(path.d));
       }
       ctx.restore();
-    });
+    }, signatureImage);
   }
   let frame;
-  form.addEventListener('submit', event => event.preventDefault());
-  form.addEventListener('input', event => {
-    fields[event.target.name] = event.target.value;
+  function refreshPreview() {
     cancelAnimationFrame(frame);
     frame = requestAnimationFrame(() => { if (host.isConnected) render(preview); });
+  }
+  form.addEventListener('submit', event => event.preventDefault());
+  form.addEventListener('input', event => {
+    if (!Object.hasOwn(fields, event.target.name)) return;
+    fields[event.target.name] = event.target.value;
+    refreshPreview();
   });
   host.querySelector('[data-referral-download]').onclick = () => {
     status.textContent = '';
@@ -175,4 +194,73 @@ export async function mountReferralLetter(host, { job, service }) {
     }
   };
   render(preview);
+  if (editable) {
+    const file = form.querySelector('[data-referral-signature]');
+    const save = form.querySelector('[data-save-referral-signature]');
+    const remove = form.querySelector('[data-remove-referral-signature]');
+    const feedback = form.querySelector('[data-referral-signature-status]');
+    const documents = window.HarborFlowDocuments;
+    let loaded = false, busy = false, saved = '', pending = '';
+    const controls = () => {
+      file.disabled = busy;
+      save.disabled = busy || !loaded || pending === saved;
+      remove.disabled = busy || !pending;
+    };
+    async function showSignature(data) {
+      const image = data ? new Image() : null;
+      if (image) {
+        image.src = data;
+        await image.decode();
+      }
+      pending = data;
+      signatureImage = image;
+      refreshPreview();
+    }
+    async function run(action, loading) {
+      busy = true;
+      controls();
+      feedback.textContent = loading;
+      try { await action(); }
+      catch (error) { feedback.textContent = error.message; }
+      finally {
+        busy = false;
+        controls();
+      }
+    }
+    file.onchange = () => {
+      const image = file.files[0];
+      file.value = '';
+      if (!image) return;
+      void run(async () => {
+        await showSignature(await documents.readSignature(image));
+        feedback.textContent = loaded ? 'Ready to save to your account.' : 'Preview only. Reopen this tab to retry loading saved settings.';
+      }, 'Preparing signature…');
+    };
+    remove.onclick = () => {
+      void showSignature('');
+      feedback.textContent = saved ? 'Select Save signature to remove it from your account.' : '';
+      controls();
+    };
+    save.onclick = () => {
+      void run(async () => {
+        const response = await fetch('/api/documents?action=referralSignature', {
+          method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({login, signature:pending, base:saved})
+        });
+        const result = await response.json();
+        if (!response.ok) throw Error(result.error || 'Signature could not be saved.');
+        if (result.login !== login) throw Error('Account changed. Reopen the letter.');
+        saved = result.signature;
+        feedback.textContent = saved ? 'Signature saved to your account.' : 'Saved signature removed.';
+      }, 'Saving signature…');
+    };
+    await run(async () => {
+      const result = await documents.request({action:'referralSignature'});
+      if (result.login !== login || !host.isConnected) return;
+      await showSignature(result.signature);
+      saved = result.signature;
+      loaded = true;
+      feedback.textContent = saved ? 'Using the signature saved to your account.' : '';
+    }, 'Loading saved signature…');
+  }
 }

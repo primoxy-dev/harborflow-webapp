@@ -88,6 +88,25 @@ test('signature validation only accepts raster image data, and supports removing
   assert.ok(validateSettingsPatch({signature:'https://external.test/signature.png'}));
   assert.ok(validateSettingsPatch({contact:'x'.repeat(201)}));
 });
+test('Referral Letter signatures are private to the account and independent of Crew preferences',async()=>{
+  const sql=fixtureDb();
+  const address='https://harborflow.test/api/documents?action=referralSignature';
+  const signature='data:image/png;base64,iVBORw0KGgo=';
+  const route=fixtureRoute(sql,'alice',{role:'editor',visitorView:true});
+  const save=(signature,base,login='alice')=>route(new Request(address,{
+    method:'POST',headers:{Origin:'https://harborflow.test','Content-Type':'application/json'},
+    body:JSON.stringify({login,signature,base})
+  }));
+  assert.equal((await save(signature,'','bob')).status,409);
+  assert.equal((await save(signature,'')).status,200);
+  assert.equal((await (await route(new Request(address))).json()).signature,signature);
+  assert.equal((await (await fixtureRoute(sql,'bob')(new Request(address))).json()).signature,'');
+  assert.equal((await fixtureRoute(sql,'alice',{role:'viewer',visitorView:true})(new Request(address))).status,403);
+  assert.deepEqual((await (await fixtureRoute(sql,'alice')(new Request(address.replace('referralSignature','preferences')))).json()).preferences,{});
+  assert.equal((await save('','')).status,409);
+  assert.equal((await save('',signature)).status,200);
+  assert.equal((await (await route(new Request(address))).json()).signature,'');
+});
 test('authorization is rechecked on each request and database failures stay private',async()=>{
   let grant={role:'editor',crewView:true};
   const sql=fixtureDb();const route=createDocumentsRoute({db:()=>sql,sessionLogin:()=> 'demo',permission:async()=>grant});

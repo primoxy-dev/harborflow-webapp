@@ -950,7 +950,7 @@
     const mount=state.tab==='voucher'?import('./cash-voucher.mjs').then(module=>module.mountCashVoucher):
       import('./referral-letter.mjs').then(module=>module.mountReferralLetter);
     mount.then(renderDocument=>{
-      if(host.isConnected)return renderDocument(host,{job:j,service:s,editable:mayEditService(s),api});
+      if(host.isConnected)return renderDocument(host,{job:j,service:s,editable:mayEditService(s),login:state.login,api});
     }).catch(error=>{if(host.isConnected)host.textContent=error.message;});
   }
   if (documentTab) window.HarborFlowDocuments?.mount(document.getElementById('hfoDocument'),{jobId:j.id,serviceId:s.id,type:state.tab,login:state.login});
