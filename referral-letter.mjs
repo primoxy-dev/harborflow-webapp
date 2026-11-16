@@ -1,5 +1,6 @@
 const pageWidth = 612, pageHeight = 792, scale = 3.5;
 const defaultHospital = 'โรงพยาบาลกรุงเทพระยอง';
+const contactFields = ['signatory', 'position', 'phone'];
 const thaiDateFormat = new Intl.DateTimeFormat('th-TH', {
   year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC'
 });
@@ -96,7 +97,7 @@ export async function mountReferralLetter(host, { job, service, editable, login 
   };
   host.innerHTML = `
     <div class="hfo-toolbar"><h3>Referral Letter</h3><button class="hfo-btn primary" type="button" data-referral-download>Download PDF</button></div>
-    <p class="hfo-muted">Entries are kept in this tab while it is open.</p>
+    <p class="hfo-muted">Letter and patient details are kept in this tab while it is open.</p>
     <p role="status" data-referral-status></p>
     <div class="hfo-referral-layout">
       <form class="hfo-referral-form" autocomplete="off"></form>
@@ -126,8 +127,10 @@ export async function mountReferralLetter(host, { job, service, editable, login 
       fieldset.insertAdjacentHTML('beforeend', `
         <label class="hfo-field">Signature<input type="file" accept="image/png,image/jpeg" title="PNG or JPEG" data-referral-signature disabled></label>
         <div class="hfo-referral-signature-actions">
-          <div class="hfo-actions"><button type="button" class="hfo-btn" data-save-referral-signature disabled>Save signature</button>
+          <div class="hfo-actions"><button type="button" class="hfo-btn" data-save-referral-contact disabled>Save contact details</button>
+          <button type="button" class="hfo-btn" data-save-referral-signature disabled>Save signature</button>
           <button type="button" class="hfo-btn" data-remove-referral-signature disabled>Remove signature</button></div>
+          <p class="hfo-muted" role="status" data-referral-contact-status></p>
           <p class="hfo-muted" role="status" data-referral-signature-status></p>
         </div>`);
     }
@@ -194,12 +197,66 @@ export async function mountReferralLetter(host, { job, service, editable, login 
     }
   };
   render(preview);
+  const documents = window.HarborFlowDocuments;
+  const contactInputs = contactFields.map(name => form.elements.namedItem(name));
+  const contactButton = form.querySelector('[data-save-referral-contact]');
+  const contactStatus = form.querySelector('[data-referral-contact-status]');
+  const currentContact = () => Object.fromEntries(contactFields.map(name => [name, fields[name]]));
+  let contactBase = null, savedContact = currentContact(), savingContact = false;
+  const contactChanged = () => contactFields.some(name => fields[name] !== savedContact[name]);
+  function updateContactButton() {
+    if (contactButton) contactButton.disabled = contactBase === null || savingContact || !contactChanged();
+  }
+  form.addEventListener('input', event => {
+    if (!contactFields.includes(event.target.name) || !contactButton || contactBase === null) return;
+    contactStatus.textContent = contactChanged() ? 'Unsaved contact details.' : '';
+    updateContactButton();
+  });
+  if (contactButton) contactButton.onclick = async () => {
+    const contact = currentContact();
+    savingContact = true;
+    updateContactButton();
+    contactStatus.textContent = 'Saving contact details…';
+    try {
+      const response = await fetch('/api/documents?action=referralContact', {
+        method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({login, contact, base:contactBase})
+      });
+      const result = await response.json();
+      if (!response.ok) throw Error(result.error || 'Contact details could not be saved.');
+      if (result.login !== login) throw Error('Account changed. Reopen the letter.');
+      contactBase = result.base;
+      savedContact = contact;
+      contactStatus.textContent = contactChanged() ? 'Unsaved contact details.' : 'Contact details saved to your account.';
+    } catch (error) {
+      contactStatus.textContent = error.message;
+    } finally {
+      savingContact = false;
+      updateContactButton();
+    }
+  };
+  for (const input of contactInputs) input.readOnly = true;
+  void documents.request({action:'referralContact'}).then(result => {
+    if (!host.isConnected) return;
+    if (result.login !== login) throw Error('Account changed. Reopen the letter.');
+    contactBase = result.base;
+    for (const input of contactInputs) {
+      input.value = result.contact?.[input.name] ?? '';
+      fields[input.name] = input.value;
+    }
+    savedContact = currentContact();
+    refreshPreview();
+  }).catch(error => {
+    (contactStatus || status).textContent = error.message;
+  }).finally(() => {
+    for (const input of contactInputs) input.readOnly = false;
+    updateContactButton();
+  });
   if (editable) {
     const file = form.querySelector('[data-referral-signature]');
     const save = form.querySelector('[data-save-referral-signature]');
     const remove = form.querySelector('[data-remove-referral-signature]');
     const feedback = form.querySelector('[data-referral-signature-status]');
-    const documents = window.HarborFlowDocuments;
     let loaded = false, busy = false, saved = '', pending = '';
     const controls = () => {
       file.disabled = busy;
