@@ -925,8 +925,7 @@
   const hasItems=['Provision & Store','Provisions','Ship Spare & Courier & Offland'].includes(s.data.type);
   const isVisitorService=Boolean(FLAT_VISITORS[s.data.type]);
   const isVisitor=['Visitor','SIRE Inspector','Surveyor','Medical Visit','Medical','Inspection/Technical Visit'].includes(s.data.type);
-  const tabs=isCrew?['crew','oktb','permit','loi','hotel','travel','checklist','history']:isVisitorService?['visitors','hotel','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:hasVoucher?['voucher','checklist','history']:['details','travel','checklist','history'];
-  if(isMedicalVisit)tabs[0]='referral';
+  const tabs=isCrew?['crew','oktb','permit','loi','hotel','travel','checklist','history']:isVisitorService?['visitors','hotel','travel','checklist','history']:isMedicalVisit?['referral','travel','checklist','history']:isVisitor?['details','visitors','travel','checklist','history']:hasVoucher?['voucher','checklist','history']:['details','travel','checklist','history'];
   if(s.data.type==='Medical')tabs.splice(1,0,'referral');
   if (!tabs.includes(state.tab)) state.tab=tabs[0];
   const label={details:'Service details',voucher:'Payment Voucher',referral:'Referral Letter',crew:'Crew members',oktb:'OKTB',permit:'Terminal Permit',loi:'LOI',visitors:FLAT_VISITORS[s.data.type]||'Visitors',hotel:'Hotel',travel:'Travel',checklist:'Checklist',history:'History'};
