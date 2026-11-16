@@ -499,6 +499,11 @@
 .hfo-file-tile > small { padding:6px; }
 .hfo-file-row-actions { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; padding:4px 0 0 6px; }
 .hfo-file-row-actions .hfo-btn { padding:5px 9px; color:#0b6f68; }
+.hfo-file-controls { display:flex; flex-wrap:wrap; align-items:center; gap:2px; }
+.hfo-file-controls .hfo-file-icon-action { display:grid; place-items:center; width:27px; min-height:28px; padding:0; color:#315778; border-color:transparent; background:transparent; }
+.hfo-file-controls [data-file-delete] { color:#a63649; }
+.hfo-file-controls .hfo-file-icon-action:hover { background:#eef5f7; }
+.hfo-file-controls [data-file-delete]:hover { background:#fce9eb; }
 .hfo-job-files [data-file-status] { margin:10px 16px 0; overflow-wrap:anywhere; }
 .hfo-job-files [data-file-status]:empty { display:none; }
 .hfo-job-file-drop { padding:12px; min-height:125px; margin:12px; border:1px solid transparent; border-radius:9px; background:#f4f8fa; }
@@ -543,8 +548,8 @@
 .hfo-file-details { width:100%; table-layout:fixed; border-collapse:collapse; color:var(--file-ink); font-size:.83rem; }
 .hfo-file-details :is(th,td) { padding:6px 4px; border-bottom:1px solid var(--file-border); text-align:left; overflow-wrap:anywhere; }
 .hfo-file-details th { background:#e7f0f3; }
-.hfo-file-details th:first-child { width:52%; }
-.hfo-file-details th:last-child { width:60px; }
+.hfo-file-details th:first-child { width:46%; }
+.hfo-file-details th:last-child { width:128px; }
 .hfo-file-details tr[data-file-drag] { cursor:grab; }
 .hfo-file-details tbody tr:hover { background:#fff; }
 @media (max-width:600px) {
@@ -560,8 +565,11 @@
   .hfo-file-details .hfo-file-type { display:none; }
   .hfo-file-details th:first-child { width:auto; }
   .hfo-file-details th:nth-child(3) { width:51px; }
-  .hfo-file-details th:last-child { width:48px; }
+  .hfo-file-details th:last-child { width:104px; }
   .hfo-file-details .hfo-btn { padding-inline:6px; }
+  .hfo-file-row-actions { padding-left:0; }
+  .hfo-file-controls [data-file-view] { padding-inline:6px; }
+  .hfo-file-controls .hfo-file-icon-action { width:28px; min-height:44px; }
   .hfo-file-tile { padding:6px; }
 }
 .hfo-job-file-view { box-sizing:border-box; width:min(880px,calc(100% - 24px)); max-height:90vh; border:1px solid #dbe3ed; border-radius:12px; padding:16px; color:#10233d; }
