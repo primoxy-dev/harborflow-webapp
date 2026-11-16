@@ -117,57 +117,84 @@
 @media(max-width:700px){.hfd-permit-row-pickers{grid-template-columns:1fr}.hfd-permit-editor-table{padding:8px}.hfd-permit-editor input[type=file]{max-width:100%}}
 
 
-.hfd-pdf-hint { flex-basis: 100%; margin: 0; color: #52667a; font-size: .82rem; }
+.hfd-document-toolbar h3,.hfd-pdf-preview-toolbar h4 { margin: 0; }
+.hfd-document-toolbar .hfd-pdf-hint { flex-basis: 100%; margin: 0; color: var(--muted); font-size: .82rem; }
 .hfd-pdf-hint:empty { display: none; }
 
-@media (max-width: 760px) {
-  .hfo-overlay #hfoDocument:has(.hfd-pdf-actions) { margin-bottom: calc(132px + env(safe-area-inset-bottom)); }
-  .hfo-overlay #hfoDocument .hfd-pdf-actions {
-    position: fixed;
-    inset-inline: 12px;
-    bottom: 0;
-    z-index: 1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 9px 10px calc(9px + env(safe-area-inset-bottom));
-    background: #fff;
-    border: 1px solid #dbe3ed;
-    border-radius: 9px;
-    box-shadow: 0 -3px 12px #10233d12;
-  }
-  .hfo-overlay #hfoDocument .hfd-pdf-actions button { flex: 1 1 0; min-height: 44px; }
-  .hfo-overlay #hfoDocument .hfd-pdf-actions .hfd-pdf-download:not(:disabled) {
-    color: #fff;
-    background: #107a72;
-    border-color: #107a72;
-  }
+.hfd-document-layout {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  align-items: start;
+  gap: 18px;
+  margin-top: 14px;
+}
+.hfd-document-form { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.hfd-document-form > :is(p,fieldset,details,.hfd-oktb-editor) { margin: 0; }
+.hfd-document-form :is(.hfd-save-status,#hfdDocSaveStatus,#hfdSaveStatus,#hfdSelectionCount) {
+  margin: 0;
+  color: var(--muted);
+  font-size: .82rem;
+}
+.hfd-document-form .hfd-oktb-editor {
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  background: var(--card);
+}
+.hfd-document-form .hfd-oktb-editor label { align-content: start; color: #475569; }
+.hfd-document-form .hfd-oktb-editor :is(input,select) {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  font: inherit;
+  color: var(--ink);
+}
+.hfd-document-form .hfd-oktb-editor label:has(input[type=file]) { grid-column: 1 / -1; }
+.hfd-document-form .hfd-oktb-settings > .hfd-oktb-editor { border-radius: 0 0 8px 8px; }
+.hfd-section-content,.hfd-document-form [data-loi-personal] > p { padding: 0 12px; }
+
+.hfd-document-preview {
+  position: sticky;
+  top: 72px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #dce7eb;
+  border-radius: 10px;
+  background: #eef3f5;
+}
+.hfd-pdf-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  max-width: 800px;
+  margin: 0 auto 10px;
+}
+.hfd-pdf-preview-toolbar button[hidden] { display: none; }
+.hfd-document-preview .hfd-oktb-sheet-wrap { margin-bottom: 0; }
+.hfd-pdf-stage {
+  width: var(--hfd-preview-width, 100%);
+  height: var(--hfd-preview-height, auto);
+  overflow: hidden;
+}
+.hfd-pdf-stage > .hfd-oktb-page {
+  width: 800px;
+  box-sizing: border-box;
+  transform: scale(var(--hfd-preview-scale, 1));
+  transform-origin: top left;
 }
 
-.hfd-pdf-preview-toolbar { display: none; }
-@media (max-width: 760px) {
-  .hfd-pdf-preview-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin: 0 auto 8px;
-    max-width: 800px;
-    font-weight: 600;
-  }
-  .hfd-pdf-preview-toolbar button { min-height: 44px; }
-  .hfd-pdf-stage {
-    width: var(--hfd-preview-width, 100%);
-    height: var(--hfd-preview-height, auto);
-    overflow: hidden;
-  }
-  .hfd-pdf-stage > .hfd-oktb-page {
-    width: 800px;
-    box-sizing: border-box;
-    transform: scale(var(--hfd-preview-scale, 1));
-    transform-origin: top left;
-  }
-}
-
-.hfd-permit-mail { padding: 12px; }
+.hfd-permit-mail > [role="status"] { margin: 0; }
 .hfd-permit-mail > [role="status"]:empty { display: none; }
+@media (max-width: 900px) {
+  .hfd-document-layout { grid-template-columns: minmax(0,1fr); }
+  .hfd-document-preview { position: static; }
+}
+@media (max-width: 600px) {
+  .hfd-document-toolbar { align-items: flex-start; }
+  .hfd-document-toolbar .hfd-pdf-actions { width: 100%; gap: 8px; }
+  .hfd-pdf-actions > button { flex: 1; }
+  .hfd-permit-mail,.hfd-permit-mail > button { width: 100%; }
+  .hfd-document-toolbar .hfo-btn,.hfd-pdf-preview-toolbar .hfo-btn { min-height: 44px; }
+  .hfd-document-form .hfd-oktb-editor { grid-template-columns: minmax(0,1fr); }
+  .hfd-document-preview { padding: 8px; }
+}

@@ -114,6 +114,24 @@
       <h3>ต้องตรวจสอบก่อนออกเอกสาร</h3><ul>${preview.requirements.map(item => `<li>${escape(item)}</li>`).join('')}</ul>
       <p class="hfd-warning">${escape(preview.notice)}</p><button type="button" class="secondary" disabled>ดาวน์โหลด · รอขั้นอนุมัติจากเจ้าของ</button></div>`;
   }
+  function documentWorkspace(type, form, paper, hint = '') {
+    const disabled = hint ? ' disabled' : '';
+    return `<div class="hfo-toolbar hfd-document-toolbar">
+      <h3>${labels[type]}</h3>
+      <div class="hfo-actions hfd-pdf-actions">
+        <button type="button" class="hfo-btn primary" data-download-${type} aria-describedby="hfdPdfHint"${disabled}>Download PDF</button>
+        <button type="button" class="hfo-btn" data-save-${type} aria-describedby="hfdPdfHint"${disabled}>Save as</button>
+      </div>
+      <p id="hfdPdfHint" class="hfd-pdf-hint" data-pdf-hint role="status">${hint}</p>
+    </div>
+    <div class="hfd-document-layout">
+      <div class="hfd-document-form">${form}</div>
+      <section class="hfd-document-preview" aria-labelledby="hfdPdfHeading">
+        <div class="hfd-pdf-preview-toolbar"><h4 id="hfdPdfHeading">PDF Live</h4><button type="button" class="hfo-btn" data-pdf-zoom>Zoom in</button></div>
+        <div class="hfd-oktb-sheet-wrap">${paper}</div>
+      </section>
+    </div>`;
+  }
   function oktbPreview(preview, ctx, profile, airlineNames) {
     const issueDate = ctx.issueDate ?? localDate();
     const arrivalDate = ctx.arrivalDate ?? dateOnly(preview.job.eta);
@@ -126,7 +144,7 @@
     const flightLines = flightRows(selectedPeople);
     const saved = profile.values;
     const disabled = profile.canSave ? '' : 'disabled';
-    return `${personSelection(preview, ctx)}<details class="hfd-oktb-settings"><summary>รายละเอียดเอกสาร OKTB</summary><div class="hfd-oktb-editor" aria-label="OKTB draft details">
+    const form = `${personSelection(preview, ctx)}<details class="hfd-oktb-settings"><summary>Document details</summary><div class="hfd-oktb-editor" aria-label="OKTB draft details">
       <label>To · ชื่อสายการบิน<input id="hfdAirline" type="text" readonly placeholder="Select crew with flight details" value="${escape(ctx.airline || '')}"></label>
       <label>Date · วันที่ออกเอกสาร<input id="hfdIssueDate" type="date" value="${issueDate}"></label>
       <label>วันเรือเข้า · on<input id="hfdArrivalInput" type="date" value="${escape(arrivalDate)}"></label>
@@ -135,7 +153,8 @@
       <label>ชื่อผู้ลงนาม<input id="hfdSigner" type="text" autocomplete="off" placeholder="Authorized signatory" maxlength="200" value="${escape(saved.signer || '')}" ${disabled}></label>
       <label>ภาพลายเซ็นสำหรับตรวจร่างเท่านั้น<input id="hfdSignature" type="file" accept="image/png,image/jpeg" ${disabled}>${profile.canSave?'<button type="button" class="hfo-btn" data-clear-signature>ลบลายเซ็นที่จำไว้</button>':''}</label>
       <p class="hfd-oktb-editor-note">Vessel และ Port มาจาก Job · Personal Details และ Flight Details มาจากลูกเรือที่เลือกใน Crew members · ข้อมูลผู้ติดต่อและลายเซ็นจำตามบัญชี</p><p id="hfdSaveStatus" role="status" class="hfd-oktb-editor-note">ใช้ข้อมูลผู้ติดต่อและลายเซ็นที่บันทึกไว้ล่าสุด</p></div></details>
-      <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page" aria-label="OKTB sample letter">
+      <p class="hfd-warning">${escape(preview.notice)} ข้อมูลผู้ติดต่อและลายเซ็นบันทึกส่วนตัวตามบัญชีผู้ใช้</p>`;
+    const paper = `<article class="hfd-oktb-page" aria-label="OKTB sample letter">
         <header class="hfd-oktb-letterhead"><span class="hfd-oktb-logo" role="img" aria-label="GAC logo"></span><div><h2>BANGKOK, THAILAND</h2><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p class="hfd-oktb-address">26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400&nbsp; Fax +66-2-650 7401&nbsp; E-mail shipping.thailand@gac.com</p></div></header>
         <div class="hfd-oktb-field"><span>Date</span><span>:</span><span id="hfdIssuedDate">${displayDate(issueDate)}</span></div>
         <div class="hfd-oktb-field"><span>To</span><span>:</span><span id="hfdAirlineOut">${escape(ctx.airline || '[airline not set]')}</span></div>
@@ -150,13 +169,8 @@
         <div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" ${saved.signature?`src="${escape(saved.signature)}"`:'hidden'}><span id="hfdSignaturePlaceholder" ${saved.signature?'hidden':''}>Signature pending owner approval</span></div>
         <p class="hfd-oktb-signoff"><span id="hfdSignerOut">${escape(saved.signer || '[signatory not set]')}</span><br>Gulf Agency Company (Thailand) Ltd.<br>As Agents Only</p>
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
-      </article></div>
-      <p class="hfd-warning">${escape(preview.notice)} ข้อมูลผู้ติดต่อและลายเซ็นบันทึกส่วนตัวตามบัญชีผู้ใช้</p>
-      <div class="hfo-row hfd-pdf-actions">
-        <p class="hfd-pdf-hint" data-pdf-hint role="status">${selectedPeople.length?'':'Select at least one crew member to enable PDF actions.'}</p>
-        <button type="button" class="secondary hfd-pdf-download" data-download-oktb ${selectedPeople.length?'':'disabled'}>Download PDF</button>
-        <button type="button" class="secondary" data-save-oktb ${selectedPeople.length?'':'disabled'}>Save as</button>
-      </div>`;
+      </article>`;
+    return documentWorkspace('oktb', form, paper, selectedPeople.length ? '' : 'Select at least one crew member to enable PDF actions.');
   }
   function clear() {
     for(const saver of activeSavers)saver.dispose();activeSavers.clear();
@@ -243,8 +257,8 @@
     ctx.permitDraft=permitModel.revalidateDraft(ctx.permitDraft||permitModel.newPermitDraft(),preview.people);
     permitModel.normalizePermitHeaders(ctx.permitDraft);
     const saved=profile.values,disabled=profile.canSave?'':'disabled';
-    return `<p class="hfd-notice">ร่างทดลอง · ใช้รายชื่อสมมติที่ได้รับสิทธิ์ดู · การแก้ตารางไม่เปลี่ยน Crew members หรือ Job</p>
-      <details class="hfd-oktb-settings hfd-permit-settings"><summary>รายละเอียดเอกสาร Terminal Permit</summary><div class="hfd-oktb-editor hfd-permit-editor">
+    const form = `<p class="hfd-notice">ร่างทดลอง · ใช้รายชื่อสมมติที่ได้รับสิทธิ์ดู · การแก้ตารางไม่เปลี่ยน Crew members หรือ Job</p>
+      <details class="hfd-oktb-settings hfd-permit-settings"><summary>Document details</summary><div class="hfd-oktb-editor hfd-permit-editor">
         <label class="hfd-permit-subject">Subject<input id="hfdPermitSubject" maxlength="500" value="${escape(ctx.permitDraft.subject)}"></label>
         <label>Vessel · มาจาก Job<input readonly value="${escape(preview.job.vessel)}"></label>
         <label>at · Port / Terminal จาก Job<input readonly value="${escape(permitModel.permitLocation(preview.job))}"></label>
@@ -255,8 +269,9 @@
         <label>ชื่อผู้ลงนาม<input id="hfdSigner" maxlength="200" value="${escape(saved.signer||'')}" ${disabled}></label>
         <label>ภาพลายเซ็นสำหรับตรวจร่าง<input id="hfdSignature" type="file" accept="image/png,image/jpeg" ${disabled}>${profile.canSave?'<button type="button" class="hfo-btn" data-clear-signature>ลบลายเซ็นที่จำไว้</button>':''}</label>
       </div></details><p id="hfdSaveStatus" role="status">ข้อมูลผู้ติดต่อใช้ค่าที่จำไว้ตามบัญชี</p>
-      <details class="hfd-oktb-settings"><summary>เลือกคน / แก้ไขหัวข้อและรายละเอียดตาราง</summary><div id="hfdPermitEditors">${permitEditors(preview,ctx)}</div></details>
-      <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page hfd-permit-page" aria-label="Terminal Permit draft">
+      <details class="hfd-oktb-settings"><summary>People and tables</summary><div id="hfdPermitEditors" class="hfd-section-content">${permitEditors(preview,ctx)}</div></details>
+      <p class="hfd-warning">ร่างยังไม่อนุมัติ ห้ามใช้ยื่นจริง · หัวข้อและแถวที่แก้ใช้ในร่างนี้ ไม่บันทึกข้อมูลบุคคลกลับ Job</p>`;
+    const paper = `<article class="hfd-oktb-page hfd-permit-page" aria-label="Terminal Permit draft">
         <div class="hfd-loi-letterhead"><div class="hfd-oktb-logo" role="img" aria-label="GAC"></div><div><b>บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด</b><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p>26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400 &nbsp; Fax +66-2-650 7401 &nbsp; E-mail shipping.thailand@gac.com</p></div></div>
         <p class="hfd-permit-issued"><span id="hfdIssuedDate">${displayDate(ctx.issueDate)}</span></p>
         <div data-permit-letter-body>
@@ -268,12 +283,8 @@
         </div>
         <div class="hfd-permit-signoff"><p>Thank you &amp; Best regards,</p><div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" ${saved.signature?`src="${escape(saved.signature)}"`:'hidden'}><span id="hfdSignaturePlaceholder" ${saved.signature?'hidden':''}>Signature pending owner approval</span></div><p>(<span id="hfdSignerOut">${escape(saved.signer||'[signatory not set]')}</span>)<br>Operations Coordinator, Shipping Services<br>Mobile: <span id="hfdPhoneOut">${escape(saved.phone||'[phone not set]')}</span><br>As Agents Only</p></div>
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
-      </article></div><p class="hfd-warning">ร่างยังไม่อนุมัติ ห้ามใช้ยื่นจริง · หัวข้อและแถวที่แก้ใช้ในร่างนี้ ไม่บันทึกข้อมูลบุคคลกลับ Job</p>
-      <div class="hfo-row hfd-pdf-actions">
-        <p class="hfd-pdf-hint" data-pdf-hint role="status"></p>
-        <button type="button" class="secondary hfd-pdf-download" data-download-permit>Download PDF</button>
-        <button type="button" class="secondary" data-save-permit>Save as</button>
-      </div>`;
+      </article>`;
+    return documentWorkspace('permit', form, paper);
   }
   function loiPerson(preview,ctx) {
     const person=preview.people.find(person=>person.id===ctx.loiPersonId);
@@ -288,12 +299,12 @@
     // Reuse only the logo markup; the LOI letterhead follows the uploaded template.
     const logo='<div class="hfd-oktb-logo" role="img" aria-label="GAC"></div>';
     const value=key=>escape(person?.[key]||'[not set]');
-    return `<p class="hfd-notice">${escape(preview.notice)}</p>
+    const form = `<p class="hfd-notice">${escape(preview.notice)}</p>
       <div class="hfd-oktb-editor hfd-loi-editor">
         <label>To · สถานทูตไทย<select id="hfdEmbassy"><option value="">เลือกสถานทูต</option>${embassies.map(item=>`<option value="${escape(item.id)}" ${ctx.embassy===item.id?'selected':''}>${escape(item.name)}${item.status==='incomplete'?' · ข้อมูลติดต่อยังไม่ครบ':''}</option>`).join('')}<option value="other" ${ctx.embassy==='other'?'selected':''}>สถานทูตอื่น · ระบุชื่อ</option></select></label>
         <label id="hfdCustomEmbassyLabel" ${ctx.embassy==='other'?'':'hidden'}>ชื่อสถานทูตและเมือง/ประเทศ<input id="hfdCustomEmbassy" maxlength="200" value="${escape(ctx.customEmbassy||'')}"></label>
         <label>ลูกเรือสำหรับ LOI · หนึ่งคนต่อฉบับ<select id="hfdLoiPerson"><option value="">เลือกลูกเรือ</option>${preview.people.map(p=>`<option value="${escape(p.id)}" ${p.id===ctx.loiPersonId?'selected':''}>${escape(p.name)} · ${escape(p.category)}</option>`).join('')}</select></label>
-      </div><details class="hfd-oktb-settings hfd-loi-settings"><summary>รายละเอียดเอกสาร LOI</summary><div class="hfd-oktb-editor hfd-loi-editor">
+      </div><details class="hfd-oktb-settings hfd-loi-settings"><summary>Document details</summary><div class="hfd-oktb-editor hfd-loi-editor">
         ${missionFields.map(([key,label])=>`<label>${label}<input data-mission-field="${key}" maxlength="1000" value="${escape(['general','visa'].includes(key)?ctx.embassySnapshot?.emails?.[key]?.join(' / ')||'':ctx.embassySnapshot?.[key]||'')}"></label>`).join('')}
         <label>Date · วันที่ออกเอกสาร<input id="hfdIssueDate" type="date" value="${ctx.issueDate}"></label>
         <label>Contact person<input id="hfdContact" maxlength="200" value="${escape(saved.contact||'')}" ${disabled}></label>
@@ -309,7 +320,8 @@
         <div class="hfd-oktb-editor">${loiFields.map(([key,label])=>`<label>${label}<input data-loi-field="${key}" maxlength="200" value="${escape(person?.[key]||'')}" ${person?'':'disabled'}></label>`).join('')}</div>
       </details>
       <p id="hfdSaveStatus" class="hfd-save-status" role="status">${profile.canSave?'ข้อมูลผู้ติดต่อและลายเซ็นจะจำไว้ในบัญชีนี้':'ดูร่างเท่านั้น · ไม่มีสิทธิ์แก้ค่าเริ่มต้น'}</p>
-      <div class="hfd-oktb-sheet-wrap"><article class="hfd-oktb-page hfd-loi-page">
+      <p class="hfd-notice">ข้อความรับผิดชอบตามต้นแบบ LOI ต้องให้เจ้าของตรวจและอนุมัติ · ห้ามใช้ร่างยื่นจริง</p>`;
+    const paper = `<article class="hfd-oktb-page hfd-loi-page" aria-label="Invitation letter">
         <div class="hfd-loi-letterhead">${logo}<div><b>บริษัท กัลฟ เอเจนซี่ คัมปะนี (ประเทศไทย) จำกัด</b><p>GULF AGENCY COMPANY (THAILAND) LTD.</p><p>26/30-31 9th Floor, Orakarn Building, Soi Chidlom, Ploenchit Road, Lumpinee, Pathumwan, Bangkok 10330</p><p>Tel +66-2-650 7400 &nbsp; Fax +66-2-650 7401 &nbsp; E-mail &nbsp; shipping.thailand@gac.com</p></div></div>
         <h2 class="hfd-loi-heading">INVITATION LETTER</h2>
         <p>Date : <span id="hfdIssuedDate">${displayDate(ctx.issueDate)}</span><br>To : <span id="hfdEmbassyOut">${missionLines(ctx).map(escape).join('<br>')||'[select embassy]'}</span></p>
@@ -322,13 +334,8 @@
         <div class="hfd-loi-signoff"><p>Yours Faithfully,</p><div class="hfd-oktb-signature"><img id="hfdSignatureOut" alt="Draft signature preview" ${saved.signature?`src="${escape(saved.signature)}"`:'hidden'}><span id="hfdSignaturePlaceholder" ${saved.signature?'hidden':''}>Signature pending owner approval</span></div>
         <p>(<span id="hfdSignerOut">${escape(saved.signer||'[signatory not set]')}</span>)</p><p><span id="hfdLoiTitleOut">${escape(ctx.loiTitle||'Operations Coordinator, Shipping Services')}</span><br>Mobile: <span id="hfdPhoneOut">${escape(saved.phone||'[phone not set]')}</span><br>As Agents Only, E.&amp;.O.E.</p></div>
         <div class="hfd-oktb-watermark">SAMPLE · NOT APPROVED</div>
-      </article></div>
-      <p class="hfd-notice">ข้อความรับผิดชอบตามต้นแบบ LOI ต้องให้เจ้าของตรวจและอนุมัติ · ห้ามใช้ร่างยื่นจริง</p>
-      <div class="hfo-row hfd-pdf-actions">
-        <p class="hfd-pdf-hint" data-pdf-hint role="status">${loiPdfHint(person,ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy))}</p>
-        <button type="button" class="secondary hfd-pdf-download" data-download-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>Download PDF</button>
-        <button type="button" class="secondary" data-save-loi ${person&&ctx.embassy&&(ctx.embassy!=='other'||ctx.customEmbassy)?'':'disabled'}>Save as</button>
-      </div>`;
+      </article>`;
+    return documentWorkspace('loi', form, paper, loiPdfHint(person, ctx.embassy && (ctx.embassy !== 'other' || ctx.customEmbassy)));
   }
   function loiPdfHint(person, embassy) {
     if (!person && !embassy) return 'Select a crew member and an embassy to enable PDF actions.';
@@ -358,11 +365,7 @@
     paper.before(stage);
     stage.append(paper);
 
-    const toolbar=document.createElement('div');
-    toolbar.className='hfd-pdf-preview-toolbar';
-    toolbar.innerHTML='<span>PDF Live</span><button type="button" class="secondary" data-pdf-zoom>Zoom in</button>';
-    viewport.before(toolbar);
-    const button=toolbar.querySelector('button');
+    const button=host.querySelector('[data-pdf-zoom]');
     let zoomed=false;
     function resize() {
       const width=viewport.clientWidth;
@@ -372,6 +375,7 @@
       stage.style.setProperty('--hfd-preview-scale',scale);
       stage.style.setProperty('--hfd-preview-width',Math.floor(paperWidth*scale)+'px');
       stage.style.setProperty('--hfd-preview-height',Math.ceil(paper.offsetHeight*scale)+'px');
+      button.hidden=width>=paperWidth;
     }
     button.addEventListener('click',()=>{
       zoomed=!zoomed;
@@ -647,8 +651,7 @@
           }
         });await saver.load();host._hfdSaver=saver;activeSavers.add(saver);
       }
-      host.innerHTML = '<div class="hfd-header"><h3>' + escape(labels[options.type]) + '</h3><span class="hfd-badge">Document</span></div>' +
-        (options.type === 'oktb' ? oktbPreview(data.preview, ctx, profile, airlineNames) : options.type === 'loi' ? loiPreview(data.preview,ctx,profile) : options.type==='permit'?permitPreview(data.preview,ctx,profile):genericPreview(data.preview));
+      host.innerHTML = options.type === 'oktb' ? oktbPreview(data.preview, ctx, profile, airlineNames) : options.type === 'loi' ? loiPreview(data.preview,ctx,profile) : options.type==='permit'?permitPreview(data.preview,ctx,profile):genericPreview(data.preview);
       bind(host, data.preview, ctx, profile, options, airlineNames);
       if(!options.localTransport){
         host.querySelectorAll('.hfd-oktb-watermark').forEach(el=>el.remove());
@@ -657,7 +660,7 @@
       }
       setDocumentEditability(host);
       if(!options.localTransport){
-        const status=document.createElement('p');status.id='hfdDocSaveStatus';status.role='status';status.textContent='โหลดข้อมูลส่วนกลางแล้ว';host.prepend(status);
+        const status=document.createElement('p');status.id='hfdDocSaveStatus';status.role='status';status.textContent='โหลดข้อมูลส่วนกลางแล้ว';(host.querySelector('.hfd-document-form') || host).prepend(status);
         if(!Object.values(data.canEdit).some(Boolean))host.querySelectorAll('input:not([readonly]),select,textarea,button:not([data-pdf-zoom],[data-download-oktb],[data-save-oktb],[data-download-permit],[data-save-permit],[data-download-loi],[data-save-loi])').forEach(el=>el.disabled=true);
         host._hfdSourceFingerprint=data.sourceFingerprint;
         host._hfdScope=data.preview.scope;

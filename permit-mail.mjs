@@ -37,9 +37,9 @@ export function outlookComposeUrl({to,cc,subject,body}){
 }
 export async function mountPermitMail(host,{preview,ctx,login,get}){
  const root=document.createElement('section');
- root.className='hfd-oktb-settings hfd-permit-mail';
- root.innerHTML='<button type="button" class="primary" data-open-permit-mail>Compose Email</button><p role="status" data-permit-mail-status></p>';
- host.querySelector('[data-download-permit]')?.closest('.hfd-pdf-actions')?.before(root);
+ root.className='hfd-permit-mail';
+ root.innerHTML='<button type="button" class="hfo-btn" data-open-permit-mail>Compose Email</button><p role="status" data-permit-mail-status></p>';
+ host.querySelector('.hfd-pdf-actions').prepend(root);
  const dialog=createMailComposer({
   templateLabel:'Terminal Permit email template', availableFields:permitFields,
   templateHelp:'Use placeholders in the subject or body to fill Job details.',
