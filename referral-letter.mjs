@@ -123,13 +123,13 @@ export async function mountReferralLetter(host, { job, service, editable, login 
       fieldset.append(wrapper);
     }
     if (legend === 'Contact and signatory' && editable) {
-      const signatureControls = document.createElement('div');
-      signatureControls.className = 'hfo-referral-signature';
-      signatureControls.innerHTML = `<label class="hfo-field">Signature (PNG or JPEG)<input type="file" accept="image/png,image/jpeg" data-referral-signature disabled></label>
-        <div class="hfo-actions"><button type="button" class="hfo-btn" data-save-referral-signature disabled>Save signature</button>
-        <button type="button" class="hfo-btn" data-remove-referral-signature disabled>Remove signature</button></div>
-        <p class="hfo-muted" role="status" data-referral-signature-status></p>`;
-      fieldset.append(signatureControls);
+      fieldset.insertAdjacentHTML('beforeend', `
+        <label class="hfo-field">Signature<input type="file" accept="image/png,image/jpeg" title="PNG or JPEG" data-referral-signature disabled></label>
+        <div class="hfo-referral-signature-actions">
+          <div class="hfo-actions"><button type="button" class="hfo-btn" data-save-referral-signature disabled>Save signature</button>
+          <button type="button" class="hfo-btn" data-remove-referral-signature disabled>Remove signature</button></div>
+          <p class="hfo-muted" role="status" data-referral-signature-status></p>
+        </div>`);
     }
     form.append(fieldset);
   }
