@@ -47,3 +47,44 @@ test('folder creation and upload use an atomic Git reference update',async()=>{
   assert.equal((await request({action:'uploadJobFile',path:'Invoices',name:'Order.txt',content:'YWJj'})).status,404);
   assert.equal((await request({action:'uploadJobFile',name:'Order.txt',content:'YWJj'})).status,201);
 });
+
+test('rename moves the same blob in one commit and refuses to overwrite an existing name',async()=>{
+  const folder=root+'/Files/Invoices';
+  const source=folder+'/Order.txt';
+  const tree=[...snapshot.tree,{path:source,mode:'100644',type:'blob',sha},
+    {path:folder+'/Other.txt',mode:'100644',type:'blob',sha:'b'.repeat(40)}];
+  const gitWithFiles=(method,path,data)=>method==='GET'&&path.startsWith('trees/')
+    ?Promise.resolve({tree}):git(method,path,data);
+  const input={action:'renameJobFile',path:'Invoices/Order.txt',expectedSha:sha};
+  assert.equal((await request({...input,name:'other.txt'},{git:gitWithFiles})).status,409);
+  assert.equal((await request({...input,name:'../Order.txt'},{git:gitWithFiles})).status,400);
+  calls.length=0;
+  assert.equal((await request({...input,name:'Updated order.txt'},{git:gitWithFiles})).status,200);
+  assert.deepEqual(calls.find(([,path])=>path==='trees')[2].tree,[
+    {path:source,mode:'100644',type:'blob',sha:null},
+    {path:folder+'/Updated order.txt',mode:'100644',type:'blob',sha}
+  ]);
+  assert.equal(calls.some(([method,path])=>method==='POST'&&path==='blobs'),false);
+  assert.deepEqual(calls.at(-1),['PATCH','refs/heads/main',{sha:'created',force:false}]);
+});
+
+test('delete rejects a changed file on retry and preserves a folder after deleting its last file',async()=>{
+  const folder=root+'/Files/Invoices', source=folder+'/Order.txt';
+  const input={action:'deleteJobFile',path:'Invoices/Order.txt',expectedSha:sha};
+  let refAttempts=0;
+  const gitWithFiles=async(method,path,data)=>{
+    if(method==='GET'&&path.startsWith('trees/'))return {tree:[
+      ...snapshot.tree,{path:source,mode:'100644',type:'blob',sha:refAttempts?'b'.repeat(40):sha}
+    ]};
+    if(method==='PATCH'){refAttempts++;throw Object.assign(Error('Head moved'),{status:422});}
+    return git(method,path,data);
+  };
+  calls.length=0;
+  assert.equal((await request(input,{git:gitWithFiles,login:'other'})).status,403);
+  assert.equal((await request(input,{git:gitWithFiles})).status,409);
+  assert.equal(refAttempts,1);
+  assert.deepEqual(calls.find(([,path])=>path==='trees')[2].tree.map(entry=>[entry.path,entry.sha]),[
+    [source,null],[folder+'/.harborflow-folder',undefined]
+  ]);
+  assert.equal(calls.filter(([method,path])=>method==='POST'&&path==='trees').length,1);
+});

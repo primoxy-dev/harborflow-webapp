@@ -202,7 +202,7 @@ return async function route(request) {
   let input;
   try { input = await parse(request); } catch { return error('Invalid or oversized JSON'); }
   const action = input.action;
-  if (['createJobFileFolder','uploadJobFile'].includes(action))return jobFiles(input);
+  if (['createJobFileFolder','uploadJobFile','renameJobFile','deleteJobFile'].includes(action))return jobFiles(input);
   if (['saveProvisionItem','removeProvisionItem','previewProvisionEmailFile'].includes(action))return provision(input);
   if(['saveHotel','saveHotelEmailDraft','saveHotelEmailTemplate','removeHotelEmailTemplate'].includes(action))return hotelRoute({sql,grant,login,input});
 

@@ -1,6 +1,11 @@
 const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const join=(path,name)=>path?path+'/'+name:name;
 const maximumBytes=3000000;
+const fileActionIcons={
+  Rename:'<path d="m13 5 4 4M4 20l4.5-1 11-11a2.8 2.8 0 0 0-4-4l-11 11L4 20Z"/>',
+  Delete:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/>'
+};
+const fileIconButton=(label,index,name)=>`<button class="hfo-btn hfo-file-icon-action" type="button" data-file-${label.toLowerCase()}="${index}" aria-label="${label} ${name}" title="${label}"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${fileActionIcons[label]}</svg></button>`;
 const previewTypes=new Map(Object.entries({
   pdf:'application/pdf', png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif',
   webp:'image/webp', bmp:'image/bmp', avif:'image/avif',
@@ -77,7 +82,7 @@ export async function mountJobFiles(host,{jobId,api}) {
   const fileInput=host.querySelector('[data-file-input]');
   const report=(message,error=false)=>{status.textContent=message;status.classList.toggle('hfo-alert',error);};
   function controls() {
-    host.querySelectorAll('[data-new-folder],[data-upload-files],[data-copy-onedrive],[data-file-open],[data-file-view],[data-file-level],[data-refresh-files]').forEach(button=>{
+    host.querySelectorAll('[data-new-folder],[data-upload-files],[data-copy-onedrive],[data-file-open],[data-file-view],[data-file-rename],[data-file-delete],[data-file-level],[data-refresh-files]').forEach(button=>{
       button.disabled=busy||(!loaded&&!button.hasAttribute('data-refresh-files'));
     });
   }
@@ -107,14 +112,17 @@ export async function mountJobFiles(host,{jobId,api}) {
         : `<a class="hfo-file-name" href="${escape(download(join(path,entry.name)))}" download="${name}" draggable="false" title="Download ${name}"><span class="hfo-file-icon hfo-file-icon-document" data-file-extension="${extension}" aria-hidden="true">${extension}</span><span>${name}</span></a>`;
       const type=folder?'Folder':extension==='FILE'?'File':extension+' file';
       const size=folder?'—':fileSize(entry.size||0);
-      const preview=folder?'':`<button type="button" class="hfo-btn" data-file-view="${index}" aria-label="View ${name}">View</button>`;
+      const actions=folder?'':`<div class="hfo-file-controls">
+        <button type="button" class="hfo-btn" data-file-view="${index}" aria-label="View ${name}">View</button>
+        ${entry.sha?fileIconButton('Rename',index,name)+fileIconButton('Delete',index,name):''}
+      </div>`;
       const drag=folder?'':` draggable="true" data-file-drag="${index}"`;
-      if(view==='details')return `<tr${drag}><td>${title}</td><td class="hfo-file-type">${type}</td><td>${size}</td><td>${preview}</td></tr>`;
+      if(view==='details')return `<tr${drag}><td>${title}</td><td class="hfo-file-type">${type}</td><td>${size}</td><td>${actions}</td></tr>`;
       const metadata=folder?type:view==='content'?type+' · '+size:size;
-      return `<li class="hfo-file-tile"${drag}>${title}<div class="hfo-file-row-actions"><small>${metadata}</small>${preview}</div></li>`;
+      return `<li class="hfo-file-tile"${drag}>${title}<div class="hfo-file-row-actions"><small>${metadata}</small>${actions}</div></li>`;
     }).join('');
     rows.innerHTML=!items?`<p class="hfo-file-empty hfo-muted">${query?'No files or folders match your search.':'This folder is empty.'}</p>`
-      :view==='details'?`<table class="hfo-file-details" aria-label="Folder contents"><thead><tr><th scope="col">Name</th><th scope="col" class="hfo-file-type">Type</th><th scope="col">Size</th><th scope="col">Preview</th></tr></thead><tbody>${items}</tbody></table>`
+      :view==='details'?`<table class="hfo-file-details" aria-label="Folder contents"><thead><tr><th scope="col">Name</th><th scope="col" class="hfo-file-type">Type</th><th scope="col">Size</th><th scope="col">Actions</th></tr></thead><tbody>${items}</tbody></table>`
       :`<ul class="hfo-file-list">${items}</ul>`;
     controls();
   }
@@ -224,6 +232,20 @@ export async function mountJobFiles(host,{jobId,api}) {
       return;
     }
     if(busy)return;
+    const {fileRename,fileDelete}=button.dataset;
+    if(fileRename!==undefined||fileDelete!==undefined){
+      const renaming=fileRename!==undefined;
+      const entry=entries[Number(fileRename??fileDelete)];
+      const filePath=join(path,entry.name), payload={jobId,path:filePath,expectedSha:entry.sha};
+      if(renaming){
+        const name=window.prompt('Rename file',entry.name)?.trim();
+        if(!name||name===entry.name)return;
+        void run(async()=>{await api('renameJobFile',{...payload,name});search.value='';await refresh();report('File renamed.');});
+      }else if(window.confirm('Delete “'+entry.name+'” from this Job?')){
+        void run(async()=>{await api('deleteJobFile',payload);await refresh();report('File deleted.');});
+      }
+      return;
+    }
     if(button.hasAttribute('data-file-view')){
       const entry=entries[Number(button.dataset.fileView)],filePath=join(path,entry.name);
       void viewJobFile(host,button,entry,download(filePath),()=>api('previewJobEmail',{jobId,path:filePath},'GET'));
