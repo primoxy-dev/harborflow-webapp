@@ -107,6 +107,30 @@ test('Referral Letter signatures are private to the account and independent of C
   assert.equal((await save('',signature)).status,200);
   assert.equal((await (await route(new Request(address))).json()).signature,'');
 });
+test('referral contact defaults are overridden privately and stale saves are rejected',async()=>{
+  const sql=fixtureDb();
+  const fallback={signatory:'Default Signer',position:'Default Role',phone:'000'};
+  const contact={signatory:'My Signer',position:'',phone:'111'};
+  const address='https://harborflow.test/api/documents?action=referralContact';
+  const route=(login,role='editor')=>createDocumentsRoute({
+    db:()=>sql, sessionLogin:()=>login, permission:async()=>({role,crewView:true}),
+    referralContactDefaults:JSON.stringify(fallback)
+  });
+  const get=async login=>(await route(login)(new Request(address))).json();
+  const save=(base,role='editor')=>route('alice',role)(new Request(address,{
+    method:'POST',headers:{Origin:'https://harborflow.test','Content-Type':'application/json'},
+    body:JSON.stringify({login:'alice',contact,base})
+  }));
+  assert.equal((await route('')(new Request(address))).status,401);
+  assert.deepEqual((await get('alice')).contact,fallback);
+  assert.equal((await save('','viewer')).status,403);
+  assert.equal((await save('')).status,200);
+  assert.deepEqual((await get('alice')).contact,contact);
+  assert.deepEqual((await get('bob')).contact,fallback);
+  assert.equal((await save('')).status,409);
+  const crew=await route('alice')(new Request(address.replace('referralContact','preferences')));
+  assert.deepEqual((await crew.json()).preferences,{});
+});
 test('authorization is rechecked on each request and database failures stay private',async()=>{
   let grant={role:'editor',crewView:true};
   const sql=fixtureDb();const route=createDocumentsRoute({db:()=>sql,sessionLogin:()=> 'demo',permission:async()=>grant});

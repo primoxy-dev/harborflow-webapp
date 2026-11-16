@@ -1,7 +1,7 @@
 import { nodeHandler, json, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
 import { canPeople, db, permission, uuid } from '../lib/operations.mjs';
 import { buildDocumentPreview, documentTypes } from '../lib/document-preview.mjs';
-import { readSettings, saveSettings } from '../lib/document-settings.mjs';
+import { crewDocumentSettings, parseReferralContact, readSettings, saveSettings } from '../lib/document-settings.mjs';
 import {readPermitDefaults,savePermitDefaults,configuredPermitSeed} from '../lib/permit-defaults.mjs';
 import {documentRecordRoute} from '../lib/document-records-api.mjs';
 import {loadPermitMailTemplates,savePermitMailTemplates} from '../lib/permit-mail-templates.mjs';
@@ -24,7 +24,25 @@ export function createDocumentsRoute(deps = {}) {
       if (!grant) return fail('Operations access required', 403);
       const crew = canPeople(grant, 'crew'), visitor = canPeople(grant, 'visitor');
       const url = new URL(request.url);
-      if (url.searchParams.get('action') === 'referralSignature') {
+      const action = url.searchParams.get('action');
+      if (action === 'referralContact') {
+        if (request.method === 'GET') {
+          const {referralContact = ''} = await readSettings(sql, login);
+          const defaults = parseReferralContact(deps.referralContactDefaults ?? process.env.HARBORFLOW_REFERRAL_CONTACT_DEFAULTS);
+          return json({login, contact:parseReferralContact(referralContact) || defaults, base:referralContact});
+        }
+        if (!['owner','editor'].includes(grant.role)) return fail('Operations editing permission required',403);
+        const raw = await request.text();
+        if (raw.length > 5000) return fail('Request too large',413);
+        let input;
+        try { input = JSON.parse(raw); } catch { return fail('Invalid JSON',400); }
+        if (input?.login !== login) return fail('Account changed; reopen the document',409);
+        if (typeof input.base !== 'string' || input.base.length > 1200) return fail('Original contact details are required',400);
+        const contact = JSON.stringify(input.contact);
+        const result = await saveSettings(sql,login,{referralContact:contact},{referralContact:input.base});
+        return result.status === 200 ? json({login, base:result.preferences.referralContact}) : fail(result.error,result.status);
+      }
+      if (action === 'referralSignature') {
         if (!['owner','editor'].includes(grant.role)) return fail('Operations editing permission required', 403);
         if (request.method === 'GET') {
           const {referralSignature = ''} = await readSettings(sql, login);
@@ -59,13 +77,12 @@ export function createDocumentsRoute(deps = {}) {
         if (!crew || !['owner','editor'].includes(grant.role)) return fail('Crew view and Operations editing permission required', 403);
         if (input.action !== 'savePreferences') return fail('Unknown action', 404);
         if (input.login !== login) return fail('Account changed; reopen the document', 409);
-        if (Object.hasOwn(input.patch || {}, 'referralSignature')) return fail('Use the Referral Letter signature settings',400);
+        if (Object.keys(input.patch || {}).some(key => key.startsWith('referral'))) return fail('Use the Referral Letter settings',400);
         const result = await saveSettings(sql, login, input.patch, input.base);
-        if (result.preferences) delete result.preferences.referralSignature;
+        if (result.preferences) result.preferences=crewDocumentSettings(result.preferences);
         const { status, ...body } = result;
         return json(body, status);
       }
-      const action = url.searchParams.get('action');
       if(action==='permitMailTemplates')return json({login,...await loadPermitMailTemplates(deps.permitMailStore),canSave:grant.role==='owner'});
       if(action==='documentState')return documentRecordRoute(request,Object.fromEntries(url.searchParams),{sql,grant,login,previewRoute:createDocumentsRoute(deps)});
       if(action==='permitDefaults'){
@@ -75,7 +92,7 @@ export function createDocumentsRoute(deps = {}) {
       }
       if (action === 'preferences') {
         if (!crew) return fail('Separate Crew view permission required', 403);
-        const {referralSignature, ...preferences} = await readSettings(sql, login);
+        const preferences = crewDocumentSettings(await readSettings(sql, login));
         return json({ login, preferences, canSave: ['owner','editor'].includes(grant.role) });
       }
       if (action === 'jobs') {
