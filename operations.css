@@ -498,6 +498,8 @@
 .hfo-file-tools .hfo-btn:not(.primary):hover { background:#28505c; }
 .hfo-file-tools .hfo-btn.primary { background:#b9e8dd; color:#0f453d; border-color:#b9e8dd; font-weight:700; }
 .hfo-file-tools .hfo-btn.primary:hover { background:#d8f7ef; }
+.hfo-file-sync:not([hidden]) { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 16px; background:#edf5f5; }
+.hfo-file-sync p { margin:0; font-size:.85rem; overflow-wrap:anywhere; }
 .hfo-file-filter { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:11px 16px; border-bottom:1px solid var(--file-border); font-size:.86rem; }
 .hfo-file-filter input { box-sizing:border-box; width:min(100%,240px); min-height:36px; padding:6px 10px; border:1px solid #afc6cb; border-radius:7px; color:var(--file-ink); }
 .hfo-file-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,155px),1fr)); gap:10px; margin:0; padding:0; list-style:none; }

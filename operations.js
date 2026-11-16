@@ -481,7 +481,7 @@
     if(!j.data.documentsPath){host.textContent='Create the GitHub Job folder in Job details to use File.';return;}
     host.textContent='Loading files…';
     import('./job-files.mjs').then(({mountJobFiles})=>{
-      if(host.isConnected)return mountJobFiles(host,{jobId:j.id,api});
+      if(host.isConnected)return mountJobFiles(host,{jobId:j.id,login:state.login,api});
     }).catch(error=>{host.textContent=error.message;delete host.dataset.mounted;});
   });
 

@@ -68,6 +68,19 @@ test('rename moves the same blob in one commit and refuses to overwrite an exist
   assert.deepEqual(calls.at(-1),['PATCH','refs/heads/main',{sha:'created',force:false}]);
 });
 
+test('replacement preserves the path and rejects stale or missing original versions',async()=>{
+  const file=root+'/Files/Order.txt';
+  const tree=[...snapshot.tree,{path:file,mode:'100644',type:'blob',sha}];
+  const gitWithFile=(method,path,data)=>method==='GET'&&path.startsWith('trees/')
+    ?Promise.resolve({tree}):git(method,path,data);
+  const input={action:'uploadJobFile',name:'Order.txt',content:'YWJj',expectedSha:sha};
+  assert.equal((await request({...input,expectedSha:'b'.repeat(40)},{git:gitWithFile})).status,409);
+  assert.equal((await request(input)).status,409);
+  calls.length=0;
+  assert.equal((await request(input,{git:gitWithFile})).status,200);
+  assert.deepEqual(calls.find(([,path])=>path==='trees')[2].tree,[{path:file,mode:'100644',type:'blob',sha:'created'}]);
+});
+
 test('delete rejects a changed file on retry and preserves a folder after deleting its last file',async()=>{
   const folder=root+'/Files/Invoices', source=folder+'/Order.txt';
   const input={action:'deleteJobFile',path:'Invoices/Order.txt',expectedSha:sha};
