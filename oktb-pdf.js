@@ -372,7 +372,7 @@
     await saveLivePdf(blob,name,fileHandle);
     return name;
   }
-  window.HarborFlowOktbPdf={renderPreview:input=>input.type==='loi'?downloadLoi({...input,previewOnly:true}):input.type==='permit'?downloadPermit({...input,previewOnly:true}):renderPages({...input,previewOnly:true}),download,fileName,loiFileName,permitFileName,downloadLoi,downloadPermit,pdfFromPages};
+  window.HarborFlowOktbPdf={renderPreview:input=>input.type==='loi'?downloadLoi({...input,previewOnly:true}):input.type==='permit'?downloadPermit({...input,previewOnly:true}):renderPages({...input,previewOnly:true}),download,fileName,loiFileName,permitFileName,downloadLoi,downloadPermit,pdfFromPages,saveLivePdf};
 })();
 
 
