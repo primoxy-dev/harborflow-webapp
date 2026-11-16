@@ -1,7 +1,10 @@
+import {createJobFileSync,gitBlobSha} from './job-file-sync.mjs';
+
 const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const join=(path,name)=>path?path+'/'+name:name;
 const maximumBytes=3000000;
 const fileActionIcons={
+  Replace:'<path d="M12 16V4m-4 4 4-4 4 4M5 15v5h14v-5"/>',
   Rename:'<path d="m13 5 4 4M4 20l4.5-1 11-11a2.8 2.8 0 0 0-4-4l-11 11L4 20Z"/>',
   Delete:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/>'
 };
@@ -18,6 +21,7 @@ const fileViews=new Map([
   ['small','Small icons'], ['list','List'], ['details','Details'], ['tiles','Tiles'], ['content','Content']
 ]);
 const viewPreference='harborflow-job-file-view';
+const oneDrivePickerOptions={id:'harborflow-onedrive',mode:'readwrite'};
 const encodeFile=file=>new Promise((resolve,reject)=>{
   const reader=new FileReader();
   reader.onload=()=>resolve(String(reader.result).split(',')[1]);
@@ -25,8 +29,11 @@ const encodeFile=file=>new Promise((resolve,reject)=>{
   reader.readAsDataURL(file);
 });
 
-export async function mountJobFiles(host,{jobId,api}) {
+export async function mountJobFiles(host,{jobId,login,api}) {
   let path='',entries=[],busy=false,loaded=false;
+  const sync=login&&typeof window.showDirectoryPicker==='function'&&navigator.locks&&window.indexedDB
+    ?createJobFileSync(login,jobId):null;
+  let linked=null,replacement=null;
   let view='medium';
   try {
     const saved=localStorage.getItem(viewPreference);
@@ -41,6 +48,7 @@ export async function mountJobFiles(host,{jobId,api}) {
         <button class="hfo-btn" type="button" data-new-folder>New folder</button>
         <button class="hfo-btn primary" type="button" data-upload-files><span aria-hidden="true">↑</span> Upload files</button>
         <button class="hfo-btn" type="button" data-copy-onedrive>Sync to OneDrive</button>
+        ${sync?'<button class="hfo-btn" type="button" data-auto-sync>Set up auto-sync</button>':''}
         <button class="hfo-btn" type="button" data-refresh-files>Refresh</button>
         <input type="file" multiple hidden data-file-input>
       </div>
@@ -57,6 +65,13 @@ export async function mountJobFiles(host,{jobId,api}) {
         </details>
       </div>
     </div>
+    ${sync?`<div class="hfo-file-sync" data-auto-sync-status hidden>
+      <p data-sync-message role="status"></p>
+      <div class="hfo-actions">
+        <button class="hfo-btn" type="button" data-retry-sync>Retry sync</button>
+        <button class="hfo-btn" type="button" data-clear-sync>Discard pending changes</button>
+      </div>
+    </div>`:''}
     <p data-file-status role="status"></p>
     <div class="hfo-job-file-drop" data-file-drop>
       <div data-file-list></div>
@@ -81,8 +96,52 @@ export async function mountJobFiles(host,{jobId,api}) {
   const status=host.querySelector('[data-file-status]');
   const fileInput=host.querySelector('[data-file-input]');
   const report=(message,error=false)=>{status.textContent=message;status.classList.toggle('hfo-alert',error);};
+  async function showSyncState(problem='') {
+    if(!sync)return;
+    linked=await sync.read();
+    host.querySelector('[data-auto-sync]').textContent=linked?'Turn off auto-sync':'Set up auto-sync';
+    const section=host.querySelector('[data-auto-sync-status]');
+    section.hidden=!linked&&!problem;
+    const count=linked?.pending.length||0;
+    const folder=linked?'OneDrive · '+linked.directory.name+' · ':'';
+    section.querySelector('[data-sync-message]').textContent=folder+(count?count+' pending':linked?'Auto-sync on':'')+(problem?(linked?' · ':'')+problem:'');
+    section.querySelectorAll('button').forEach(button=>{button.hidden=!count;});
+  }
+  async function flushSync() {
+    if(!sync||!host.isConnected)return;
+    try{
+      const problem=await sync.flush(async changes=>{
+        for(const change of changes){
+          const parts=change.path.split('/');
+          const name=parts.pop();
+          const files=await list(parts.join('/'));
+          const current=files.find(entry=>entry.name===name);
+          const matches=change.type==='delete'?!current:change.type==='folder'?current?.kind==='folder':current?.sha===change.sha;
+          if(!matches)return false;
+          if(change.type==='rename'&&files.some(entry=>entry.name===change.from.split('/').at(-1)))return false;
+        }
+        return true;
+      },()=>host.isConnected);
+      await showSyncState(problem);
+    }catch(error){await showSyncState('Could not sync: '+error.message).catch(()=>report(error.message,true));}
+  }
+  async function mutateFile(action,payload,makeChanges,expectedDirectory) {
+    const save=()=>api(action,payload);
+    return sync?sync.mutate(save,makeChanges,expectedDirectory):save();
+  }
+  async function switchSync() {
+    if(linked){
+      await sync.disconnect();
+      await showSyncState();
+      return;
+    }
+    const directory=await window.showDirectoryPicker(oneDrivePickerOptions);
+    if(!host.isConnected||!window.confirm('Enable automatic copies, changes and deletions for this Job in “'+directory.name+'”? Choose a dedicated synced OneDrive folder.'))return;
+    await sync.connect(directory);
+    await showSyncState();
+  }
   function controls() {
-    host.querySelectorAll('[data-new-folder],[data-upload-files],[data-copy-onedrive],[data-file-open],[data-file-view],[data-file-rename],[data-file-delete],[data-file-level],[data-refresh-files]').forEach(button=>{
+    host.querySelectorAll('[data-new-folder],[data-upload-files],[data-copy-onedrive],[data-file-open],[data-file-view],[data-file-rename],[data-file-delete],[data-file-replace],[data-file-level],[data-refresh-files],[data-auto-sync],[data-retry-sync],[data-clear-sync]').forEach(button=>{
       button.disabled=busy||(!loaded&&!button.hasAttribute('data-refresh-files'));
     });
   }
@@ -114,7 +173,7 @@ export async function mountJobFiles(host,{jobId,api}) {
       const size=folder?'—':fileSize(entry.size||0);
       const actions=folder?'':`<div class="hfo-file-controls">
         <button type="button" class="hfo-btn" data-file-view="${index}" aria-label="View ${name}">View</button>
-        ${entry.sha?fileIconButton('Rename',index,name)+fileIconButton('Delete',index,name):''}
+        ${entry.sha?fileIconButton('Rename',index,name)+fileIconButton('Replace',index,name)+fileIconButton('Delete',index,name):''}
       </div>`;
       const drag=folder?'':` draggable="true" data-file-drag="${index}"`;
       if(view==='details')return `<tr${drag}><td>${title}</td><td class="hfo-file-type">${type}</td><td>${size}</td><td>${actions}</td></tr>`;
@@ -134,7 +193,7 @@ export async function mountJobFiles(host,{jobId,api}) {
     catch(error){if(error.name==='AbortError')report('');else report(error.message,true);}
     finally{busy=false;controls();}
   }
-  function upload(files){
+  function upload(files,replace=null){
     if(!files.length||!loaded||busy)return;
     void run(async()=>{
       const failures=[];
@@ -142,19 +201,28 @@ export async function mountJobFiles(host,{jobId,api}) {
         if(!host.isConnected)break;
         try{
           if(file.size>maximumBytes)throw Error('File exceeds 3 MB');
-          await api('uploadJobFile',{jobId,path,name:file.name,content:await encodeFile(file)});
+          const name=replace?.name||file.name;
+          const parent=replace?.parent??path;
+          const payload={jobId,path:parent,name,content:await encodeFile(file),...(replace?{expectedSha:replace.sha}:{})};
+          await mutateFile('uploadJobFile',payload,async()=>[{
+            type:'write',path:join(parent,name),sha:await gitBlobSha(file),previousSha:replace?.sha,blob:file
+          }]);
         }catch(error){failures.push(file.name+' · '+error.message);}
       }
       if(!host.isConnected)return;
+      await flushSync();
       if(failures.length!==files.length)search.value='';
       await refresh();
-      report('Uploaded '+(files.length-failures.length)+' of '+files.length+'. '+failures.join(' · '),Boolean(failures.length));
+      report(replace?(failures.length?failures.join(' · '):'File replaced.'):
+        'Uploaded '+(files.length-failures.length)+' of '+files.length+'. '+failures.join(' · '),Boolean(failures.length));
     },{loading:'Uploading files…'});
   }
   fileInput.onchange=()=>{
     const files=[...fileInput.files];fileInput.value='';
-    upload(files);
+    const replace=replacement;replacement=null;
+    upload(replace?files.slice(0,1):files,replace);
   };
+  fileInput.addEventListener('cancel',()=>{replacement=null;});
   host.addEventListener('dragover',event=>{
     if(!event.dataTransfer?.types.includes('Files'))return;
     event.preventDefault();
@@ -183,7 +251,7 @@ export async function mountJobFiles(host,{jobId,api}) {
   });
   async function copyToOneDrive() {
     if(typeof window.showDirectoryPicker!=='function')throw Error('Use desktop Chrome or Edge to select your synced OneDrive folder.');
-    const destination=await window.showDirectoryPicker({mode:'readwrite'});
+    const destination=await window.showDirectoryPicker(oneDrivePickerOptions);
     if(!host.isConnected)return;
     if(!window.confirm('Copy the contents of this HarborFlow folder to “'+destination.name+'”? Choose a private folder in your synced OneDrive. Existing files will be skipped.')){report('');return;}
     let copied=0,skipped=0;
@@ -218,6 +286,102 @@ export async function mountJobFiles(host,{jobId,api}) {
     report('Copied '+copied+' · Skipped '+skipped+' existing · Failed '+failures.length+
       (failures.length?' · '+failures.join(' · '):''),Boolean(failures.length));
   }
+  function confirmDelete(button, entry, payload) {
+    const dialog=document.createElement('dialog');
+    dialog.className='hfo-msg-preview';
+    dialog.setAttribute('aria-label','Delete file');
+    const canPickFolder=typeof window.showDirectoryPicker==='function';
+    const connectedFolder=linked?.directory;
+    dialog.innerHTML=`<h3>Delete file</h3>
+      <p><strong>${escape(entry.name)}</strong></p>
+      <p>${connectedFolder?'The OneDrive copy in “'+escape(connectedFolder.name)+'” will be included if you delete from both locations.':canPickFolder?'To delete the OneDrive copy as well, choose the synced folder that contains this file.':'Use desktop Chrome or Edge with a synced OneDrive folder to delete both copies.'}</p>
+      <p data-delete-status role="status"></p>
+      <div class="hfo-actions">
+        <button type="button" class="hfo-btn" data-cancel-delete>Cancel</button>
+        <button type="button" class="hfo-btn danger" data-delete-job-only>Delete from Job only</button>
+        ${canPickFolder?'<button type="button" class="hfo-btn danger" data-delete-both>Delete from Job and OneDrive'+(connectedFolder?'':'…')+'</button>':''}
+      </div>`;
+    host.append(dialog);
+    const notice=dialog.querySelector('[data-delete-status]');
+    const cancel=dialog.querySelector('[data-cancel-delete]');
+    const jobOnly=dialog.querySelector('[data-delete-job-only]');
+    const both=dialog.querySelector('[data-delete-both]');
+    let jobDeleted=false, directory=null, deleting=false;
+    async function verifyCopy() {
+      let local;
+      try{local=await (await directory.getFileHandle(entry.name)).getFile();}
+      catch(error){
+        if(error.name==='NotFoundError')throw Error('This file was not found in the selected folder.');
+        throw error;
+      }
+      if(local.size!==entry.size)throw Error('The selected OneDrive file differs from the Job file.');
+      if(await gitBlobSha(local)!==entry.sha)throw Error('The selected OneDrive file differs from the Job file.');
+    }
+    function remove(includeOneDrive) {
+      if(deleting||busy)return;
+      deleting=true;
+      for(const control of dialog.querySelectorAll('button'))control.disabled=true;
+      void run(async()=>{
+        notice.textContent='Checking file…';
+        try{
+          if(includeOneDrive&&connectedFolder){
+            await mutateFile('deleteJobFile',payload,()=>[{
+              type:'delete',path:payload.path,previousSha:entry.sha
+            }],connectedFolder);
+            dialog.close();
+            await flushSync();
+            report('Deleted from this Job. See OneDrive status for sync results.');
+            try{await refresh();}catch{report('File deleted. Refresh to update the list.',true);}
+            return;
+          }
+          if(includeOneDrive){
+            directory??=await window.showDirectoryPicker(oneDrivePickerOptions);
+            await verifyCopy();
+            if(!jobDeleted&&!window.confirm('Delete “'+entry.name+'” from this Job and from “'+directory.name+'”?')){
+              directory=null;notice.textContent='';return;
+            }
+          }
+          if(!host.isConnected)return;
+          if(!jobDeleted){
+            await api('deleteJobFile',payload);
+            jobDeleted=true;
+            jobOnly.hidden=true;
+            cancel.textContent='Close';
+          }
+          if(includeOneDrive){
+            await verifyCopy();
+            await directory.removeEntry(entry.name);
+          }
+          dialog.close();
+          const success=includeOneDrive?'Deleted from this Job and the selected OneDrive folder.':'File deleted.';
+          report(success);
+          try{await refresh();}catch{report(success+' Refresh to update the file list.',true);}
+        }catch(error){
+          if(error.name==='AbortError'&&!jobDeleted){directory=null;notice.textContent='';return;}
+          if(jobDeleted){
+            both.textContent='Retry OneDrive deletion';
+            notice.textContent='Deleted from this Job. OneDrive deletion failed: '+error.message;
+            report(notice.textContent,true);
+            await refresh().catch(()=>{});
+          }else{
+            directory=null;
+            notice.textContent=error.message;
+            report('');
+          }
+        }finally{
+          deleting=false;
+          for(const control of dialog.querySelectorAll('button'))control.disabled=false;
+        }
+      });
+    }
+    cancel.onclick=()=>dialog.close();
+    jobOnly.onclick=()=>remove(false);
+    if(both)both.onclick=()=>remove(true);
+    dialog.addEventListener('cancel',event=>{if(deleting)event.preventDefault();});
+    dialog.addEventListener('close',()=>{dialog.remove();if(button.isConnected)button.focus();},{once:true});
+    dialog.showModal();
+    cancel.focus();
+  }
   host.onclick=event=>{
     if(!viewMenu.contains(event.target))viewMenu.open=false;
     const button=event.target.closest('button');
@@ -232,6 +396,28 @@ export async function mountJobFiles(host,{jobId,api}) {
       return;
     }
     if(busy)return;
+    if(button.hasAttribute('data-auto-sync')){void run(async()=>{await switchSync();report('');});return;}
+    if(button.hasAttribute('data-retry-sync')){
+      void run(async()=>{
+        if(linked&&await linked.directory.requestPermission({mode:'readwrite'})!=='granted'){
+          await showSyncState('Allow access to resume sync.');report('');return;
+        }
+        await flushSync();report('');
+      });
+      return;
+    }
+    if(button.hasAttribute('data-clear-sync')){
+      if(window.confirm('Discard pending OneDrive changes for this Job? Changes saved in HarborFlow will remain.')){
+        void run(async()=>{await sync.clear();await showSyncState();report('');});
+      }
+      return;
+    }
+    if(button.hasAttribute('data-file-replace')){
+      replacement={...entries[Number(button.dataset.fileReplace)],parent:path};
+      fileInput.multiple=false;
+      fileInput.click();
+      return;
+    }
     const {fileRename,fileDelete}=button.dataset;
     if(fileRename!==undefined||fileDelete!==undefined){
       const renaming=fileRename!==undefined;
@@ -240,10 +426,18 @@ export async function mountJobFiles(host,{jobId,api}) {
       if(renaming){
         const name=window.prompt('Rename file',entry.name)?.trim();
         if(!name||name===entry.name)return;
-        void run(async()=>{await api('renameJobFile',{...payload,name});search.value='';await refresh();report('File renamed.');});
-      }else if(window.confirm('Delete “'+entry.name+'” from this Job?')){
-        void run(async()=>{await api('deleteJobFile',payload);await refresh();report('File deleted.');});
-      }
+        void run(async()=>{
+          await mutateFile('renameJobFile',{...payload,name},async()=>{
+            const response=await fetch(download(filePath),{credentials:'same-origin'});
+            if(!response.ok)throw Error('Could not read the file for OneDrive sync.');
+            const blob=await response.blob();
+            if(await gitBlobSha(blob)!==entry.sha)throw Error('The file changed. Refresh and try again.');
+            const target=join(path,name);
+            return [{type:'rename',path:target,from:filePath,sha:entry.sha,blob}];
+          });
+          await flushSync();search.value='';await refresh();report('File renamed.');
+        });
+      }else confirmDelete(button,entry,payload);
       return;
     }
     if(button.hasAttribute('data-file-view')){
@@ -251,20 +445,23 @@ export async function mountJobFiles(host,{jobId,api}) {
       void viewJobFile(host,button,entry,download(filePath),()=>api('previewJobEmail',{jobId,path:filePath},'GET'));
       return;
     }
-    if(button.hasAttribute('data-refresh-files')){void run(async()=>{await refresh();report('');});return;}
-    if(button.hasAttribute('data-upload-files')){fileInput.click();return;}
+    if(button.hasAttribute('data-refresh-files')){void run(async()=>{await refresh();await flushSync();report('');});return;}
+    if(button.hasAttribute('data-upload-files')){replacement=null;fileInput.multiple=true;fileInput.click();return;}
     if(button.hasAttribute('data-copy-onedrive')){void run(copyToOneDrive);return;}
     if(button.hasAttribute('data-new-folder')){
       const name=window.prompt('Folder name')?.trim();
       if(!name)return;
-      void run(async()=>{await api('createJobFileFolder',{jobId,path,name});search.value='';await refresh();report('Folder created.');});return;
+      void run(async()=>{
+        await mutateFile('createJobFileFolder',{jobId,path,name},()=>[{type:'folder',path:join(path,name)}]);
+        await flushSync();search.value='';await refresh();report('Folder created.');
+      });return;
     }
     const next=button.hasAttribute('data-file-level')?path.split('/').slice(0,Number(button.dataset.fileLevel)).join('/'):
       button.hasAttribute('data-file-open')?join(path,entries[Number(button.dataset.fileOpen)].name):null;
     if(next!==null)void run(async()=>{await refresh(next);report('');});
   };
   controls();
-  await run(async()=>{await refresh();report('');},{loading:'Loading files…'});
+  await run(async()=>{await refresh();await flushSync();report('');},{loading:'Loading files…'});
 }
 
 async function viewJobFile(host,trigger,entry,url,loadEmail) {
