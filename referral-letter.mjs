@@ -96,7 +96,10 @@ export async function mountReferralLetter(host, { job, service, editable, login 
     personName: '', nationality: '', birthDate: '', passport: '', signatory: '', position: '', phone: ''
   };
   host.innerHTML = `
-    <div class="hfo-toolbar"><h3>Referral Letter</h3><button class="hfo-btn primary" type="button" data-referral-download>Download PDF</button></div>
+    <div class="hfo-toolbar"><h3>Referral Letter</h3><div class="hfo-actions">
+      <button class="hfo-btn" type="button" data-referral-save-as>Save as</button>
+      <button class="hfo-btn primary" type="button" data-referral-download>Download PDF</button>
+    </div></div>
     <p class="hfo-muted">Letter and patient details are kept in this tab while it is open.</p>
     <p role="status" data-referral-status></p>
     <div class="hfo-referral-layout">
@@ -178,24 +181,38 @@ export async function mountReferralLetter(host, { job, service, editable, login 
     fields[event.target.name] = event.target.value;
     refreshPreview();
   });
-  host.querySelector('[data-referral-download]').onclick = () => {
+  const saveAsButton = host.querySelector('[data-referral-save-as]');
+  async function exportLetter(saveAs) {
     status.textContent = '';
+    const vessel = fields.vessel.replace(/[<>:"/\\|?*\x00-\x1F]+/g, '-').trim();
+    const name = 'REFERRAL LETTER' + (vessel ? ' - ' + vessel : '') + '.pdf';
+    let handle;
+    if (saveAs) saveAsButton.disabled = true;
     try {
+      if (saveAs && typeof window.showSaveFilePicker === 'function') {
+        try {
+          handle = await window.showSaveFilePicker({
+            suggestedName:name, types:[{description:'PDF document', accept:{'application/pdf':['.pdf']}}]
+          });
+        } catch (error) {
+          if (error.name === 'AbortError') return;
+          throw error;
+        }
+      }
+      if (!host.isConnected) return;
       const canvas = document.createElement('canvas');
       render(canvas, true);
-      const url = URL.createObjectURL(pdf.fromCanvases([canvas], { width: pageWidth, height: pageHeight }));
-      const link = document.createElement('a');
-      const vessel = fields.vessel.replace(/[<>:"/\\|?*\x00-\x1F]+/g, '-').trim();
-      link.href = url;
-      link.download = 'REFERRAL LETTER' + (vessel ? ' - ' + vessel : '') + '.pdf';
-      host.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      const blob = pdf.fromCanvases([canvas], { width: pageWidth, height: pageHeight });
+      await window.HarborFlowOktbPdf.saveLivePdf(blob, name, handle);
+      if (saveAs) status.textContent = handle ? 'PDF saved.' : 'PDF download started.';
     } catch (error) {
       status.textContent = error.message;
+    } finally {
+      if (saveAs) saveAsButton.disabled = false;
     }
-  };
+  }
+  saveAsButton.onclick = () => { void exportLetter(true); };
+  host.querySelector('[data-referral-download]').onclick = () => { void exportLetter(false); };
   render(preview);
   const documents = window.HarborFlowDocuments;
   const contactInputs = contactFields.map(name => form.elements.namedItem(name));
