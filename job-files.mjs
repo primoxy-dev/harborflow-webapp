@@ -6,7 +6,6 @@ const join=(path,name)=>path?path+'/'+name:name;
 const maximumBytes=3000000;
 const fileActionIcons={
   Share:'<path d="M12 15V3m-4 4 4-4 4 4M5 11v9h14v-9"/>',
-  Replace:'<path d="M12 16V4m-4 4 4-4 4 4M5 15v5h14v-5"/>',
   Rename:'<path d="m13 5 4 4M4 20l4.5-1 11-11a2.8 2.8 0 0 0-4-4l-11 11L4 20Z"/>',
   Delete:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/>'
 };
@@ -36,7 +35,7 @@ const encodeFile=file=>new Promise((resolve,reject)=>{
   reader.readAsDataURL(file);
 });
 
-export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUrl}) {
+export async function mountJobFiles(host,{jobId,login,api,folderUrl}) {
   let path='',entries=[],busy=false,loaded=false;
   let selecting=false;
   const selected=new Set(), prepared=new Map();
@@ -44,7 +43,8 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
     &&navigator.canShare({files:[new File(['a'],'file.txt',{type:'text/plain'})]});
   const sync=login&&typeof window.showDirectoryPicker==='function'&&navigator.locks&&window.indexedDB
     ?createJobFileSync(login,jobId):null;
-  let linked=null,replacement=null;
+  let linked=null;
+  const oneDriveUrl=oneDriveFolderLink(folderUrl);
   let view='medium';
   try {
     const saved=localStorage.getItem(viewPreference);
@@ -55,14 +55,10 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
   host.innerHTML=`<div class="hfo-file-browser">
     <div class="hfo-file-command">
       <nav data-file-path aria-label="File location"></nav>
-      <div class="hfo-file-onedrive">
-        <a class="hfo-btn hfo-onedrive-link" data-open-onedrive rel="noopener noreferrer" hidden>Open OneDrive</a>
-        ${saveFolderUrl?'<button class="hfo-btn" type="button" data-set-onedrive>Set OneDrive folder</button>':''}
-      </div>
+      ${oneDriveUrl?`<div class="hfo-file-onedrive"><a class="hfo-btn" data-open-onedrive href="${escape(oneDriveUrl)}" rel="noopener noreferrer">Open OneDrive</a></div>`:''}
       <div class="hfo-file-tools">
         <button class="hfo-btn" type="button" data-new-folder>New folder</button>
         <button class="hfo-btn primary" type="button" data-upload-files><span aria-hidden="true">↑</span> Upload files</button>
-        <button class="hfo-btn" type="button" data-copy-onedrive>Sync to OneDrive</button>
         ${sync?'<button class="hfo-btn" type="button" data-auto-sync>Set up auto-sync</button>':''}
         <button class="hfo-btn" type="button" data-refresh-files>Refresh</button>
         <input type="file" multiple hidden data-file-input>
@@ -119,15 +115,6 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
   const status=host.querySelector('[data-file-status]');
   const fileInput=host.querySelector('[data-file-input]');
   const report=(message,error=false)=>{status.textContent=message;status.classList.toggle('hfo-alert',error);};
-  function renderFolderLink() {
-    const link=host.querySelector('[data-open-onedrive]');
-    const url=oneDriveFolderLink(folderUrl);
-    link.hidden=!url;
-    if(url)link.href=url;else link.removeAttribute('href');
-    const edit=host.querySelector('[data-set-onedrive]');
-    if(edit)edit.textContent=url?'Edit link':'Set OneDrive folder';
-  }
-  renderFolderLink();
   function filteredEntries() {
     const query=search.value.trim().toLocaleLowerCase();
     return entries.map((entry,index)=>({entry,index})).filter(({entry})=>entry.name.toLocaleLowerCase().includes(query));
@@ -235,7 +222,7 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
     await showSyncState();
   }
   function controls() {
-    host.querySelectorAll('[data-new-folder],[data-upload-files],[data-copy-onedrive],[data-file-open],[data-file-view],[data-file-rename],[data-file-delete],[data-file-replace],[data-file-share],[data-file-level],[data-refresh-files],[data-auto-sync],[data-retry-sync],[data-clear-sync],[data-select-files],[data-set-onedrive]').forEach(button=>{
+    host.querySelectorAll('[data-new-folder],[data-upload-files],[data-file-open],[data-file-view],[data-file-rename],[data-file-delete],[data-file-share],[data-file-level],[data-refresh-files],[data-auto-sync],[data-retry-sync],[data-clear-sync],[data-select-files]').forEach(button=>{
       button.disabled=busy||(!loaded&&!button.hasAttribute('data-refresh-files'));
     });
     rows.querySelectorAll('[data-pick-file]').forEach(input=>{input.disabled=busy;});
@@ -272,7 +259,7 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
       const actions=folder?'':`<div class="hfo-file-controls">
         <button type="button" class="hfo-btn" data-file-view="${index}" aria-label="View ${name}">View</button>
         ${shareAvailable?fileIconButton('Share',index,name):''}
-        ${entry.sha?fileIconButton('Rename',index,name)+fileIconButton('Replace',index,name)+fileIconButton('Delete',index,name):''}
+        ${entry.sha?fileIconButton('Rename',index,name)+fileIconButton('Delete',index,name):''}
       </div>`;
       const drag=folder?'':` draggable="true" data-file-drag="${index}"`;
       const pick=selecting&&!folder?`<label class="hfo-file-pick"><input type="checkbox" data-pick-file="${index}" aria-label="Select ${name}" ${selected.has(entry)?'checked':''}></label>`:'';
@@ -304,7 +291,7 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
     catch(error){if(error.name==='AbortError')report('');else report(error.message,true);}
     finally{busy=false;controls();}
   }
-  function upload(files,replace=null){
+  function upload(files){
     if(!files.length||!loaded||busy)return;
     void run(async()=>{
       const failures=[];
@@ -312,11 +299,9 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
         if(!host.isConnected)break;
         try{
           if(file.size>maximumBytes)throw Error('File exceeds 3 MB');
-          const name=replace?.name||file.name;
-          const parent=replace?.parent??path;
-          const payload={jobId,path:parent,name,content:await encodeFile(file),...(replace?{expectedSha:replace.sha}:{})};
+          const payload={jobId,path,name:file.name,content:await encodeFile(file)};
           await mutateFile('uploadJobFile',payload,async()=>[{
-            type:'write',path:join(parent,name),sha:await gitBlobSha(file),previousSha:replace?.sha,blob:file
+            type:'write',path:join(path,file.name),sha:await gitBlobSha(file),blob:file
           }]);
         }catch(error){failures.push(file.name+' · '+error.message);}
       }
@@ -324,16 +309,13 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
       await flushSync();
       if(failures.length!==files.length)search.value='';
       await refresh();
-      report(replace?(failures.length?failures.join(' · '):'File replaced.'):
-        'Uploaded '+(files.length-failures.length)+' of '+files.length+'. '+failures.join(' · '),Boolean(failures.length));
+      report('Uploaded '+(files.length-failures.length)+' of '+files.length+'. '+failures.join(' · '),Boolean(failures.length));
     },{loading:'Uploading files…'});
   }
   fileInput.onchange=()=>{
     const files=[...fileInput.files];fileInput.value='';
-    const replace=replacement;replacement=null;
-    upload(replace?files.slice(0,1):files,replace);
+    upload(files);
   };
-  fileInput.addEventListener('cancel',()=>{replacement=null;});
   host.addEventListener('dragover',event=>{
     if(!event.dataTransfer?.types.includes('Files'))return;
     event.preventDefault();
@@ -360,43 +342,6 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
     event.dataTransfer.effectAllowed='copy';
     event.dataTransfer.setData('DownloadURL','application/octet-stream:'+entry.name+':'+link.href);
   });
-  async function copyToOneDrive() {
-    if(typeof window.showDirectoryPicker!=='function')throw Error('Use desktop Chrome or Edge to select your synced OneDrive folder.');
-    const destination=await window.showDirectoryPicker(oneDrivePickerOptions);
-    if(!host.isConnected)return;
-    if(!window.confirm('Copy the contents of this HarborFlow folder to “'+destination.name+'”? Choose a private folder in your synced OneDrive. Existing files will be skipped.')){report('');return;}
-    let copied=0,skipped=0;
-    const failures=[];
-    async function copy(directory, source){
-      for(const entry of await list(source)){
-        if(!host.isConnected)return;
-        const from=join(source,entry.name);
-        report('Copying '+from+'…');
-        try{
-          if(entry.kind==='folder'){
-            await copy(await directory.getDirectoryHandle(entry.name,{create:true}),from);
-            continue;
-          }
-          try{await directory.getFileHandle(entry.name);skipped++;continue;}
-          catch(error){if(error.name!=='NotFoundError')throw error;}
-          const response=await fetch(download(from),{credentials:'same-origin'});
-          if(!response.ok)throw Error('Could not download file');
-          const bytes=await response.blob();
-          if(!host.isConnected)return;
-          try{await directory.getFileHandle(entry.name);skipped++;continue;}
-          catch(error){if(error.name!=='NotFoundError')throw error;}
-          const file=await directory.getFileHandle(entry.name,{create:true});
-          const writer=await file.createWritable();
-          try{await writer.write(bytes);await writer.close();}
-          catch(error){await writer.abort().catch(()=>{});throw error;}
-          copied++;
-        }catch(error){failures.push(from+' · '+error.message);}
-      }
-    }
-    await copy(destination,path);
-    report('Copied '+copied+' · Skipped '+skipped+' existing · Failed '+failures.length+
-      (failures.length?' · '+failures.join(' · '):''),Boolean(failures.length));
-  }
   function confirmDelete(button, entry, payload) {
     const dialog=document.createElement('dialog');
     dialog.className='hfo-msg-preview';
@@ -507,20 +452,6 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
       return;
     }
     if(busy)return;
-    if(button.hasAttribute('data-set-onedrive')){
-      const value=window.prompt('Paste the OneDrive folder link for this Job. Use a link for people with existing access.',folderUrl||'');
-      if(value===null)return;
-      const url=oneDriveFolderLink(value.trim());
-      if(value.trim()&&!url){report('Enter an HTTPS OneDrive or SharePoint link.',true);return;}
-      if(url===(folderUrl||''))return;
-      void run(async()=>{
-        await saveFolderUrl(url,folderUrl||null);
-        folderUrl=url;
-        renderFolderLink();
-        report(url?'OneDrive folder saved.':'OneDrive folder link removed.');
-      });
-      return;
-    }
     if(button.hasAttribute('data-select-files')){
       selecting=!selecting;
       if(!selecting){selected.clear();prepared.clear();}
@@ -561,12 +492,6 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
       }
       return;
     }
-    if(button.hasAttribute('data-file-replace')){
-      replacement={...entries[Number(button.dataset.fileReplace)],parent:path};
-      fileInput.multiple=false;
-      fileInput.click();
-      return;
-    }
     const {fileRename,fileDelete}=button.dataset;
     if(fileRename!==undefined||fileDelete!==undefined){
       const renaming=fileRename!==undefined;
@@ -595,8 +520,7 @@ export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUr
       return;
     }
     if(button.hasAttribute('data-refresh-files')){void run(async()=>{await refresh();await flushSync();report('');});return;}
-    if(button.hasAttribute('data-upload-files')){replacement=null;fileInput.multiple=true;fileInput.click();return;}
-    if(button.hasAttribute('data-copy-onedrive')){void run(copyToOneDrive);return;}
+    if(button.hasAttribute('data-upload-files')){fileInput.click();return;}
     if(button.hasAttribute('data-new-folder')){
       const name=window.prompt('Folder name')?.trim();
       if(!name)return;
