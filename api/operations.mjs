@@ -1,6 +1,8 @@
 import { jobFilesRoute } from '../lib/job-files.mjs';
 import { provisionRoute } from '../lib/provision.mjs';
 import { hotelRoute } from '../lib/hotels.mjs';
+import { cashVoucherTypes } from '../lib/cash-voucher.mjs';
+import { mailRecipientAddresses } from '../lib/mail-recipients.mjs';
 import { randomUUID } from 'node:crypto';
 import { nodeHandler, gh, json, readJson, safeName, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
 import { documentsFolder, moveJobFolder } from '../lib/job-folders.mjs';
@@ -127,7 +129,7 @@ function validateTrip(data) {
   if (JSON.stringify(data).length > 6000) return 'Travel record is too large';
   return null;
 }
-export function createOperationsRoute({ database = db, loginFromRequest = sessionLogin, readPermission = permission } = {}) {
+export function createOperationsRoute({ database = db, loginFromRequest = sessionLogin, readPermission = permission, voucherMailDefaults } = {}) {
 return async function route(request) {
   if (!process.env.DATABASE_URL) return error('Operations database is not configured', 503);
   const url = new URL(request.url);
@@ -154,6 +156,21 @@ return async function route(request) {
   const jobFiles = async input => jobFilesRoute({job:await loadJob(sql,input.jobId),grant,login,input});
   if (request.method === 'GET') {
     const action = url.searchParams.get('action') || 'state';
+    if (action === 'voucherMailDefaults') {
+      const service = await loadService(sql, url.searchParams.get('serviceId'));
+      const job = service && await loadJob(sql, service.job_id);
+      if (!job || service.removed_at || !cashVoucherTypes.includes(service.data.type) || !canEditService(grant, login, job, service)) {
+        return error('Assigned Cash to Master Service required', 403);
+      }
+      try {
+        const raw = voucherMailDefaults ?? process.env.HARBORFLOW_VOUCHER_MAIL_DEFAULTS;
+        if (!raw) return json({ to: '', cc: '' });
+        const { to, cc } = JSON.parse(raw);
+        mailRecipientAddresses(to);
+        mailRecipientAddresses(cc);
+        return json({ to, cc });
+      } catch { return error('Payment Voucher email defaults are unavailable', 503); }
+    }
     if (['provisionItems','provisionEmail','provisionEmailPreview'].includes(action))return provision({action,serviceId:url.searchParams.get('serviceId'),id:url.searchParams.get('id')});
     if (['jobFiles','downloadJobFile','previewJobEmail'].includes(action))return jobFiles({action,jobId:url.searchParams.get('jobId'),path:url.searchParams.get('path')??''});
     if (action === 'state') {

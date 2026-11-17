@@ -1,4 +1,5 @@
 import {amountInCents,banknoteRows,ctmCurrencies} from './lib/cash-voucher.mjs';
+import {mailRecipientAddresses} from './lib/mail-recipients.mjs';
 import {bindMailEditor,cleanBody,createMailComposer,outlookUrl} from './hotel-email.mjs';
 
 const money=new Intl.NumberFormat('en-US',{maximumFractionDigits:2});
@@ -47,7 +48,7 @@ function voucherEmailBody({vessel,jobNo,amountText,dueDate,groups},approvedBy) {
     <p>Thank you &amp; Best regards,</p>`;
 }
 
-export function openVoucherEmail({job,draft,trigger,downloadVoucher}) {
+export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipients}) {
   const details=voucherMailDetails(job,draft);
   const dialog=createMailComposer({
     fieldsExtra:'<label class="hfo-mail-line"><span>Due time (LT)</span><input name="dueTime" type="time"></label>',
@@ -61,7 +62,8 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher}) {
   form.elements.subject.value=details.subject;
   editor.innerHTML=voucherEmailBody(details,draft.header.approvedBy);
   form.hidden=false;
-  report([...details.warnings,'Download the voucher and attach it in Outlook.'].join(' '),Boolean(details.warnings.length));
+  const hint=[...details.warnings,'Download the voucher and attach it in Outlook.'].join(' ');
+  report(hint,Boolean(details.warnings.length));
   form.onsubmit=event=>event.preventDefault();
   form.elements.dueTime.oninput=()=>{
     const time=editor.querySelector('[data-ctm-due-time]');
@@ -72,9 +74,11 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher}) {
     catch(error){report(error.message,true);}
   };
   form.querySelector('[data-outlook]').onclick=()=>{
-    const to=form.elements.to.value, cc=form.elements.cc.value, subject=form.elements.subject.value;
+    const subject=form.elements.subject.value;
     const body=editor.innerText;
     try{
+      const to=mailRecipientAddresses(form.elements.to.value).join(';');
+      const cc=mailRecipientAddresses(form.elements.cc.value).join(';');
       let url=outlookUrl({to,cc,subject});
       try{url=outlookUrl({to,cc,subject,body});}
       catch(error){if(!window.confirm(error.message+' Open Outlook with recipients and subject?'))return;}
@@ -96,4 +100,18 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher}) {
   dialog.addEventListener('close',()=>{dialog.remove();if(trigger.isConnected)trigger.focus();},{once:true});
   trigger.parentElement.append(dialog);
   dialog.showModal();
+  if(loadRecipients){
+    const edited=new Set();
+    for(const field of ['to','cc'])form.elements[field].addEventListener('input',()=>edited.add(field));
+    const outlook=form.querySelector('[data-outlook]');
+    outlook.disabled=true;
+    report('Loading default recipients…');
+    void Promise.resolve().then(loadRecipients).then(defaults=>{
+      if(!dialog.open)return;
+      for(const field of ['to','cc'])if(!edited.has(field))form.elements[field].value=defaults[field]||'';
+      report(hint,Boolean(details.warnings.length));
+    },()=>{
+      if(dialog.open)report('Default recipients could not load. Enter To and CC manually. '+hint,true);
+    }).finally(()=>{outlook.disabled=false;});
+  }
 }
