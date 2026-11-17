@@ -3,6 +3,7 @@ import { provisionRoute } from '../lib/provision.mjs';
 import { hotelRoute } from '../lib/hotels.mjs';
 import { cashVoucherTypes } from '../lib/cash-voucher.mjs';
 import { mailRecipientAddresses } from '../lib/mail-recipients.mjs';
+import { beginVoucherOutlook, createVoucherOutlookDraft, finishVoucherOutlook, voucherOutlookConfig } from '../lib/voucher-outlook.mjs';
 import { randomUUID } from 'node:crypto';
 import { nodeHandler, gh, json, readJson, safeName, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
 import { documentsFolder, moveJobFolder } from '../lib/job-folders.mjs';
@@ -16,7 +17,7 @@ const parse = async request => {
   const raw = await request.text();
   if (raw.length > 4100000) throw Error('Request too large');
   const input = JSON.parse(raw || '{}');
-  const limit=['saveProvisionItem','previewProvisionEmailFile','uploadJobFile'].includes(input?.action)?4100000:['saveHotelEmailDraft','saveHotelEmailTemplate'].includes(input?.action)?60000:24000;
+  const limit=['saveProvisionItem','previewProvisionEmailFile','uploadJobFile'].includes(input?.action)?4100000:['saveHotelEmailDraft','saveHotelEmailTemplate','createVoucherOutlookDraft'].includes(input?.action)?60000:24000;
   if (raw.length > limit) throw Error('Request too large');
   return input;
 };
@@ -154,12 +155,20 @@ return async function route(request) {
     return provisionRoute({sql,service,job,grant,login,input});
   };
   const jobFiles = async input => jobFilesRoute({job:await loadJob(sql,input.jobId),grant,login,input});
+  const canUseVoucherMail=async id=>{
+    const service=await loadService(sql,id);
+    const job=service&&await loadJob(sql,service.job_id);
+    return job&&!service.removed_at&&cashVoucherTypes.includes(service.data.type)&&canEditService(grant,login,job,service);
+  };
   if (request.method === 'GET') {
     const action = url.searchParams.get('action') || 'state';
+    if(action==='voucherOutlookCallback')return finishVoucherOutlook(request,voucherOutlookConfig());
+    if(action==='voucherOutlookConnect'){
+      if(!await canUseVoucherMail(url.searchParams.get('serviceId')))return error('Assigned Cash to Master Service required',403);
+      return beginVoucherOutlook(request,voucherOutlookConfig());
+    }
     if (action === 'voucherMailDefaults') {
-      const service = await loadService(sql, url.searchParams.get('serviceId'));
-      const job = service && await loadJob(sql, service.job_id);
-      if (!job || service.removed_at || !cashVoucherTypes.includes(service.data.type) || !canEditService(grant, login, job, service)) {
+      if (!await canUseVoucherMail(url.searchParams.get('serviceId'))) {
         return error('Assigned Cash to Master Service required', 403);
       }
       try {
@@ -221,6 +230,10 @@ return async function route(request) {
   let input;
   try { input = await parse(request); } catch { return error('Invalid or oversized JSON'); }
   const action = input.action;
+  if(action==='createVoucherOutlookDraft'){
+    if(!await canUseVoucherMail(input.serviceId))return error('Assigned Cash to Master Service required',403);
+    return createVoucherOutlookDraft(request,voucherOutlookConfig(),input);
+  }
   if (['createJobFileFolder','uploadJobFile','renameJobFile','deleteJobFile'].includes(action))return jobFiles(input);
   if (['saveProvisionItem','removeProvisionItem','previewProvisionEmailFile'].includes(action))return provision(input);
   if(['saveHotel','saveHotelEmailDraft','saveHotelEmailTemplate','removeHotelEmailTemplate'].includes(action))return hotelRoute({sql,grant,login,input});
