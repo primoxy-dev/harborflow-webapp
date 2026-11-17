@@ -3,7 +3,6 @@ import { provisionRoute } from '../lib/provision.mjs';
 import { hotelRoute } from '../lib/hotels.mjs';
 import { cashVoucherTypes } from '../lib/cash-voucher.mjs';
 import { mailRecipientAddresses } from '../lib/mail-recipients.mjs';
-import { beginVoucherOutlook, createVoucherOutlookDraft, finishVoucherOutlook, voucherOutlookConfig } from '../lib/voucher-outlook.mjs';
 import { randomUUID } from 'node:crypto';
 import { nodeHandler, gh, json, readJson, safeName, sameOrigin, sessionLogin } from '../lib/harborflow.mjs';
 import { documentsFolder, moveJobFolder } from '../lib/job-folders.mjs';
@@ -162,9 +161,13 @@ return async function route(request) {
   };
   if (request.method === 'GET') {
     const action = url.searchParams.get('action') || 'state';
-    if(action==='voucherOutlookCallback')return finishVoucherOutlook(request,voucherOutlookConfig());
+    if(action==='voucherOutlookCallback'){
+      const {finishVoucherOutlook,voucherOutlookConfig}=await import('../lib/voucher-outlook.mjs');
+      return finishVoucherOutlook(request,voucherOutlookConfig());
+    }
     if(action==='voucherOutlookConnect'){
       if(!await canUseVoucherMail(url.searchParams.get('serviceId')))return error('Assigned Cash to Master Service required',403);
+      const {beginVoucherOutlook,voucherOutlookConfig}=await import('../lib/voucher-outlook.mjs');
       return beginVoucherOutlook(request,voucherOutlookConfig());
     }
     if (action === 'voucherMailDefaults') {
@@ -232,6 +235,7 @@ return async function route(request) {
   const action = input.action;
   if(action==='createVoucherOutlookDraft'){
     if(!await canUseVoucherMail(input.serviceId))return error('Assigned Cash to Master Service required',403);
+    const {createVoucherOutlookDraft,voucherOutlookConfig}=await import('../lib/voucher-outlook.mjs');
     return createVoucherOutlookDraft(request,voucherOutlookConfig(),input);
   }
   if (['createJobFileFolder','uploadJobFile','renameJobFile','deleteJobFile'].includes(action))return jobFiles(input);
