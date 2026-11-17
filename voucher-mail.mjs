@@ -48,17 +48,15 @@ function voucherEmailBody({vessel,jobNo,amountText,dueDate,groups},approvedBy) {
     <p>Thank you &amp; Best regards,</p>`;
 }
 
-export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipients,createOutlookDraft,outlookConnectUrl}) {
+export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipients}) {
   const details=voucherMailDetails(job,draft);
   const dialog=createMailComposer({
     fieldsExtra:'<label class="hfo-mail-line"><span>Due time (LT)</span><input name="dueTime" type="time"></label>',
     footerExtra:`<button type="button" class="hfo-btn" data-email-voucher-pdf>Download PDF</button>
-      <button type="button" class="hfo-btn" data-copy-voucher-cc>Copy CC</button>
-      ${createOutlookDraft?'<button type="button" class="hfo-btn" data-create-outlook-draft>Create Outlook draft</button>':''}`
+      <button type="button" class="hfo-btn" data-copy-voucher-cc>Copy CC</button>`
   });
   const form=dialog.querySelector('form');
   const notice=dialog.querySelector('[data-mail-notice]');
-  const draftButton=form.querySelector('[data-create-outlook-draft]');
   const {editor}=bindMailEditor(form);
   const report=(text,error=false)=>{notice.textContent=text;notice.classList.toggle('hfo-alert',error);};
   dialog.querySelector('[data-branch]').textContent=['Payment Voucher',details.vessel,details.jobNo].filter(Boolean).join(' · ');
@@ -111,39 +109,6 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipien
       report('Formatted body copied. Paste it into Outlook.');
     }catch(error){report(error.message,true);}
   };
-  if(draftButton){
-    const link=document.createElement('a');
-    link.className='hfo-btn';
-    link.target='_blank';
-    link.rel='noopener noreferrer';
-    link.hidden=true;
-    draftButton.after(link);
-    function showLink(label,url){
-      link.textContent=label;
-      link.href=url;
-      link.hidden=false;
-    }
-    draftButton.onclick=async()=>{
-      draftButton.disabled=true;
-      link.hidden=true;
-      let created=false;
-      try{
-        const to=form.elements.to.value,cc=form.elements.cc.value,subject=form.elements.subject.value;
-        mailRecipientAddresses(to);
-        mailRecipientAddresses(cc);
-        report('Creating draft in Outlook…');
-        const result=await createOutlookDraft({to,cc,subject,body:cleanBody(editor.innerHTML)});
-        created=true;
-        showLink('Open Outlook draft',result.url);
-        report('Draft created with To, CC and the formatted table. Review it in Outlook and attach the voucher PDF.');
-      }catch(error){
-        if(error.code===428&&error.detail?.connectOutlook){
-          showLink('Connect Outlook',outlookConnectUrl);
-          report('Connect your Microsoft 365 account, then return here and select Create Outlook draft again.');
-        }else report(error.message,true);
-      }finally{draftButton.disabled=created;}
-    };
-  }
   dialog.querySelector('[data-close-mail]').onclick=()=>dialog.close();
   dialog.addEventListener('close',()=>{dialog.remove();if(trigger.isConnected)trigger.focus();},{once:true});
   trigger.parentElement.append(dialog);
@@ -151,7 +116,7 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipien
   if(loadRecipients){
     const edited=new Set();
     for(const field of ['to','cc'])form.elements[field].addEventListener('input',()=>edited.add(field));
-    const recipientActions=form.querySelectorAll('[data-outlook],[data-copy-voucher-cc],[data-create-outlook-draft]');
+    const recipientActions=form.querySelectorAll('[data-outlook],[data-copy-voucher-cc]');
     recipientActions.forEach(button=>{button.disabled=true;});
     report('Loading default recipients…');
     void Promise.resolve().then(loadRecipients).then(defaults=>{
