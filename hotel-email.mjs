@@ -27,6 +27,11 @@ export function cleanBody(html, values, availableFields=fields) {
         element.style.cssText='border:1px solid #64748b;padding:4px 8px;';
       }
       if (node.tagName === 'TABLE') element.style.borderCollapse='collapse';
+      if (node.classList.contains('hfo-ctm-highlight')) element.style.backgroundColor='#fff275';
+      if (node.classList.contains('hfo-ctm-total')) {
+        element.style.color='#a61d24';
+        element.style.fontWeight='bold';
+      }
       if (node.classList.contains('hfo-permit-email-layout')) {
         element.className='hfo-permit-email-layout';
         element.style.cssText='font:13px/1.4 Arial,sans-serif;color:#111;';
@@ -73,21 +78,22 @@ export function outlookUrl({to,cc,subject,body}) {
   return url.href;
 }
 
-export function createMailComposer({templateLabel, availableFields, templateHelp, templateExtra='', footerExtra='', bodyExtra='', outlookAttribute='data-outlook'}) {
+export function createMailComposer({templateLabel, availableFields, templateHelp, templateExtra='', footerExtra='', bodyExtra='', fieldsExtra='', outlookAttribute='data-outlook'}) {
   const dialog = document.createElement('dialog');
   dialog.className='hfo-hotel-mail';
   dialog.setAttribute('aria-labelledby','hotelEmailTitle');
   dialog.innerHTML=`<header><div><h2 id="hotelEmailTitle">Compose Email</h2><p data-branch></p></div><button type="button" class="hfo-btn" data-close-mail>Close</button></header>
     <p role="status" data-mail-notice>Loading email…</p>
     <form hidden>
-      <div class="hfo-mail-templates">
+      ${templateLabel?`<div class="hfo-mail-templates">
         <label>${templateLabel}<select name="template"></select></label>
         <button type="button" class="hfo-btn" data-use>Use template</button>
         <small data-branch-hint></small>
-      </div>
+      </div>`:''}
       <label class="hfo-mail-line"><span>To</span><input name="to" maxlength="2000" placeholder="Separate addresses with ;"></label>
       <label class="hfo-mail-line"><span>CC</span><input name="cc" maxlength="2000" placeholder="Separate addresses with ;"></label>
       <label class="hfo-mail-line"><span>Subject</span><input name="subject" maxlength="500"></label>
+      ${fieldsExtra}
       <div class="hfo-mail-body">
         <div class="hfo-mail-tools" role="group" aria-label="Format body">
           <button type="button" data-format="bold" aria-label="Bold"><b>B</b></button>
@@ -96,19 +102,19 @@ export function createMailComposer({templateLabel, availableFields, templateHelp
           <button type="button" data-format="insertUnorderedList">Bullets</button>
           <button type="button" data-format="insertOrderedList">Numbering</button>
           <button type="button" data-format="createLink">Link</button>
-          <select data-field aria-label="Template field">${Object.entries(availableFields).map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select>
-          <button type="button" data-insert>Insert field</button>${bodyExtra}
+          ${availableFields?`<select data-field aria-label="Template field">${Object.entries(availableFields).map(([key,label])=>`<option value="${key}">${label}</option>`).join('')}</select>
+          <button type="button" data-insert>Insert field</button>`:''}${bodyExtra}
         </div>
         <div class="hfo-mail-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Body"></div>
       </div>
-      <details data-manage hidden><summary>Manage templates</summary>
+      ${templateLabel?`<details data-manage hidden><summary>Manage templates</summary>
         <label>Template name<input name="templateName" maxlength="120"></label>${templateExtra}
         <small>${templateHelp}</small>
         <div class="hfo-actions"><button type="button" class="hfo-btn" data-template-action="create">Save as new</button>
         <button type="button" class="hfo-btn" data-template-action="load">Load for editing</button>
         <button type="button" class="hfo-btn" data-template-action="update">Update selected</button>
         <button type="button" class="hfo-btn danger" data-template-action="remove">Delete selected</button></div>
-      </details>
+      </details>`:''}
       <footer>${footerExtra}
         <button type="button" class="hfo-btn" data-copy>Copy formatted body</button>
         <button type="button" class="hfo-btn primary" ${outlookAttribute}>Open Outlook</button></footer>

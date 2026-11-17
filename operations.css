@@ -405,6 +405,10 @@
 .hfo-mail-tools select { width: auto; }
 .hfo-mail-editor { min-height: 210px; max-height: 50vh; overflow: auto; overflow-wrap: anywhere; padding: 12px; font: 15px/1.4 Arial,sans-serif; }
 .hfo-mail-editor p { margin: 0 0 .7em; }
+.hfo-mail-editor .hfo-ctm-highlight { background:#fff275; }
+.hfo-mail-editor .hfo-ctm-total { color:#a61d24; font-weight:700; }
+.hfo-mail-editor [aria-label$="denominations"] { border-collapse:collapse; margin-bottom:.7em; }
+.hfo-mail-editor [aria-label$="denominations"] :is(th,td) { border:1px solid #64748b; padding:4px 8px; }
 @media (max-width: 540px) {
   .hfo-hotel-mail { padding-inline: 12px; }
   .hfo-mail-line { grid-template-columns: 62px minmax(0, 1fr); }
