@@ -498,6 +498,18 @@
 .hfo-file-tools .hfo-btn:not(.primary):hover { background:#28505c; }
 .hfo-file-tools .hfo-btn.primary { background:#b9e8dd; color:#0f453d; border-color:#b9e8dd; font-weight:700; }
 .hfo-file-tools .hfo-btn.primary:hover { background:#d8f7ef; }
+.hfo-file-onedrive { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+.hfo-file-onedrive:has(> :not([hidden])) { margin-left:auto; }
+.hfo-file-onedrive [data-open-onedrive] { background:#e8f4ff; border-color:#b8d7ed; color:#184c77; font-weight:650; }
+.hfo-file-onedrive [data-open-onedrive][hidden] { display:none; }
+.hfo-file-onedrive [data-set-onedrive] { background:transparent; color:#e5f3f5; border-color:#62808b; }
+.hfo-file-selection:not([hidden]) { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 16px; background:#eaf5f3; }
+.hfo-file-selection [data-selected-count] { color:#125b54; font-weight:650; }
+.hfo-file-select-name { display:flex; align-items:center; min-width:0; gap:4px; }
+.hfo-file-select-name .hfo-file-name { min-width:0; }
+.hfo-file-pick { display:grid; place-items:center; flex:none; width:32px; min-height:36px; cursor:pointer; }
+.hfo-file-pick input { width:18px; height:18px; accent-color:#107a72; }
+.hfo-file-tile:has([data-pick-file]:checked) { background:#eaf8f4; border-color:#7bb9ae; }
 .hfo-file-sync:not([hidden]) { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 16px; background:#edf5f5; }
 .hfo-file-sync p { margin:0; font-size:.85rem; overflow-wrap:anywhere; }
 .hfo-file-filter { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:11px 16px; border-bottom:1px solid var(--file-border); font-size:.86rem; }
@@ -593,6 +605,7 @@
   .hfo-file-row-actions { padding-left:0; }
   .hfo-file-controls [data-file-view] { padding-inline:6px; }
   .hfo-file-controls .hfo-file-icon-action { width:28px; min-height:44px; }
+  .hfo-file-controls [data-file-share],.hfo-file-pick { width:44px; min-height:44px; }
   .hfo-file-tile { padding:6px; }
 }
 .hfo-job-file-view { box-sizing:border-box; width:min(880px,calc(100% - 24px)); max-height:90vh; border:1px solid #dbe3ed; border-radius:12px; padding:16px; color:#10233d; }

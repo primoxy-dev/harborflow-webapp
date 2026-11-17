@@ -15,6 +15,18 @@ test('vessel type is validated for the calendar icon', () => {
   assert.match(validateJob({ ...base, vesselType: 'Unknown warship' }), /vessel type/i);
 });
 
+test('OneDrive folder links require HTTPS and stay out of the public Job response', () => {
+  const base = { status: 'Open', vessel: 'Demo', port: 'Map Ta Phut', eta: '2026-10-15T23:45' };
+  for (const link of ['https://1drv.ms/f/synthetic', 'https://demo-my.sharepoint.com/personal/demo/Documents/Job', 'https://onedrive.live.com/?id=demo', '']) {
+    const data = { ...base, oneDriveFolderUrl: link };
+    assert.equal(validateJob(data), null);
+    assert.equal('oneDriveFolderUrl' in publicJob({ id: 'j1', data }).data, false);
+  }
+  for (const link of ['https://demo.sharepoint.com.invalid/Job', 'http://onedrive.live.com/', 'https://user@onedrive.live.com/', 'javascript:alert(1)']) {
+    assert.match(validateJob({ ...base, oneDriveFolderUrl: link }), /OneDrive folder link/);
+  }
+});
+
 test('Draft may omit Job No.; Planned and Confirmed enforce milestones', () => {
   assert.equal(validateJob({ status: 'Draft' }), null);
   assert.match(validateJob({ status: 'Planned', vessel: 'Demo' }), /Vessel, port and ETA/);
