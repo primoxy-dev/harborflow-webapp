@@ -498,11 +498,8 @@
 .hfo-file-tools .hfo-btn:not(.primary):hover { background:#28505c; }
 .hfo-file-tools .hfo-btn.primary { background:#b9e8dd; color:#0f453d; border-color:#b9e8dd; font-weight:700; }
 .hfo-file-tools .hfo-btn.primary:hover { background:#d8f7ef; }
-.hfo-file-onedrive { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
-.hfo-file-onedrive:has(> :not([hidden])) { margin-left:auto; }
+.hfo-file-onedrive { display:flex; align-items:center; margin-left:auto; }
 .hfo-file-onedrive [data-open-onedrive] { background:#e8f4ff; border-color:#b8d7ed; color:#184c77; font-weight:650; }
-.hfo-file-onedrive [data-open-onedrive][hidden] { display:none; }
-.hfo-file-onedrive [data-set-onedrive] { background:transparent; color:#e5f3f5; border-color:#62808b; }
 .hfo-file-selection:not([hidden]) { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 16px; background:#eaf5f3; }
 .hfo-file-selection [data-selected-count] { color:#125b54; font-weight:650; }
 .hfo-file-select-name { display:flex; align-items:center; min-width:0; gap:4px; }
