@@ -475,7 +475,9 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
     }
   };
   const compose=host.querySelector('[data-voucher-email]');
-  compose.onclick=()=>openVoucherEmail({job,draft,trigger:compose,downloadVoucher});
+  compose.onclick=()=>openVoucherEmail({job,draft,trigger:compose,downloadVoucher,
+    ...(editable?{loadRecipients:()=>api('voucherMailDefaults',{serviceId:service.id},'GET')}:{})
+  });
   renderLines();
   draw(preview);
 }
