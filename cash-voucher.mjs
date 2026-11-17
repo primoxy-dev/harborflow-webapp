@@ -1,4 +1,5 @@
 import { amountInCents, banknoteDenominations, banknoteRows, calculateCtmPricing, ctmCurrencies, ctmFeeLabels, defaultCtmPricing, emptyBanknotes, validateCashVoucher, validateCtmPricing, voucherDueDateField, voucherFields, voucherLineFields, voucherRowLimit } from './lib/cash-voucher.mjs';
+import { openVoucherEmail } from './voucher-mail.mjs';
 
 const width = 612, height = 792;
 const defaultApprover = 'Mr. Jarun Soisuwan';
@@ -341,6 +342,7 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
   host.innerHTML = `
     <div class="hfo-toolbar"><h3>Payment Voucher</h3><div class="hfo-actions">
       ${editable ? '<button type="button" class="hfo-btn" data-voucher-save>Save voucher</button>' : ''}
+      <button type="button" class="hfo-btn" data-voucher-email>Compose Email</button>
       <button type="button" class="hfo-btn primary" data-voucher-download>Download PDF</button>
     </div></div>
     <p role="status" data-voucher-status class="hfo-muted">${saved || !editable ? '' : 'Fill in the voucher and save it to this Service.'}</p>
@@ -449,26 +451,31 @@ export async function mountCashVoucher(host, { job, service, editable, api }) {
       save.disabled = false;
     }
   };
-  download.onclick = () => {
+  function downloadVoucher() {
     const invalid = validateCashVoucher({header: draft.header, lines: draft.lines, banknotes: draft.banknotes});
-    if (invalid) return report(invalid, true);
+    if (invalid) throw Error(invalid);
+    const canvas = document.createElement('canvas');
+    draw(canvas, true);
+    const blob = pdf.fromCanvases([canvas], { width, height });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const suffix = (draft.header.number || jobNo || job.data.vessel || '').replace(/[<>:"/\\|?*\x00-\x1F]+/g, '-').trim();
+    link.download = 'PAYMENT VOUCHER' + (suffix ? ' - ' + suffix : '') + '.pdf';
+    host.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+  download.onclick = () => {
     try {
-      const canvas = document.createElement('canvas');
-      draw(canvas, true);
-      const blob = pdf.fromCanvases([canvas], { width, height });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const suffix = (draft.header.number || jobNo || job.data.vessel || '').replace(/[<>:"/\\|?*\x00-\x1F]+/g, '-').trim();
-      link.download = 'PAYMENT VOUCHER' + (suffix ? ' - ' + suffix : '') + '.pdf';
-      host.append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      downloadVoucher();
     } catch (error) {
       report(error.message, true);
     }
   };
+  const compose=host.querySelector('[data-voucher-email]');
+  compose.onclick=()=>openVoucherEmail({job,draft,trigger:compose,downloadVoucher});
   renderLines();
   draw(preview);
 }
