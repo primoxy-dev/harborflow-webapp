@@ -1,5 +1,11 @@
+import { bindMailEditor, cleanBody, createMailComposer, outlookUrl } from './hotel-email.mjs';
+import { mailRecipientAddresses } from './lib/mail-recipients.mjs';
+
 const pageWidth = 612, pageHeight = 792, scale = 3.5;
 const defaultHospital = 'โรงพยาบาลกรุงเทพระยอง';
+const defaultHospitalEnglish = 'Bangkok Rayong Hospital';
+const referralTo = 'BRH Information <Information.rayong@bangkokhospital.com>; BRH Customer Service Department <brhrcpt@brh.co.th>';
+const referralCc = 'shipping.thailand@gac.com; Success Thailand <success.thailand@success-th.com>';
 const contactFields = ['signatory', 'position', 'phone'];
 const thaiDateFormat = new Intl.DateTimeFormat('th-TH', {
   year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC'
@@ -7,10 +13,92 @@ const thaiDateFormat = new Intl.DateTimeFormat('th-TH', {
 const englishDateFormat = new Intl.DateTimeFormat('en-GB', {
   year: 'numeric', month: 'short', day: '2-digit', timeZone: 'UTC'
 });
+const emailDateFormat = new Intl.DateTimeFormat('en-GB', {
+  year: '2-digit', month: 'short', day: 'numeric', timeZone: 'UTC'
+});
 
 function letterDate(value, format = thaiDateFormat) {
   const date = new Date(value + 'T00:00:00Z');
   return Number.isNaN(date.valueOf()) ? '' : format.format(date);
+}
+
+function openReferralEmail(fields, trigger, downloadLetter) {
+  const hospital = fields.hospital.trim();
+  const isBangkokRayong = hospital === defaultHospital ||
+    hospital.toLowerCase() === defaultHospitalEnglish.toLowerCase();
+  const date = letterDate(fields.appointmentDate, emailDateFormat).replace('Sept', 'Sep').toUpperCase();
+  const vessel = fields.vessel.trim().toUpperCase();
+  const person = fields.personName.trim().toUpperCase();
+  const dialog = createMailComposer({
+    footerExtra: '<button class="hfo-btn" type="button" data-email-letter-pdf>Download PDF</button>' +
+      '<button class="hfo-btn" type="button" data-copy-referral-cc>Copy CC</button>'
+  });
+  const form = dialog.querySelector('form');
+  const notice = dialog.querySelector('[data-mail-notice]');
+  const { editor } = bindMailEditor(form);
+  function report(message, error = false) {
+    notice.textContent = message;
+    notice.classList.toggle('hfo-alert', error);
+  }
+  dialog.querySelector('[data-branch]').textContent = ['Referral Letter', vessel].filter(Boolean).join(' · ');
+  form.elements.to.value = isBangkokRayong ? referralTo : '';
+  form.elements.cc.value = referralCc;
+  form.elements.subject.value = (vessel || '[VESSEL]') + ': MEDICAL VISIT APPOINTMENT FOR ' +
+    (person || '[PATIENT NAME]') + ' ON ' + (date || '[APPOINTMENT DATE]');
+  for (const line of [
+    'Dear ' + (isBangkokRayong ? defaultHospitalEnglish : hospital || '[Hospital]') + ',',
+    'Please find the attached referral letter and kindly arrange the medical visit on ' + (date || '[Appointment date]') + '.',
+    "Please confirm the appointment and send us the doctor's certificate in English as soon as the visit is complete."
+  ]) {
+    const paragraph = document.createElement('p');
+    paragraph.textContent = line;
+    editor.append(paragraph);
+  }
+  form.hidden = false;
+  form.onsubmit = event => event.preventDefault();
+  const missing = [!vessel && 'vessel', !person && 'patient name', !date && 'appointment date', !isBangkokRayong && 'To'].filter(Boolean);
+  const attachmentHint = 'Download the referral letter PDF and attach it in Outlook.';
+  report((missing.length ? 'Complete the missing fields before sending (' + missing.join(', ') + '). ' : '') + attachmentHint);
+  form.addEventListener('mail-format-error', event => report(event.detail, true));
+  form.querySelector('[data-email-letter-pdf]').onclick = () => downloadLetter(report);
+  form.querySelector('[data-copy-referral-cc]').onclick = async () => {
+    try {
+      const addresses = mailRecipientAddresses(form.elements.cc.value).join('; ');
+      if (!addresses) { report('The CC field is empty.'); return; }
+      await navigator.clipboard.writeText(addresses);
+      report('CC copied. Paste it into the CC field in Outlook.');
+    } catch {
+      form.elements.cc.select();
+      report('Check the CC addresses, or copy them directly from the CC field.', true);
+    }
+  };
+  form.querySelector('[data-copy]').onclick = async () => {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({
+        'text/html': new Blob([cleanBody(editor.innerHTML)], { type: 'text/html' }),
+        'text/plain': new Blob([editor.innerText], { type: 'text/plain' })
+      })]);
+      report('Formatted body copied. Paste it into Outlook.');
+    } catch { report('Select and copy the body directly to keep its formatting.', true); }
+  };
+  form.querySelector('[data-outlook]').onclick = () => {
+    try {
+      const to = mailRecipientAddresses(form.elements.to.value).join(';');
+      if (!to) { form.elements.to.focus(); report('Enter a To address for this hospital.', true); return; }
+      const cc = mailRecipientAddresses(form.elements.cc.value).join(';');
+      const subject = form.elements.subject.value;
+      const body = editor.innerText;
+      let url = outlookUrl({ to, cc, subject });
+      try { url = outlookUrl({ to, cc, subject, body }); }
+      catch (error) { if (!window.confirm(error.message + ' Open Outlook with recipients and subject?')) return; }
+      window.open(url, '_blank', 'noopener,noreferrer');
+      report('If Outlook leaves CC blank, use Copy CC. ' + attachmentHint);
+    } catch (error) { report(error.message, true); }
+  };
+  dialog.querySelector('[data-close-mail]').onclick = () => dialog.close();
+  dialog.addEventListener('close', () => { dialog.remove(); if (trigger.isConnected) trigger.focus(); }, { once: true });
+  trigger.parentElement.append(dialog);
+  dialog.showModal();
 }
 
 function drawLetter(ctx, fields, drawLogo, signature) {
@@ -97,6 +185,7 @@ export async function mountReferralLetter(host, { job, service, editable, login 
   };
   host.innerHTML = `
     <div class="hfo-toolbar"><h3>Referral Letter</h3><div class="hfo-actions">
+      <button class="hfo-btn" type="button" data-referral-email>Compose Email</button>
       <button class="hfo-btn" type="button" data-referral-save-as>Save as</button>
       <button class="hfo-btn primary" type="button" data-referral-download>Download PDF</button>
     </div></div>
@@ -182,8 +271,8 @@ export async function mountReferralLetter(host, { job, service, editable, login 
     refreshPreview();
   });
   const saveAsButton = host.querySelector('[data-referral-save-as]');
-  async function exportLetter(saveAs) {
-    status.textContent = '';
+  async function exportLetter(saveAs, report = message => { status.textContent = message; }) {
+    report('');
     const vessel = fields.vessel.replace(/[<>:"/\\|?*\x00-\x1F]+/g, '-').trim();
     const name = 'REFERRAL LETTER' + (vessel ? ' - ' + vessel : '') + '.pdf';
     let handle;
@@ -204,15 +293,17 @@ export async function mountReferralLetter(host, { job, service, editable, login 
       render(canvas, true);
       const blob = pdf.fromCanvases([canvas], { width: pageWidth, height: pageHeight });
       await window.HarborFlowOktbPdf.saveLivePdf(blob, name, handle);
-      if (saveAs) status.textContent = handle ? 'PDF saved.' : 'PDF download started.';
+      report(handle ? 'PDF saved.' : 'PDF download started.');
     } catch (error) {
-      status.textContent = error.message;
+      report(error.message, true);
     } finally {
       if (saveAs) saveAsButton.disabled = false;
     }
   }
   saveAsButton.onclick = () => { void exportLetter(true); };
   host.querySelector('[data-referral-download]').onclick = () => { void exportLetter(false); };
+  const composeButton = host.querySelector('[data-referral-email]');
+  composeButton.onclick = () => openReferralEmail(fields, composeButton, report => exportLetter(false, report));
   render(preview);
   const documents = window.HarborFlowDocuments;
   const contactInputs = contactFields.map(name => form.elements.namedItem(name));
