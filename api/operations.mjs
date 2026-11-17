@@ -6,7 +6,7 @@ import { nodeHandler, gh, json, readJson, safeName, sameOrigin, sessionLogin } f
 import { documentsFolder, moveJobFolder } from '../lib/job-folders.mjs';
 import { OWNER, TRIP_KINDS, canEditJob, canEditService, canPeople, db, fieldConflicts, permission, publicJob, publicService, textField, uuid, validateJob, validateService } from '../lib/operations.mjs';
 
-const jobFields = ['jobNo', 'vessel', 'vesselType', 'imo', 'port', 'principal', 'eta', 'etd', 'status', 'pic', 'notes', 'terminalStays', 'completionReason'];
+const jobFields = ['jobNo', 'vessel', 'vesselType', 'imo', 'port', 'principal', 'eta', 'etd', 'status', 'pic', 'notes', 'terminalStays', 'completionReason', 'oneDriveFolderUrl'];
 const serviceFields = ['type', 'status', 'description', 'pic', 'supplier', 'plannedStart', 'plannedEnd', 'actualStart', 'actualEnd', 'planConfirmed', 'supplierConfirmed', 'terminalCondition', 'terminalConfirmation', 'restrictionReason', 'details', 'checklist', 'sopVersion', 'baselineDue', 'deadlineReason', 'notes'];
 const personFields = ['kind', 'category', 'name', 'nationality', 'rank', 'dob', 'passport', 'passportExpiry', 'seamanBook', 'seamanBookExpiry', 'documentChecks', 'immigration', 'flights', 'serviceIds', 'notes'];
 const tripFields = ['kind', 'origin', 'originName', 'originAddress', 'destination', 'destinationName', 'destinationAddress', 'originLat', 'originLon', 'destinationLat', 'destinationLon', 'plannedDeparture', 'plannedArrival', 'actualDeparture', 'actualArrival', 'routeDistanceMeters', 'routeDurationSeconds', 'provider', 'vehicle', 'purpose', 'status', 'personIds', 'cargo', 'cargoItems', 'notes'];
@@ -87,7 +87,9 @@ async function patchRow(sql, table, id, scope, base, patch, actor, validate, rea
 }
 async function patchJobWithFolder(sql, job, patch, base, actor, reason = '') {
   const merged = { ...job.data, ...patch };
-  if (!job.data.documentsPath) return patchRow(sql, 'operation_jobs', job.id, 'job', base, patch, actor, validateJob, reason);
+  if (!job.data.documentsPath || (Object.keys(patch).length === 1 && 'oneDriveFolderUrl' in patch)) {
+    return patchRow(sql, 'operation_jobs', job.id, 'job', base, patch, actor, validateJob, reason);
+  }
   if (!textField(merged.vessel) || !textField(merged.jobNo) || !merged.eta) return error('Vessel, Job No. and ETA are required while the GitHub folder exists');
   const nextFolder = documentsFolder(merged);
   if (nextFolder === job.data.documentsPath) return patchRow(sql, 'operation_jobs', job.id, 'job', base, patch, actor, validateJob, reason);

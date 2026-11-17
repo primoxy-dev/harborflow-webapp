@@ -1,9 +1,11 @@
 import {createJobFileSync,gitBlobSha} from './job-file-sync.mjs';
+import {oneDriveFolderLink} from './lib/onedrive-link.mjs';
 
 const escape=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const join=(path,name)=>path?path+'/'+name:name;
 const maximumBytes=3000000;
 const fileActionIcons={
+  Share:'<path d="M12 15V3m-4 4 4-4 4 4M5 11v9h14v-9"/>',
   Replace:'<path d="M12 16V4m-4 4 4-4 4 4M5 15v5h14v-5"/>',
   Rename:'<path d="m13 5 4 4M4 20l4.5-1 11-11a2.8 2.8 0 0 0-4-4l-11 11L4 20Z"/>',
   Delete:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/>'
@@ -14,6 +16,11 @@ const previewTypes=new Map(Object.entries({
   webp:'image/webp', bmp:'image/bmp', avif:'image/avif',
   txt:'text/plain', csv:'text/plain', tsv:'text/plain', log:'text/plain', md:'text/plain',
   json:'text/plain', xml:'text/plain', html:'text/plain', svg:'text/plain'
+}));
+const officeShareTypes=new Map(Object.entries({
+  docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation'
 }));
 const fileSize=bytes=>bytes<1000?bytes+' B':bytes<1000000?(bytes/1000).toFixed(1)+' KB':(bytes/1000000).toFixed(1)+' MB';
 const fileViews=new Map([
@@ -29,8 +36,12 @@ const encodeFile=file=>new Promise((resolve,reject)=>{
   reader.readAsDataURL(file);
 });
 
-export async function mountJobFiles(host,{jobId,login,api}) {
+export async function mountJobFiles(host,{jobId,login,api,folderUrl,saveFolderUrl}) {
   let path='',entries=[],busy=false,loaded=false;
+  let selecting=false;
+  const selected=new Set(), prepared=new Map();
+  const shareAvailable=typeof navigator.share==='function'&&typeof navigator.canShare==='function'
+    &&navigator.canShare({files:[new File(['a'],'file.txt',{type:'text/plain'})]});
   const sync=login&&typeof window.showDirectoryPicker==='function'&&navigator.locks&&window.indexedDB
     ?createJobFileSync(login,jobId):null;
   let linked=null,replacement=null;
@@ -44,6 +55,10 @@ export async function mountJobFiles(host,{jobId,login,api}) {
   host.innerHTML=`<div class="hfo-file-browser">
     <div class="hfo-file-command">
       <nav data-file-path aria-label="File location"></nav>
+      <div class="hfo-file-onedrive">
+        <a class="hfo-btn hfo-onedrive-link" data-open-onedrive rel="noopener noreferrer" hidden>Open OneDrive</a>
+        ${saveFolderUrl?'<button class="hfo-btn" type="button" data-set-onedrive>Set OneDrive folder</button>':''}
+      </div>
       <div class="hfo-file-tools">
         <button class="hfo-btn" type="button" data-new-folder>New folder</button>
         <button class="hfo-btn primary" type="button" data-upload-files><span aria-hidden="true">↑</span> Upload files</button>
@@ -57,12 +72,20 @@ export async function mountJobFiles(host,{jobId,login,api}) {
       <div data-file-count role="status" class="hfo-muted"></div>
       <div class="hfo-file-filter-actions">
         <input type="search" data-file-search aria-label="Search this folder" placeholder="Search this folder">
+        <button class="hfo-btn" type="button" data-select-files aria-pressed="false">Select files</button>
         <details class="hfo-file-display">
           <summary class="hfo-btn" aria-label="View options"><span aria-hidden="true">☰</span> View <span aria-hidden="true">⌄</span></summary>
           <div class="hfo-file-display-options" role="group" aria-label="File layout">
             ${[...fileViews].map(([mode,label])=>`<button type="button" data-file-layout="${mode}" aria-pressed="${mode===view}"><span aria-hidden="true">${['extra-large','large','medium','small'].includes(mode)?'▦':'☷'}</span>${label}</button>`).join('')}
           </div>
         </details>
+      </div>
+    </div>
+    <div class="hfo-file-selection" data-selection-bar hidden>
+      <span data-selected-count role="status"></span>
+      <div class="hfo-actions">
+        <button class="hfo-btn" type="button" data-select-all>Select all</button>
+        <button class="hfo-btn primary" type="button" data-share-selected>${shareAvailable?'Share selected':'Download selected'}</button>
       </div>
     </div>
     ${sync?`<div class="hfo-file-sync" data-auto-sync-status hidden>
@@ -96,6 +119,77 @@ export async function mountJobFiles(host,{jobId,login,api}) {
   const status=host.querySelector('[data-file-status]');
   const fileInput=host.querySelector('[data-file-input]');
   const report=(message,error=false)=>{status.textContent=message;status.classList.toggle('hfo-alert',error);};
+  function renderFolderLink() {
+    const link=host.querySelector('[data-open-onedrive]');
+    const url=oneDriveFolderLink(folderUrl);
+    link.hidden=!url;
+    if(url)link.href=url;else link.removeAttribute('href');
+    const edit=host.querySelector('[data-set-onedrive]');
+    if(edit)edit.textContent=url?'Edit link':'Set OneDrive folder';
+  }
+  renderFolderLink();
+  function filteredEntries() {
+    const query=search.value.trim().toLocaleLowerCase();
+    return entries.map((entry,index)=>({entry,index})).filter(({entry})=>entry.name.toLocaleLowerCase().includes(query));
+  }
+  function updateSelection() {
+    host.querySelector('[data-selection-bar]').hidden=!selecting;
+    const toggle=host.querySelector('[data-select-files]');
+    toggle.textContent=selecting?'Cancel':'Select files';
+    toggle.setAttribute('aria-pressed',String(selecting));
+    host.querySelector('[data-selected-count]').textContent=selected.size+' selected';
+    const visible=filteredEntries().filter(({entry})=>entry.kind==='file');
+    const all=host.querySelector('[data-select-all]');
+    all.disabled=busy||!visible.length;
+    all.textContent=visible.length&&visible.every(({entry})=>selected.has(entry))?'Clear shown':'Select all';
+    host.querySelector('[data-share-selected]').disabled=busy||!selected.size;
+  }
+  function prepareShare(entry) {
+    if(!prepared.has(entry)){
+      const filePath=join(path,entry.name);
+      const pending=fetch(download(filePath),{credentials:'same-origin'}).then(async response=>{
+        if(!response.ok)throw Error('Could not load '+entry.name+'.');
+        const blob=await response.blob();
+        if(entry.sha&&await gitBlobSha(blob)!==entry.sha)throw Error(entry.name+' changed. Refresh and try again.');
+        const extension=entry.name.split('.').at(-1).toLowerCase();
+        return new File([blob],entry.name,{type:previewTypes.get(extension)||officeShareTypes.get(extension)||blob.type});
+      });
+      prepared.set(entry,pending);
+      pending.catch(()=>{if(prepared.get(entry)===pending)prepared.delete(entry);});
+    }
+    return prepared.get(entry);
+  }
+  function downloadSelection(files) {
+    const dialog=document.createElement('dialog');
+    dialog.className='hfo-msg-preview';
+    dialog.setAttribute('aria-label','Download selected files');
+    dialog.innerHTML=`<form method="dialog" class="hfo-toolbar"><h3>Download selected files</h3><button class="hfo-btn">Close</button></form>
+      <ul>${files.map(entry=>`<li><a href="${escape(download(join(path,entry.name)))}" download="${escape(entry.name)}">${escape(entry.name)}</a></li>`).join('')}</ul>`;
+    host.append(dialog);
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    dialog.showModal();
+  }
+  async function shareFiles(files) {
+    if(!files.length)return;
+    if(!shareAvailable){downloadSelection(files);return;}
+    try{
+      const outgoing=[];
+      for(const entry of files)outgoing.push(await prepareShare(entry));
+      const data={files:outgoing};
+      if(!host.isConnected)return;
+      if(!navigator.canShare(data)){downloadSelection(files);report('This device cannot share these files together. You can download them instead.');return;}
+      if(navigator.userActivation&&!navigator.userActivation.isActive){
+        report('Files ready. Tap Share again.');
+        return;
+      }
+      await navigator.share(data);
+      report('');
+    }catch(error){
+      if(error.name==='AbortError'){report('');return;}
+      if(error.name==='NotAllowedError'||error.name==='DataError'){downloadSelection(files);report('Sharing was unavailable. You can download the files instead.');return;}
+      throw error;
+    }
+  }
   async function showSyncState(problem='') {
     if(!sync)return;
     linked=await sync.read();
@@ -141,13 +235,17 @@ export async function mountJobFiles(host,{jobId,login,api}) {
     await showSyncState();
   }
   function controls() {
-    host.querySelectorAll('[data-new-folder],[data-upload-files],[data-copy-onedrive],[data-file-open],[data-file-view],[data-file-rename],[data-file-delete],[data-file-replace],[data-file-level],[data-refresh-files],[data-auto-sync],[data-retry-sync],[data-clear-sync]').forEach(button=>{
+    host.querySelectorAll('[data-new-folder],[data-upload-files],[data-copy-onedrive],[data-file-open],[data-file-view],[data-file-rename],[data-file-delete],[data-file-replace],[data-file-share],[data-file-level],[data-refresh-files],[data-auto-sync],[data-retry-sync],[data-clear-sync],[data-select-files],[data-set-onedrive]').forEach(button=>{
       button.disabled=busy||(!loaded&&!button.hasAttribute('data-refresh-files'));
     });
+    rows.querySelectorAll('[data-pick-file]').forEach(input=>{input.disabled=busy;});
+    updateSelection();
   }
   async function refresh(next=path) {
     const nextEntries=await list(next);
-    if(path!==next)search.value='';
+    if(path!==next){search.value='';selecting=false;}
+    selected.clear();
+    prepared.clear();
     path=next;
     entries=nextEntries.sort((a,b)=>a.kind===b.kind?a.name.localeCompare(b.name):a.kind==='folder'?-1:1);
     const parts=path?path.split('/'):[];
@@ -157,7 +255,7 @@ export async function mountJobFiles(host,{jobId,login,api}) {
   }
   function renderEntries(){
     const query=search.value.trim().toLocaleLowerCase();
-    const visible=entries.map((entry,index)=>({entry,index})).filter(({entry})=>entry.name.toLocaleLowerCase().includes(query));
+    const visible=filteredEntries();
     const folders=entries.filter(entry=>entry.kind==='folder').length;
     const files=entries.length-folders;
     count.textContent=query?visible.length+' of '+entries.length+' items':folders+' '+(folders===1?'folder':'folders')+' · '+files+' '+(files===1?'file':'files');
@@ -173,12 +271,15 @@ export async function mountJobFiles(host,{jobId,login,api}) {
       const size=folder?'—':fileSize(entry.size||0);
       const actions=folder?'':`<div class="hfo-file-controls">
         <button type="button" class="hfo-btn" data-file-view="${index}" aria-label="View ${name}">View</button>
+        ${shareAvailable?fileIconButton('Share',index,name):''}
         ${entry.sha?fileIconButton('Rename',index,name)+fileIconButton('Replace',index,name)+fileIconButton('Delete',index,name):''}
       </div>`;
       const drag=folder?'':` draggable="true" data-file-drag="${index}"`;
-      if(view==='details')return `<tr${drag}><td>${title}</td><td class="hfo-file-type">${type}</td><td>${size}</td><td>${actions}</td></tr>`;
+      const pick=selecting&&!folder?`<label class="hfo-file-pick"><input type="checkbox" data-pick-file="${index}" aria-label="Select ${name}" ${selected.has(entry)?'checked':''}></label>`:'';
+      const heading=pick?`<div class="hfo-file-select-name">${pick}${title}</div>`:title;
+      if(view==='details')return `<tr${drag}><td>${heading}</td><td class="hfo-file-type">${type}</td><td>${size}</td><td>${actions}</td></tr>`;
       const metadata=folder?type:view==='content'?type+' · '+size:size;
-      return `<li class="hfo-file-tile"${drag}>${title}<div class="hfo-file-row-actions"><small>${metadata}</small>${actions}</div></li>`;
+      return `<li class="hfo-file-tile"${drag}>${heading}<div class="hfo-file-row-actions"><small>${metadata}</small>${actions}</div></li>`;
     }).join('');
     rows.innerHTML=!items?`<p class="hfo-file-empty hfo-muted">${query?'No files or folders match your search.':'This folder is empty.'}</p>`
       :view==='details'?`<table class="hfo-file-details" aria-label="Folder contents"><thead><tr><th scope="col">Name</th><th scope="col" class="hfo-file-type">Type</th><th scope="col">Size</th><th scope="col">Actions</th></tr></thead><tbody>${items}</tbody></table>`
@@ -186,6 +287,16 @@ export async function mountJobFiles(host,{jobId,login,api}) {
     controls();
   }
   search.addEventListener('input',renderEntries);
+  rows.addEventListener('change',event=>{
+    const input=event.target;
+    if(!input.hasAttribute('data-pick-file'))return;
+    const entry=entries[Number(input.dataset.pickFile)];
+    if(input.checked){
+      selected.add(entry);
+      if(shareAvailable)void prepareShare(entry);
+    }else{selected.delete(entry);prepared.delete(entry);}
+    updateSelection();
+  });
   async function run(action,{loading='Working…'}={}) {
     if(busy)return;
     busy=true;controls();report(loading);
@@ -396,6 +507,44 @@ export async function mountJobFiles(host,{jobId,login,api}) {
       return;
     }
     if(busy)return;
+    if(button.hasAttribute('data-set-onedrive')){
+      const value=window.prompt('Paste the OneDrive folder link for this Job. Use a link for people with existing access.',folderUrl||'');
+      if(value===null)return;
+      const url=oneDriveFolderLink(value.trim());
+      if(value.trim()&&!url){report('Enter an HTTPS OneDrive or SharePoint link.',true);return;}
+      if(url===(folderUrl||''))return;
+      void run(async()=>{
+        await saveFolderUrl(url,folderUrl||null);
+        folderUrl=url;
+        renderFolderLink();
+        report(url?'OneDrive folder saved.':'OneDrive folder link removed.');
+      });
+      return;
+    }
+    if(button.hasAttribute('data-select-files')){
+      selecting=!selecting;
+      if(!selecting){selected.clear();prepared.clear();}
+      renderEntries();
+      return;
+    }
+    if(button.hasAttribute('data-select-all')){
+      const visible=filteredEntries().map(({entry})=>entry).filter(entry=>entry.kind==='file');
+      const clear=visible.every(entry=>selected.has(entry));
+      for(const entry of visible){
+        if(clear){selected.delete(entry);prepared.delete(entry);}
+        else selected.add(entry);
+      }
+      renderEntries();
+      return;
+    }
+    if(button.hasAttribute('data-share-selected')){
+      void run(()=>shareFiles([...selected]),{loading:'Preparing files…'});
+      return;
+    }
+    if(button.hasAttribute('data-file-share')){
+      void run(()=>shareFiles([entries[Number(button.dataset.fileShare)]]),{loading:'Preparing file…'});
+      return;
+    }
     if(button.hasAttribute('data-auto-sync')){void run(async()=>{await switchSync();report('');});return;}
     if(button.hasAttribute('data-retry-sync')){
       void run(async()=>{
