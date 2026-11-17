@@ -52,7 +52,8 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipien
   const details=voucherMailDetails(job,draft);
   const dialog=createMailComposer({
     fieldsExtra:'<label class="hfo-mail-line"><span>Due time (LT)</span><input name="dueTime" type="time"></label>',
-    footerExtra:'<button type="button" class="hfo-btn" data-email-voucher-pdf>Download PDF</button>'
+    footerExtra:`<button type="button" class="hfo-btn" data-email-voucher-pdf>Download PDF</button>
+      <button type="button" class="hfo-btn" data-copy-voucher-cc>Copy CC</button>`
   });
   const form=dialog.querySelector('form');
   const notice=dialog.querySelector('[data-mail-notice]');
@@ -62,7 +63,7 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipien
   form.elements.subject.value=details.subject;
   editor.innerHTML=voucherEmailBody(details,draft.header.approvedBy);
   form.hidden=false;
-  const hint=[...details.warnings,'Download the voucher and attach it in Outlook.'].join(' ');
+  const hint=[...details.warnings,'Use Copy CC and Copy formatted body when pasting into Outlook. Download the voucher PDF to attach it.'].join(' ');
   report(hint,Boolean(details.warnings.length));
   form.onsubmit=event=>event.preventDefault();
   form.elements.dueTime.oninput=()=>{
@@ -72,6 +73,18 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipien
   form.querySelector('[data-email-voucher-pdf]').onclick=()=>{
     try{downloadVoucher();report('Voucher downloaded. Attach it in Outlook.');}
     catch(error){report(error.message,true);}
+  };
+  form.querySelector('[data-copy-voucher-cc]').onclick=async()=>{
+    try{
+      const cc=mailRecipientAddresses(form.elements.cc.value).join('; ');
+      if(!cc){report('The CC field is empty.');return;}
+      if(!navigator.clipboard?.writeText)throw Error('Copying is unavailable. Select and copy the CC field.');
+      await navigator.clipboard.writeText(cc);
+      report('CC copied. Paste it into the CC field in Outlook.');
+    }catch(error){
+      form.elements.cc.select();
+      report(error.message,true);
+    }
   };
   form.querySelector('[data-outlook]').onclick=()=>{
     const subject=form.elements.subject.value;
@@ -83,7 +96,7 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipien
       try{url=outlookUrl({to,cc,subject,body});}
       catch(error){if(!window.confirm(error.message+' Open Outlook with recipients and subject?'))return;}
       window.open(url,'_blank','noopener,noreferrer');
-      report('Use Copy formatted body to keep the table in Outlook. Attach the downloaded voucher before sending.');
+      report('If Outlook leaves CC blank, paste the list using Copy CC. Replace the plain text with Copy formatted body to keep the table. Attach the downloaded voucher before sending.');
     }catch(error){report(error.message,true);}
   };
   form.querySelector('[data-copy]').onclick=async()=>{
@@ -103,8 +116,8 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipien
   if(loadRecipients){
     const edited=new Set();
     for(const field of ['to','cc'])form.elements[field].addEventListener('input',()=>edited.add(field));
-    const outlook=form.querySelector('[data-outlook]');
-    outlook.disabled=true;
+    const recipientActions=form.querySelectorAll('[data-outlook],[data-copy-voucher-cc]');
+    recipientActions.forEach(button=>{button.disabled=true;});
     report('Loading default recipients…');
     void Promise.resolve().then(loadRecipients).then(defaults=>{
       if(!dialog.open)return;
@@ -112,6 +125,6 @@ export function openVoucherEmail({job,draft,trigger,downloadVoucher,loadRecipien
       report(hint,Boolean(details.warnings.length));
     },()=>{
       if(dialog.open)report('Default recipients could not load. Enter To and CC manually. '+hint,true);
-    }).finally(()=>{outlook.disabled=false;});
+    }).finally(()=>{recipientActions.forEach(button=>{button.disabled=false;});});
   }
 }
