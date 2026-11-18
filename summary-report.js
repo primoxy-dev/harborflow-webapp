@@ -4,8 +4,9 @@
   const label = key => String(key).replace(/([a-z])([A-Z])/g,'$1 $2').replace(/\b\w/g,char=>char.toUpperCase());
   const hasValue = value => value !== null && value !== undefined && value !== '' && (!Array.isArray(value) || value.length > 0);
   const show = value => typeof value === 'boolean' ? (value ? 'Yes' : 'No') : Array.isArray(value) ? value.join(', ') : String(value ?? '');
+  const isScalar = value => ['string','number','boolean'].includes(typeof value);
   const dateTime = value => {
-    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:T| )(\d{2}:\d{2})?/);
+    const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:(?:T| )(\d{2}:\d{2}))?/);
     if (!match) return String(value || '—');
     const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${match[3]} ${months[Number(match[2])-1] || match[2]} ${match[1]}${match[4] ? ' · '+match[4] : ''}`;
@@ -28,7 +29,8 @@
       const source=item.data || {};
       const fields=publicView ? [] : serviceFields.filter(([key])=>hasValue(source[key]))
         .map(([key,name])=>({name,value:dateFields.has(key)?dateTime(source[key]):show(source[key])}));
-      const specifics=publicView ? [] : Object.entries(source.details || {}).filter(([,value])=>hasValue(value))
+      const specifics=publicView ? [] : Object.entries(source.details || {})
+        .filter(([,value])=>hasValue(value)&&(isScalar(value)||Array.isArray(value)&&value.every(isScalar)))
         .map(([key,value])=>({name:label(key),value:show(value)}));
       const checklist=publicView ? [] : (Array.isArray(source.checklist)?source.checklist:[]).map(step=>({
         text:String(step.text||''),done:Boolean(step.done),actor:String(step.actor||''),completedAt:step.completedAt?dateTime(step.completedAt):''
@@ -37,6 +39,7 @@
         id:person.id,kind:person.kind,name:String(person.data?.name||''),category:String(person.data?.category||''),
         nationality:String(person.data?.nationality||''),rank:String(person.data?.rank||''),
         dob:String(person.data?.dob||''),passport:String(person.data?.passport||''),passportExpiry:String(person.data?.passportExpiry||''),
+        seamanBook:String(person.data?.seamanBook||''),immigration:person.data?.immigration,
         flights:(Array.isArray(person.data?.flights)?person.data.flights:[]).filter(flight=>Object.values(flight||{}).some(hasValue)).map(flight=>({
           airline:String(flight?.airline||''),number:String(flight?.number||''),date:String(flight?.date||''),from:String(flight?.from||''),to:String(flight?.to||''),
           departure:String(flight?.departure||''),arrival:String(flight?.arrival||''),booking:String(flight?.booking||'')
@@ -71,117 +74,264 @@
       generatedAt:new Date().toLocaleString('en-GB',{timeZone:'Asia/Bangkok',dateStyle:'medium',timeStyle:'short'})
     };
   }
-  const pair=(name,value)=>`<div class="hfs-report-field"><span>${escape(name)}</span><b>${escape(value)}</b></div>`;
-  const flightTable=person=>person.flights.length?`<div class="hfs-flight-scroll"><table class="hfs-flight-table"><thead><tr><th>Airline</th><th>Flight No.</th><th>Date</th><th>From</th><th>To</th><th>Departure</th><th>Arrival</th><th>PNR</th></tr></thead><tbody>${person.flights.map(flight=>`<tr>${[['Airline',flight.airline],['Flight No.',flight.number],['Date',flight.date],['From',flight.from],['To',flight.to],['Departure',flight.departure],['Arrival',flight.arrival],['PNR',flight.booking]].map(([name,value])=>`<td data-label="${name}">${escape(value||'—')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`:'<p class="hfs-empty-line">ยังไม่มีรายละเอียดเที่ยวบิน</p>';
-  const crewPerson=person=>`<div class="hfs-crew-person"><div class="hfs-crew-person-head"><b>${escape(person.name||'Unnamed crew')}</b><span>${escape([person.rank,person.nationality].filter(Boolean).join(' · ')||'—')}</span></div><div class="hfs-crew-person-meta">${[['Date of birth',person.dob],['Passport',person.passport],['PP. EXP',person.passportExpiry]].filter(([,value])=>hasValue(value)).map(([name,value])=>pair(name,value)).join('')}</div>${flightTable(person)}</div>`;
-  const crewGroup=(title,people)=>`<section class="hfs-crew-group"><h5>${escape(title)} <span>${people.length}</span></h5>${people.length?people.map(crewPerson).join(''):'<p class="hfs-empty-line">ยังไม่มีรายชื่อ</p>'}</section>`;
-  function render(report) {
-    const j=report.job,t=report.totals;
-    const header=`<div class="hfs-report-title"><div><span class="hfs-eyebrow">OPERATIONS · SERVICE SUMMARY</span><h2>${escape(j.vessel)}</h2><p>${escape([j.jobNo,j.port].filter(Boolean).join(' · '))}</p></div><span class="hfs-report-badge">${escape(report.publicView?'PUBLIC SUMMARY':'JOB REPORT')}</span></div>`;
-    const metadata=[['Job No.',j.jobNo],['Port / Terminal',j.port],['Principal',j.principal],['ETA',j.eta],['ETD',j.etd],['Job status',j.status],['Job PIC',j.pic]].filter(([,value])=>hasValue(value));
-    const metrics=`<div class="hfs-report-metrics"><div><span>Services</span><strong>${t.services}</strong></div><div><span>Completed</span><strong>${t.completed}</strong></div><div><span>Waiting</span><strong>${t.waiting}</strong></div><div><span>Checklist</span><strong>${report.publicView?'—':`${t.done} / ${t.steps}`}</strong></div></div>`;
-    const cards=report.services.length?report.services.map(service=>{
-      const fieldHtml=service.fields.length||service.specifics.length?`<div class="hfs-report-fields">${[...service.fields,...service.specifics].map(field=>pair(field.name,field.value)).join('')}</div>`:'<p class="hfs-empty-line">ยังไม่มีรายละเอียดเพิ่มเติม</p>';
-      const checkHtml=report.publicView?'<p class="hfs-empty-line">ลงชื่อเข้าใช้เพื่อดู checklist และรายละเอียด</p>':service.checklist.length?
-        `<div class="hfs-report-checks">${service.checklist.map(step=>`<div class="hfs-check-row"><span class="hfs-check ${step.done?'done':''}" aria-label="${step.done?'Complete':'Pending'}">${step.done?'✓':''}</span><span>${escape(step.text)}${step.done&&step.completedAt?`<small>${escape([step.actor,step.completedAt].filter(Boolean).join(' · '))}</small>`:''}</span></div>`).join('')}</div>`:'<p class="hfs-empty-line">ยังไม่มี checklist</p>';
-      const peopleHtml=service.crewGroups?`<div class="hfs-report-sub hfs-crew-change"><h4>Crew Change</h4>${report.publicView?'<p class="hfs-empty-line">ลงชื่อเข้าใช้และใช้สิทธิ์ Crew เพื่อดูรายชื่อและเที่ยวบิน</p>':crewGroup('On-signers',service.crewGroups.onSigners)+crewGroup('Off-signers',service.crewGroups.offSigners)}</div>`:service.people.length?`<div class="hfs-report-sub"><h4>Linked crew / visitors</h4><div class="hfs-people-list">${service.people.map(person=>`<span>${escape([person.name,person.category||person.kind,person.rank,person.nationality].filter(Boolean).join(' · '))}</span>`).join('')}</div></div>`:'';
-      const travelHtml=service.travel.length?`<div class="hfs-report-sub"><h4>Travel</h4>${service.travel.map(trip=>`<div class="hfs-trip"><b>${escape(trip.kind.toUpperCase())} · ${escape(trip.origin||'—')} → ${escape(trip.destination||'—')}</b><span>${escape([trip.departure,trip.arrival,trip.provider,trip.vehicle,trip.status].filter(value=>value&&value!=='—').join(' · '))}</span>${trip.passengers.length||trip.cargo.length?`<small>${escape([...trip.passengers,...trip.cargo].join(', '))}</small>`:''}</div>`).join('')}</div>`:'';
-      return `<article class="hfs-service-card ${service.crewGroups?'hfs-service-crew':''}"><div class="hfs-service-head"><div><span>#${escape(service.seq)}</span><h3>${escape(service.type)}</h3></div><span class="hfs-status" data-status="${escape(service.status)}">${escape(service.status)}</span></div>${fieldHtml}<div class="hfs-report-sub"><h4>Checklist <span>${report.publicView?'':`${service.checklist.filter(step=>step.done).length} / ${service.checklist.length}`}</span></h4>${checkHtml}</div>${peopleHtml}${travelHtml}</article>`;
-    }).join(''):'<div class="hfs-empty-report">ยังไม่มี Service ใน Port Call นี้</div>';
-    return `${header}<div class="hfs-report-meta">${metadata.map(([name,value])=>pair(name,value)).join('')}</div>${metrics}<div class="hfs-report-note">${report.publicView?'รายงานสาธารณะแสดงเฉพาะข้อมูลสรุป':'ข้อมูล ณ '+escape(report.generatedAt)+' (Asia/Bangkok) · ตรวจสอบข้อมูลกับ Job ก่อนนำไปใช้'}</div><div class="hfs-service-grid">${cards}</div>`;
+
+
+  const compact=values=>values.filter(value=>hasValue(value)&&value!=='—').join(' · ');
+  const immigration=(person,code)=>Boolean(person?.immigration?.codes?.[code]||
+    (code==='VISA'&&person?.immigration?.visa)||(code==='OKTB'&&person?.immigration?.oktb));
+  const personMeta=person=>compact([person.rank,person.nationality]);
+  const personDocs=person=>compact([
+    person.passport&&'Passport '+person.passport,person.passportExpiry&&'EXP '+person.passportExpiry,
+    person.seamanBook&&'SB '+person.seamanBook,person.dob&&'DOB '+person.dob
+  ]);
+  const flightsFor=person=>person.flights.map(flight=>compact([
+    [flight.airline,flight.number].filter(Boolean).join(' '),[flight.from,flight.to].filter(Boolean).join(' → '),
+    flight.date,[flight.departure,flight.arrival].filter(Boolean).join('–'),flight.booking&&'PNR '+flight.booking
+  ])).filter(Boolean);
+  const crewChecks=person=>[
+    ['Passport','PP',Boolean(person.passport)],['Seaman Book','SB',Boolean(person.seamanBook)],
+    ['Flight','FLT',flightsFor(person).length>0],
+    ...['OKTB','VISA','VISA-C','VOA','BG','EX'].map(code=>[code,code,immigration(person,code)])
+  ];
+  function crewGroups(report){
+    if(report.publicView)return [];
+    const sections=report.services.flatMap(service=>service.crewGroups?[service.crewGroups]:[]);
+    if(!sections.length)return [];
+    return [['On-signers','onSigners'],['Off-signers','offSigners']].map(([title,group])=>({
+      title,people:[...new Map(sections.flatMap(section=>section[group]).map(person=>[person.id,person])).values()]
+    })).filter(section=>section.people.length);
   }
-  function createPages(report,scale=3.5) {
-    const width=595,height=842,pages=[];
-    let canvas,ctx,y,pageNumber=0;
-    const left=38,right=width-38,bodyWidth=right-left;
-    function page() {
-      canvas=document.createElement('canvas');canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
-      ctx=(window.HarborFlowVectorPdf?.captureContext(canvas)||canvas.getContext('2d'));ctx.scale(scale,scale);ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
-      ctx.textBaseline='top';pages.push(canvas);pageNumber++;y=38;
-      ctx.fillStyle='#107a72';ctx.fillRect(left,29,36,4);
-      ctx.fillStyle='#66788b';ctx.font='9px Arial';ctx.fillText('HARBORFLOW  /  OPERATIONS',left,38);y=63;
-    }
-    function ensure(space){if(y+space>height-49)page();}
-    function splitLine(line,max,font){
-      ctx.font=font;const words=String(line).split(/\s+/),result=[];let current='';
-      for(const word of words){const proposal=current?current+' '+word:word;
-        if(ctx.measureText(proposal).width<=max){current=proposal;continue;}
-        if(current)result.push(current);current='';
-        if(ctx.measureText(word).width<=max){current=word;continue;}
-        for(const letter of Array.from(word)){if(ctx.measureText(current+letter).width>max&&current){result.push(current);current='';}current+=letter;}
-      }
-      if(current)result.push(current);return result.length?result:[''];
-    }
-    function text(value,{x=left,size=10,bold=false,color='#203047',max=bodyWidth,lineHeight=size+4,indent=0}={}){
-      const font=`${bold?'bold ':''}${size}px Arial, sans-serif`;
-      for(const paragraph of String(value||'—').split('\n')){
-        for(const line of splitLine(paragraph,max-indent,font)){
-          ensure(lineHeight);ctx.fillStyle=color;ctx.font=font;ctx.fillText(line,x+indent,y);y+=lineHeight;
+  function serviceDetails(service){
+    const fields=[...service.fields,...service.specifics];
+    const crew=service.crewGroups;
+    const related=service.people.filter(person=>!crew||!crew.onSigners.includes(person)&&!crew.offSigners.includes(person));
+    const travel=service.travel.map(trip=>compact([
+      [trip.origin,trip.destination].filter(Boolean).join(' → '),trip.departure,trip.arrival,trip.provider,
+      trip.vehicle,trip.status,trip.purpose,trip.passengers.join(', '),trip.cargo.join(', ')
+    ]));
+    return {
+      description:fields.find(field=>field.name==='Description')?.value||'',
+      fields:fields.filter(field=>field.name!=='Description'),
+      travel,related
+    };
+  }
+  const checkMark=(done,title)=>`<span class="hfs-check${done?' done':''}" role="img" aria-label="${escape(title)}: ${done?'checked':'unchecked'}">${done?'✓':''}</span>`;
+  function renderService(service,publicView){
+    const {description,fields,travel,related}=serviceDetails(service);
+    const done=service.checklist.filter(step=>step.done).length;
+    const detailText=description||fields.length||travel.length||related.length;
+    const details=`<div class="hfs-service-details">
+      ${description?`<p>${escape(description)}</p>`:''}
+      ${fields.length?`<dl>${fields.map(field=>`<div><dt>${escape(field.name)}</dt><dd>${escape(field.value)}</dd></div>`).join('')}</dl>`:''}
+      ${travel.length?`<div class="hfs-travel-summary"><b>Travel</b><ul>${travel.map(item=>`<li>${escape(item)}</li>`).join('')}</ul></div>`:''}
+      ${related.length?`<div class="hfs-travel-summary"><b>Linked people</b><ul>${related.map(person=>
+        `<li>${escape(compact([person.name,person.category||person.kind,personMeta(person),personDocs(person),...flightsFor(person)]))}</li>`
+      ).join('')}</ul></div>`:''}
+    </div>`;
+    const checklist=service.checklist.length?`<div class="hfs-service-checklist">
+      <h5>Checklist <span>${done}/${service.checklist.length}</span></h5>
+      <ul>${service.checklist.map(step=>`<li>${checkMark(step.done,step.text)}<div>${escape(step.text||'Untitled step')}${step.done&&step.completedAt?
+        `<small>${escape(compact([step.actor,step.completedAt]))}</small>`:''}</div></li>`).join('')}</ul>
+    </div>`:'';
+    return `<article class="hfs-service-item">
+      <header><h4>${escape(service.type)}</h4><span class="hfs-service-status" data-status="${escape(service.status)}">${escape(service.status)}</span></header>
+      ${!publicView&&(detailText||checklist)?`<div class="hfs-service-body${detailText&&checklist?' has-columns':''}">${detailText?details:''}${checklist}</div>`:''}
+    </article>`;
+  }
+  function renderCrew({title,people}){
+    return `<section class="hfs-crew-section${title==='Off-signers'?' off-signers':''}"><h4>${escape(title)} <span>${people.length}</span></h4><ul>${people.map(person=>{
+      const flights=flightsFor(person),docs=personDocs(person),meta=personMeta(person);
+      return `<li class="hfs-crew-member">
+        <h5>${escape(person.name||'Unnamed crew')}</h5>
+        ${meta?`<p>${escape(meta)}</p>`:''}
+        <div class="hfs-crew-checks">${crewChecks(person).map(([name,short,checked])=>
+          `<span>${checkMark(checked,name)}${escape(name)}</span>`).join('')}</div>
+        ${docs?`<p class="hfs-crew-docs">${escape(docs)}</p>`:''}
+        ${flights.length?`<div class="hfs-crew-flights"><b>Flight details</b><ul>${flights.map(line=>`<li>${escape(line)}</li>`).join('')}</ul></div>`:''}
+        ${person.immigration?.notes?`<p>${escape(person.immigration.notes)}</p>`:''}
+      </li>`;
+    }).join('')}</ul></section>`;
+  }
+  function render(report){
+    const {job}=report;
+    const schedule=[['ETA',job.eta],['ETD',job.etd]].filter(([,value])=>value&&value!=='—');
+    const crew=crewGroups(report);
+    return `<header class="hfs-report-vessel"><div>
+      <div class="hfs-vessel-title"><h2>${escape(job.vessel)}</h2>${job.status?`<span>${escape(job.status)}</span>`:''}</div>
+      <p>${escape(compact([job.jobNo,job.port,job.principal,job.pic&&'PIC '+job.pic]))}</p></div>
+      ${schedule.length?`<dl class="hfs-schedule">${schedule.map(([name,value])=>`<div><dt>${name}</dt><dd>${escape(value)}</dd></div>`).join('')}</dl>`:''}
+    </header>
+    <div class="hfs-report-content">
+      <section class="hfs-report-services"><h3>Services <span>${report.totals.completed}/${report.totals.services} completed</span></h3>
+        ${report.services.length?report.services.map(service=>renderService(service,report.publicView)).join(''):'<p>No services for this port call.</p>'}
+      </section>
+      ${crew.length?`<section class="hfs-report-crew"><h3>Crew change</h3><div class="hfs-crew-columns">${crew.map(renderCrew).join('')}</div></section>`:''}
+      <p class="hfs-report-note">${report.publicView?'PUBLIC SUMMARY · ':''}อัปเดต ${escape(report.generatedAt)} (Bangkok)</p>
+    </div>`;
+  }
+
+  function createPage(report){
+    const width=595,height=842,scale=3.5,left=32,bodyWidth=width-left*2;
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
+    const ctx=window.HarborFlowVectorPdf?.captureContext(canvas)||canvas.getContext('2d');
+    ctx.scale(scale,scale);ctx.textBaseline='top';
+    const ink='#173442',muted='#486473',line='#dce7eb',teal='#086d62';
+    let shortened=false;
+    function fill(x,y,w,h,color){ctx.fillStyle=color;ctx.fillRect(x,y,w,h);}
+    function wrap(value,max){
+      const result=[];
+      let current='';
+      for(const word of String(value??'').trim().split(/\s+/)){
+        const joined=current?current+' '+word:word;
+        if(ctx.measureText(joined).width<=max){current=joined;continue;}
+        if(current)result.push(current);
+        current='';
+        for(const character of word){
+          if(current&&ctx.measureText(current+character).width>max){result.push(current);current='';}
+          current+=character;
         }
       }
+      if(current)result.push(current);
+      return result;
     }
-    function rule(){ensure(12);ctx.fillStyle='#e0e7ee';ctx.fillRect(left,y,bodyWidth,1);y+=12;}
-    function item(name,value){text(name.toUpperCase(),{size:7.5,bold:true,color:'#6b7a90',lineHeight:11});text(value,{size:9.5,lineHeight:13});y+=4;}
-    page();
-    text('SERVICE SUMMARY REPORT',{size:18,bold:true,color:'#10233d',lineHeight:25});
-    text(report.job.vessel,{size:15,bold:true,color:'#10233d',lineHeight:21});
-    text([report.job.jobNo,report.job.port].filter(Boolean).join('  ·  '),{size:9,color:'#607286'});
-    y+=7;rule();
-    for(const [name,value] of [['Job No.',report.job.jobNo],['Port / Terminal',report.job.port],['Principal',report.job.principal],['ETA',report.job.eta],['ETD',report.job.etd],['Job status',report.job.status],['Job PIC',report.job.pic]].filter(([,value])=>hasValue(value)))item(name,value);
-    rule();
-    text(`Services ${report.totals.services}  ·  Completed ${report.totals.completed}  ·  Waiting ${report.totals.waiting}${report.publicView?'':`  ·  Checklist ${report.totals.done}/${report.totals.steps}`}`,{size:10,bold:true,color:'#107a72'});
-    y+=9;
-    for(const [serviceIndex,service] of report.services.entries()){
-      const crewCount=(service.crewGroups?.onSigners.length||0)+(service.crewGroups?.offSigners.length||0),flightCount=service.people.reduce((sum,person)=>sum+person.flights.length,0);
-      ensure(Math.min(420,60+([...service.fields,...service.specifics].length*24)+(service.checklist.length*14)+(crewCount*34)+(flightCount*12)+(service.travel.length*28)));
-      ctx.fillStyle='#eff6f6';ctx.fillRect(left,y,bodyWidth,28);y+=7;
-      text(`#${service.seq}  ${service.type}  ·  ${service.status}`,{x:left+9,max:bodyWidth-18,size:11,bold:true,color:'#10233d',lineHeight:17});y+=12;
-      for(const field of [...service.fields,...service.specifics])item(field.name,field.value);
-      text(`CHECKLIST${report.publicView?'':`  ${service.checklist.filter(step=>step.done).length}/${service.checklist.length}`}`,{size:8,bold:true,color:'#567184',lineHeight:13});
-      if(report.publicView)text('Sign in to view checklist and details.',{size:9,color:'#6b7a90'});
-      else if(!service.checklist.length)text('No checklist steps yet.',{size:9,color:'#6b7a90'});
-      else for(const step of service.checklist)text(`${step.done?'[x]':'[ ]'}  ${step.text}${step.done&&step.completedAt?`  (${[step.actor,step.completedAt].filter(Boolean).join(' · ')})`:''}`,{size:9,lineHeight:13,indent:3});
-      if(service.crewGroups&&!report.publicView){
-        y+=5;text('CREW CHANGE',{size:8,bold:true,color:'#567184',lineHeight:13});
-        for(const [groupName,crew] of [['ON-SIGNERS',service.crewGroups.onSigners],['OFF-SIGNERS',service.crewGroups.offSigners]]){
-          ensure(30);text(`${groupName}  ${crew.length}`,{size:9,bold:true,color:'#107a72',lineHeight:15,indent:3});
-          if(!crew.length)text('No crew listed.',{size:8.5,color:'#6b7a90',lineHeight:12,indent:8});
-          for(const person of crew){
-            ensure(38);text([person.name,person.rank,person.nationality].filter(Boolean).join(' · '),{size:9,bold:true,lineHeight:14,indent:8});
-            const identity=[person.dob&&`DOB ${person.dob}`,person.passport&&`Passport ${person.passport}`,person.passportExpiry&&`PP. EXP ${person.passportExpiry}`].filter(Boolean).join(' · ');
-            if(identity)text(identity,{size:8.2,color:'#607286',lineHeight:12,indent:8});
-            if(!person.flights.length)text('No flight details.',{size:8.2,color:'#6b7a90',lineHeight:12,indent:12});
-            for(const flight of person.flights){
-              const route=[flight.airline,flight.number,flight.date,flight.from&&flight.to?`${flight.from}-${flight.to}`:[flight.from,flight.to].filter(Boolean).join('-'),[flight.departure,flight.arrival].filter(Boolean).join('-'),flight.booking&&`PNR ${flight.booking}`].filter(Boolean).join(' · ');
-              text(route||'Flight details pending',{size:8.2,lineHeight:12,indent:12});
-            }
-            y+=2;
+    function text(value,x,y,{size=9,color=ink,bold=false,max=bodyWidth}={}){
+      ctx.font=(bold?'bold ':'')+size+'px Arial, sans-serif';
+      let display=String(value??'');
+      if(ctx.measureText(display).width>max){
+        shortened=true;
+        const chars=Array.from(display);
+        while(chars.length&&ctx.measureText(chars.join('')+'…').width>max)chars.pop();
+        display=chars.join('').trimEnd()+'…';
+      }
+      ctx.fillStyle=color;ctx.fillText(display,x,y);
+    }
+    function check(done,x,y){
+      fill(x,y,8,8,done?teal:'#8da5ac');
+      if(!done){fill(x+1,y+1,6,6,'#fff');return;}
+      ctx.strokeStyle='#fff';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(x+2,y+4);ctx.lineTo(x+3.5,y+5.5);ctx.lineTo(x+6.5,y+2.5);ctx.stroke();
+    }
+
+    fill(0,0,width,height,'#fff');
+    fill(left,32,bodyWidth,77,'#10313f');
+    const job=report.job;
+    text('SUMMARY REPORT',left+14,43,{color:'#afdade',size:8,bold:true});
+    text(job.vessel,left+14,57,{color:'#fff',size:20,bold:true,max:bodyWidth-28});
+    text(compact([job.jobNo,job.port,job.principal,job.pic&&'PIC '+job.pic]),left+14,86,{
+      color:'#d5edf0',max:bodyWidth-28
+    });
+    text(compact([job.eta!=='—'&&job.eta&&'ETA '+job.eta,job.etd!=='—'&&job.etd&&'ETD '+job.etd,job.status]),left,119,{
+      color:muted,bold:true
+    });
+
+    const crew=crewGroups(report);
+    const start=161,bottom=780;
+    const maxCrew=crew.reduce((max,group)=>Math.max(max,group.people.length),0);
+    const crewSpace=crew.length?Math.min(386,26+maxCrew*45):0;
+    const available=bottom-start-crewSpace;
+    const headingHeight=19,detailHeight=11,detailWidth=313;
+    const maxServices=Math.floor(available/headingHeight);
+    const services=report.services.slice(0,maxServices);
+    const serviceRows=services.map(service=>{
+      const {description,fields,travel,related}=serviceDetails(service);
+      ctx.font='9px Arial, sans-serif';
+      const details=wrap(compact([description,...fields.map(field=>field.name+' '+field.value),...travel,...related.map(person=>person.name)]),detailWidth);
+      const steps=service.checklist.flatMap(step=>wrap(step.text||'Untitled step',168).map((value,index)=>({
+        value,done:index===0?step.done:null
+      })));
+      return {service,details,steps,available:Math.max(details.length,steps.length),lines:0};
+    });
+    let remaining=Math.floor((available-headingHeight*services.length)/detailHeight);
+    const maxLines=serviceRows.reduce((max,row)=>Math.max(max,row.available),0);
+    for(let index=0;index<maxLines&&remaining>0;index++){
+      for(const row of serviceRows){
+        if(!remaining)break;
+        if(index<row.available){row.lines++;remaining--;}
+      }
+    }
+    const badge={
+      Completed:['#e4f4ee','#12644d'],'In Progress':['#e7effa','#255489'],
+      Waiting:['#fff1da','#7b4b06'],Cancelled:['#fae9ed','#8b2e43']
+    };
+    text('Services',left,140,{size:13,bold:true});
+    text(report.totals.completed+'/'+report.totals.services+' completed',left+bodyWidth-90,143,{size:8.5,color:muted,max:90});
+    let y=start;
+    for(const {service,details,steps,lines} of serviceRows){
+      const rowHeight=headingHeight+lines*detailHeight;
+      fill(left,y,bodyWidth,1,line);
+      text(service.type,left,y+5,{size:10.5,bold:true,max:bodyWidth-125});
+      const [background,color]=Object.hasOwn(badge,service.status)?badge[service.status]:['#ecf2f4',muted];
+      fill(left+bodyWidth-91,y+3,91,14,background);
+      text(service.status,left+bodyWidth-85,y+6,{size:8,color,bold:true,max:79});
+      if(details.length>lines||steps.length>lines)shortened=true;
+      details.slice(0,lines).forEach((value,index)=>text(value,left,y+headingHeight+index*detailHeight,{color:muted,max:detailWidth}));
+      steps.slice(0,lines).forEach(({value,done},index)=>{
+        const top=y+headingHeight+index*detailHeight;
+        if(done!==null)check(done,left+337,top);
+        text(value,left+349,top,{max:168});
+      });
+      y+=rowHeight;
+    }
+    if(!services.length){
+      text('No services for this port call.',left,y+5,{color:muted});
+      y+=19;
+    }
+
+    let omittedCrew=0;
+    if(crew.length){
+      const crewY=y+13,gap=16,crewWidth=(bodyWidth-gap*(crew.length-1))/crew.length;
+      crew.forEach(({title,people},index)=>{
+        const x=left+index*(crewWidth+gap),rowHeight=45;
+        let rowY=crewY+20;
+        fill(x,crewY,crewWidth,17,title==='On-signers'?'#e8f4f0':'#edf2f7');
+        text(title+' ('+people.length+')',x+6,crewY+4,{size:9,bold:true});
+        const shown=people.slice(0,Math.max(0,Math.floor((bottom-rowY)/rowHeight)));
+        omittedCrew+=people.length-shown.length;
+        ctx.font='8px Arial, sans-serif';
+        const blocks=shown.map(person=>({
+          person,details:wrap(compact([...flightsFor(person),personDocs(person),person.immigration?.notes]),crewWidth-8),lines:1
+        }));
+        let extra=Math.floor((bottom-rowY-shown.length*rowHeight)/detailHeight);
+        const longest=blocks.reduce((max,block)=>Math.max(max,block.details.length),0);
+        for(let i=1;i<longest&&extra>0;i++){
+          for(const block of blocks){
+            if(!extra)break;
+            if(i<block.details.length){block.lines++;extra--;}
           }
         }
-      } else if(service.people.length){y+=5;text('LINKED CREW / VISITORS',{size:8,bold:true,color:'#567184',lineHeight:13});for(const person of service.people)text([person.name,person.category||person.kind,person.rank,person.nationality].filter(Boolean).join(' · '),{size:9,lineHeight:13,indent:3});}
-      if(service.travel.length){y+=5;text('TRAVEL',{size:8,bold:true,color:'#567184',lineHeight:13});for(const trip of service.travel){text(`${trip.kind.toUpperCase()}  ${trip.origin||'—'} → ${trip.destination||'—'}`,{size:9,bold:true,lineHeight:13,indent:3});text([trip.departure,trip.arrival,trip.provider,trip.vehicle,trip.status,...trip.passengers,...trip.cargo].filter(value=>value&&value!=='—').join(' · '),{size:8.5,lineHeight:12,indent:3});}}
-      y+=10;
-      if(serviceIndex<report.services.length-1)rule();
+        for(const {person,details,lines} of blocks){
+          text(person.name||'Unnamed crew',x+4,rowY+2,{size:9.5,bold:true,max:crewWidth-8});
+          text(personMeta(person),x+4,rowY+13,{size:8,color:muted,max:crewWidth-8});
+          let flagX=x+4;
+          for(const [name,short,done] of crewChecks(person)){
+            check(done,flagX,rowY+23);
+            text(short,flagX+10,rowY+23,{size:7,color:muted,max:25});
+            flagX+=ctx.measureText(short).width+13;
+          }
+          details.slice(0,lines).forEach((value,i)=>text(value,x+4,rowY+34+i*detailHeight,{size:8,color:muted,max:crewWidth-8}));
+          if(details.length>lines)shortened=true;
+          rowY+=rowHeight+(lines-1)*detailHeight;
+          fill(x,rowY-1,crewWidth,1,line);
+        }
+      });
     }
-    for(const [index,surface] of pages.entries()){
-      const context=(window.HarborFlowVectorPdf?.captureContext(surface)||surface.getContext('2d'));context.save();context.setTransform(scale,0,0,scale,0,0);
-      context.fillStyle='#8190a2';context.font='8px Arial';context.textBaseline='top';
-      context.fillText(`${report.publicView?'PUBLIC SUMMARY  ·  ':'TRIAL DATA  ·  '}Generated ${report.generatedAt} Asia/Bangkok`,left,height-30);
-      context.textAlign='right';context.fillText(`${index+1} / ${pages.length}`,right,height-30);context.restore();
-    }
-    return {pages,width,height,scale};
+    const omitted=report.services.length-services.length;
+    const notice=compact([omitted?'+'+omitted+' services':'',omittedCrew?'+'+omittedCrew+' crew':'',shortened?'More details':'']);
+    if(notice)text(notice+' in Summary report or Excel.',left,790,{size:8,color:muted});
+    fill(left,806,bodyWidth,1,line);
+    text(compact([report.publicView?'PUBLIC SUMMARY':'','Updated '+report.generatedAt+' (Bangkok)']),left,813,{size:8,color:muted});
+    text('1 / 1',width-left-15,813,{size:8,color:muted,max:18});
+    return canvas;
   }
   const safeName=report=>String(report.job.jobNo||report.job.vessel||'PORT-CALL').replace(/[\\/:*?"<>|\x00-\x1f]/g,' ').replace(/\s+/g,' ').trim().slice(0,90);
   function createPdf(report) {
     if (!window.HarborFlowOktbPdf?.pdfFromPages) throw Error('PDF exporter unavailable');
-    const {pages}=createPages(report);
-    return {filename:`SERVICE SUMMARY - ${safeName(report)}.PDF`,blob:window.HarborFlowOktbPdf.pdfFromPages(pages)};
+    const page=createPage(report);
+    return {filename:`SERVICE SUMMARY - ${safeName(report)}.PDF`,blob:window.HarborFlowOktbPdf.pdfFromPages([page])};
   }
   function createImage(report) {
-    const {pages}=createPages(report,2),gap=24;
-    const canvas=document.createElement('canvas');canvas.width=Math.max(...pages.map(page=>page.width));canvas.height=pages.reduce((sum,page)=>sum+page.height,0)+gap*Math.max(0,pages.length-1);
-    const context=(window.HarborFlowVectorPdf?.captureContext(canvas)||canvas.getContext('2d'));context.fillStyle='#e8eef3';context.fillRect(0,0,canvas.width,canvas.height);
-    let top=0;for(const page of pages){context.drawImage(page,0,top);top+=page.height+gap;}
+    const canvas=createPage(report);
     return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve({filename:`SERVICE SUMMARY - ${safeName(report)}.PNG`,blob}):reject(Error('Image exporter unavailable')),'image/png'));
   }
   const xmlEscape=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[char]));
@@ -200,10 +350,11 @@
       else for(const step of service.checklist)add([step.text,step.done?'Complete':'Pending',[step.actor,step.completedAt].filter(Boolean).join(' · ')]);
       if(service.crewGroups&&!report.publicView){
         for(const [groupName,crew] of [['ON-SIGNERS',service.crewGroups.onSigners],['OFF-SIGNERS',service.crewGroups.offSigners]]){
-          add([]);add([groupName,crew.length],2);add(['Name - Surname','Rank','Nationality','Date of birth','Passport','PP. EXP'],3);
+          add([]);add([groupName,crew.length],2);add(['Name - Surname','Rank','Nationality','Date of birth','Passport','PP. EXP','Seaman book','Immigration'],3);
           if(!crew.length)add(['No crew listed.']);
           for(const person of crew){
-            add([person.name,person.rank,person.nationality,person.dob,person.passport,person.passportExpiry]);
+            add([person.name,person.rank,person.nationality,person.dob,person.passport,person.passportExpiry,person.seamanBook,
+              ['OKTB','VISA','VISA-C','VOA','BG','EX'].filter(code=>immigration(person,code)).join(', ')]);
             add(['Flight','Airline','Flight No.','Date','From','To','Departure','Arrival','PNR'],3);
             if(!person.flights.length)add(['','No flight details.']);
             else for(const flight of person.flights)add(['',flight.airline,flight.number,flight.date,flight.from,flight.to,flight.departure,flight.arrival,flight.booking]);
