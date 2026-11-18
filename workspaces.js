@@ -56,6 +56,7 @@
   const business=document.createElement('div'); business.className='group'; business.textContent='Business Development';
   const last=sidebar.querySelectorAll('.workspace-group')[1]; last.after(business); business.after(marketing);
   let request=0, reportData=null, selectedJobId='', selectedYear='', selectedMonth='', linked={people:[],trips:[]}, currentReport=null;
+  let reportFormat='pdf';
   const reportSection=document.getElementById('allservices');
   const reportApi=async(action,jobId)=>{
     const response=await fetch('/api/operations?'+new URLSearchParams({action,...(jobId ? {jobId} : {})}),{credentials:'same-origin',cache:'no-store'});
@@ -83,7 +84,26 @@
     const yearOptions=years.map(year=>`<option value="${escape(year)}" ${year===selectedYear?'selected':''}>${escape(year)} (${allJobs.filter(job=>jobPeriod(job).year===year).length})</option>`).join('');
     const monthOptions=months.map(month=>`<option value="${escape(month)}" ${month===selectedMonth?'selected':''}>${escape(monthLabel(month))} (${yearJobs.filter(job=>jobPeriod(job).month===month).length})</option>`).join('');
     const options=jobs.map(job=>`<option value="${escape(job.id)}" ${job.id===selectedJobId?'selected':''}>${escape([job.data?.vessel||'Unnamed vessel',job.data?.jobNo,job.data?.port,job.data?.eta?.slice(0,10)].filter(Boolean).join(' · '))}</option>`).join('');
-    reportSection.innerHTML=`<div class="hfs-report-shell"><div class="hfs-report-toolbar"><div><span class="hfs-eyebrow">OPERATIONS</span><h2>Summary report</h2><p>ภาพรวม Service ทั้งหมดของหนึ่ง Port Call</p></div><div class="hfs-report-actions"><button type="button" class="secondary" data-report-refresh>↻ Refresh</button><label class="hfs-export-format"><span>Export</span><select data-report-format aria-label="Export format"><option value="pdf">PDF</option><option value="xlsx">Excel (.xlsx)</option><option value="png">Image (.png)</option></select></label><button type="button" class="primary" data-report-download>↓ Download</button></div></div><div class="hfs-report-filters"><label><span>ปี</span><select id="hfsReportYear" aria-label="Select year">${yearOptions}</select></label><label><span>เดือน</span><select id="hfsReportMonth" aria-label="Select month">${monthOptions}</select></label><label class="hfs-job-selector"><span>เลือกเรือ / Port Call</span><select id="hfsReportJob" aria-label="Select vessel and Port Call">${options}</select></label></div><div class="hfs-report-paper">${window.HarborFlowSummaryReport.render(currentReport)}</div></div>`;
+    reportSection.innerHTML=`<div class="hfs-report-shell">
+      <div class="hfs-report-toolbar">
+        <h2>Summary report</h2>
+        <div class="hfs-report-actions">
+          <button type="button" class="secondary" data-report-refresh>↻ Refresh</button>
+          <div class="hfs-export-group">
+            <select data-report-format aria-label="Export format"><option value="pdf">PDF</option><option value="xlsx">Excel</option><option value="png">PNG</option></select>
+            <button type="button" class="primary" data-report-download>↓ Download</button>
+          </div>
+        </div>
+      </div>
+      <div class="hfs-report-filters">
+        <label><span>ปี</span><select id="hfsReportYear" aria-label="Select year">${yearOptions}</select></label>
+        <label><span>เดือน</span><select id="hfsReportMonth" aria-label="Select month">${monthOptions}</select></label>
+        <label class="hfs-job-selector"><span>เรือ / Port Call</span><select id="hfsReportJob" aria-label="Select vessel and Port Call">${options}</select></label>
+      </div>
+      <p class="hfs-report-feedback" role="status" data-report-feedback></p>
+      <div class="hfs-report-paper">${window.HarborFlowSummaryReport.render(currentReport)}</div>
+    </div>`;
+    reportSection.querySelector('[data-report-format]').value=reportFormat;
   }
   async function loadLinked(own){
     linked={people:[],trips:[]};
@@ -97,6 +117,9 @@
   async function chooseJob(jobId){
     if(!reportData?.jobs?.some(job=>job.id===jobId))return;
     selectedJobId=jobId;const own=++request;
+    currentReport=null;
+    reportSection.querySelector('[data-report-download]').disabled=true;
+    reportSection.querySelector('[data-report-feedback]').textContent='';
     reportSection.querySelector('.hfs-report-paper').innerHTML='<div class="hfs-report-loading" role="status">กำลังโหลดรายละเอียด Port Call…</div>';
     await loadLinked(own);if(own===request)renderReport();
   }
@@ -105,18 +128,22 @@
     selectedMonth=yearMonths.includes(month)?month:yearMonths[0]||'';const next=jobsInPeriod()[0];if(next)await chooseJob(next.id);else renderReport();
   }
   reportSection.addEventListener('change',event=>{
+    if(event.target.matches('[data-report-format]')){reportFormat=event.target.value;return;}
     if(event.target.id==='hfsReportJob'){void chooseJob(event.target.value);return;}
     if(event.target.id==='hfsReportYear'){void choosePeriod(event.target.value,'');return;}
     if(event.target.id==='hfsReportMonth')void choosePeriod(selectedYear,event.target.value);
   });
-  reportSection.addEventListener('click',event=>{
+  reportSection.addEventListener('click',async event=>{
     if(event.target.closest('[data-report-refresh]')){void loadReport();return;}
-    if(!event.target.closest('[data-report-download]')||!currentReport)return;
-    const format=reportSection.querySelector('[data-report-format]')?.value||'pdf';
-    void window.HarborFlowSummaryReport.download(currentReport,format).catch(error=>{
-      const note=document.createElement('div');note.className='hfs-report-error';note.setAttribute('role','alert');note.textContent=error.message;
-      reportSection.querySelector('.hfs-report-toolbar')?.after(note);
-    });
+    const download=event.target.closest('[data-report-download]');
+    if(!download||download.disabled||!currentReport)return;
+    const own=request,feedback=reportSection.querySelector('[data-report-feedback]');
+    download.disabled=true;
+    feedback.classList.remove('is-error');
+    feedback.textContent='';
+    try{await window.HarborFlowSummaryReport.download(currentReport,reportFormat);}
+    catch(error){if(own===request){feedback.classList.add('is-error');feedback.textContent=error.message;}}
+    finally{if(own===request)download.disabled=false;}
   });
   async function loadReport(){
     const own=++request;reportData=null;currentReport=null;linked={people:[],trips:[]};reportSection.innerHTML=views.allservices;
