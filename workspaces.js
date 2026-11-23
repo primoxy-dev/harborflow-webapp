@@ -3,7 +3,7 @@
   const sidebar = document.getElementById('primaryNav');
   if (!sidebar) return;
   const groups = [
-    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','Summary report','☷'],['readerdatabase','Reader data base','▧'],['alerts','Smart Alerts','⚑'],['outlook','Outlook','✉']]],
+    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','Summary report','☷'],['handover','Operations Handover','✓'],['readerdatabase','Reader data base','▧'],['alerts','Smart Alerts','⚑'],['outlook','Outlook','✉']]],
     ['Quotation & Payments', [['commercial','Quotation / PDA / FDA','◫'],['pv','Payment Voucher','▧'],['price','Price Master','¤'],['approvals','Approvals','✓']]]
   ];
   const title = document.getElementById('title');
@@ -16,6 +16,7 @@
     price: empty('Published selling rates','เผยแพร่เฉพาะราคาขายที่เจ้าของตรวจ · ต้นทุน Supplier, Margin และกฎส่วนลดไม่เปิดสาธารณะ'),
     approvals: empty('Approvals','ข้อมูลการอนุมัติภายในต้องลงชื่อเข้าใช้ · ช่วงทดลองให้เจ้าของอนุมัติเท่านั้น'),
     allservices: '<div class="panel" role="status">กำลังโหลด Summary report…</div>',
+    handover: '<div class="panel" role="status">กำลังโหลด Operations Handover…</div>',
     readerdatabase: '<div class="panel" role="status">Loading Reader data base…</div>'
   };
   for (const [id, html] of Object.entries(views)) {
@@ -38,6 +39,12 @@
         title.textContent=label; crumb.textContent=name+' / '+label;
         if(id!=='operations') document.getElementById('createJob').hidden=true;
         if(id==='allservices') loadReport();
+        if(id==='handover'){
+          const section=document.getElementById('handover');
+          void import('./operations-handover.mjs').then(module=>module.openOperationsHandover(section)).catch(()=>{
+            section.innerHTML='<div class="panel" role="alert">เปิด Operations Handover ไม่สำเร็จ กรุณาเลือกเมนูอีกครั้ง</div>';
+          });
+        }
         if(id==='readerdatabase') window.HarborFlowReaderDatabase?.open();
         if(id==='commercial') window.HarborFlowQuotation?.open();
         if(id==='price') window.HarborFlowPriceMaster?.open();
