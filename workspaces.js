@@ -29,6 +29,18 @@
     const details=document.createElement('details'); details.className='workspace-group'; details.open=true;
     const summary=document.createElement('summary'); summary.textContent=name; details.append(summary);
     for (const [id,label,icon] of items) {
+      let parent = details;
+      let breadcrumb = name;
+      if (id === 'handover') {
+        parent = document.createElement('details');
+        parent.className = 'workspace-subgroup';
+        const subgroupLabel = document.createElement('summary');
+        subgroupLabel.textContent = 'FPSO Ventures';
+        subgroupLabel.title = subgroupLabel.textContent;
+        parent.append(subgroupLabel);
+        details.append(parent);
+        breadcrumb += ' / ' + subgroupLabel.textContent;
+      }
       let button=sidebar.querySelector(`[data-view="${id}"]`);
       if (!button) { button=document.createElement('button'); button.type='button'; button.className='nav'; button.dataset.view=id; }
       button.innerHTML=`<i aria-hidden="true">${icon}</i><span class="nav-label">${label}</span>`; button.setAttribute('aria-label',label); button.title=label;
@@ -36,7 +48,7 @@
         if(id==='outlook') { window.HarborFlowOutlook.open(); return; }
         document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));
         sidebar.querySelectorAll('.nav').forEach(b=>b.classList.toggle('active',b===button));
-        title.textContent=label; crumb.textContent=name+' / '+label;
+        title.textContent=label; crumb.textContent=breadcrumb+' / '+label;
         if(id!=='operations') document.getElementById('createJob').hidden=true;
         if(id==='allservices') loadReport();
         if(id==='handover'){
@@ -50,7 +62,7 @@
         if(id==='price') window.HarborFlowPriceMaster?.open();
         if(window.matchMedia('(max-width: 900px)').matches) document.getElementById('closeNav').click();
       });
-      details.append(button);
+      parent.append(button);
     }
     anchor.after(details);
   }
