@@ -1,19 +1,15 @@
 .workspace-group{margin:8px 0}
 .workspace-group summary{padding:10px 8px;border-radius:7px;background:#ffffff12;font-weight:600;cursor:pointer}
 .workspace-group .nav{padding-left:20px;font-size:13px}
-.workspace-subgroup{margin:4px 0 4px 12px}
-.workspace-subgroup>summary{padding:8px;background:transparent;font-size:13px}
-.workspace-subgroup>summary:is(:hover,:focus-visible){background:#ffffff12}
-body.nav-collapsed .workspace-subgroup{margin-left:0}
-body.nav-collapsed .workspace-subgroup>summary{display:block}
+.workspace-subgroup{margin:4px 0}
+.workspace-subgroup>.nav{padding-left:32px}
 .brand-collapse{margin-left:auto;flex:none;border:1px solid #69809b;border-radius:6px;background:transparent;color:#fff;min-height:32px;min-width:32px}
 .brand{gap:6px;padding-left:0;padding-right:0;font-size:17px}
-body.nav-collapsed .workspace-group summary{font-size:0;padding:6px;text-align:center}
+body.nav-collapsed .workspace-group summary{display:block;font-size:0;padding:6px;text-align:center}
 body.nav-collapsed .workspace-group summary::after{content:'▸';font-size:16px}
-body.nav-collapsed .workspace-group[open] summary::after{content:'▾'}
+body.nav-collapsed :is(.workspace-group,.workspace-subgroup)[open]>summary::after{content:'▾'}
 body.nav-collapsed .brand{flex-wrap:wrap}
-@media(max-width:900px){body.nav-collapsed .workspace-group summary{font-size:14px;padding:10px 8px;text-align:left}body.nav-collapsed .workspace-group summary::after{display:none}.brand-collapse{display:none}}
-@media(max-width:900px){body.nav-collapsed .workspace-subgroup{margin-left:12px}body.nav-collapsed .workspace-subgroup>summary{display:list-item;font-size:13px;padding:8px}}
+@media(max-width:900px){body.nav-collapsed .workspace-group summary{display:list-item;font-size:14px;padding:10px 8px;text-align:left}body.nav-collapsed .workspace-group summary::after{display:none}.brand-collapse{display:none}}
 .hfs-sortbar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:14px 0 18px;padding:12px;background:var(--page);border-radius:8px}
 .hfs-sortbar label{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:13px}
 .hfs-sortbar select{max-width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink)}
