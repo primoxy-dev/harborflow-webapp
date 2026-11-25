@@ -9,6 +9,41 @@ vm.createContext(context);
 vm.runInContext(source,context);
 const reader=context.window.HarborFlowDocumentImport;
 
+test('mixed upload type detection uses document markers and leaves uncertain files for review',()=>{
+  assert.equal(reader.detectDocumentType('PASSPORT / Surname / Given names / Date of birth'),'passport');
+  assert.equal(reader.detectDocumentType("SEAFARER'S IDENTIFICATION AND RECORD BOOK"),'seamanBook');
+  assert.equal(reader.detectDocumentType('E-TICKET · PNR ZXCVBN · FLIGHT TG 402 · Passport number on file'),'flightTicket');
+  assert.equal(reader.detectDocumentType('P<PHLDEMO<<CREW\nSEAMAN BOOK NO: X1234567'),'passport');
+  assert.equal(reader.detectDocumentType('P<PHLDEMO<<CREW\nITINERARY FLIGHT TG 402'),'');
+  assert.equal(reader.detectDocumentType('DEMO CREW · JOB 123456 · 2026'),'');
+});
+
+test('automatic crew import fills blank fields and flags conflicts and uncertain values',()=>{
+  const result={type:'passport',confidence:72,nameNeedsTitle:true,
+    fields:{name:'ALEX MORGAN',passport:'CD1234567',dob:'1990-04-12',nationality:'CROATIAN'}};
+  const {person}=reader.applyToPerson({passport:'AB1234567'},result,{auto:true});
+  assert.equal(person.name,'ALEX MORGAN');
+  assert.equal(person.dob,'1990-04-12');
+  assert.equal(person.passport,'AB1234567');
+  const flags=person.documentChecks.passport.fieldsToCheck;
+  assert.equal(flags.name.reason,'Title could not be read');
+  assert.equal(flags.dob.reason,'Low reading confidence');
+  assert.equal(flags.passport.reason,'Differs from the document');
+  assert.equal(flags.passportExpiry.reason,'Field could not be read');
+});
+
+test('automatic flight import keeps warnings on other flights and clears them on a clearer read',()=>{
+  const first={type:'flightTicket',confidence:68,flight:{airline:'TG',number:'402',date:'26SEP',from:'CGK',to:'BKK'}};
+  const second={type:'flightTicket',confidence:94,flight:{airline:'TG',number:'403',date:'29SEP',from:'BKK',to:'CGK'}};
+  const a=reader.applyToPerson({},first,{auto:true}).person;
+  const b=reader.applyToPerson(a,second,{auto:true}).person;
+  assert.equal(b.flights.length,2);
+  assert.equal(b.documentChecks.flightTicket.fieldsToCheck['flight.0.number'].value,'402');
+  const c=reader.applyToPerson(b,{...first,confidence:92},{auto:true}).person;
+  assert.equal(c.flights.length,2);
+  assert.equal(Object.keys(c.documentChecks.flightTicket.fieldsToCheck).length,0);
+});
+
 test('template values fill missing fields without overwriting existing values',()=>{
  const result=reader.applyTemplateValues({fields:{passport:'Z1234567'}},{passport:'Z7654321',dob:'20 OCT 1990',nationality:'PHILIPPINES'});
  assert.equal(result.fields.passport,'Z1234567');assert.equal(result.fields.dob,'1990-10-20');assert.equal(result.fields.nationality,'FILIPINO');assert.ok(result.extractionWarnings.length);
