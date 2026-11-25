@@ -3,7 +3,7 @@
   const sidebar = document.getElementById('primaryNav');
   if (!sidebar) return;
   const groups = [
-    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','Summary report','☷'],['handover','Operations Handover','✓'],['readerdatabase','Reader data base','▧'],['alerts','Smart Alerts','⚑'],['outlook','Outlook','✉']]],
+    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','Summary report','☷'],['handover','Operations Handover','✓'],['crewdetails',"Crew's details",'▤'],['readerdatabase','Reader data base','▧'],['alerts','Smart Alerts','⚑'],['outlook','Outlook','✉']]],
     ['Quotation & Payments', [['commercial','Quotation / PDA / FDA','◫'],['pv','Payment Voucher','▧'],['price','Price Master','¤'],['approvals','Approvals','✓']]]
   ];
   const title = document.getElementById('title');
@@ -17,6 +17,7 @@
     approvals: empty('Approvals','ข้อมูลการอนุมัติภายในต้องลงชื่อเข้าใช้ · ช่วงทดลองให้เจ้าของอนุมัติเท่านั้น'),
     allservices: '<div class="panel" role="status">กำลังโหลด Summary report…</div>',
     handover: '<div class="panel" role="status">กำลังโหลด Operations Handover…</div>',
+    crewdetails: '<div class="panel" role="status">กำลังโหลดข้อมูลลูกเรือ…</div>',
     readerdatabase: '<div class="panel" role="status">Loading Reader data base…</div>'
   };
   for (const [id, html] of Object.entries(views)) {
@@ -28,18 +29,22 @@
   for (const [name, items] of groups) {
     const details=document.createElement('details'); details.className='workspace-group'; details.open=true;
     const summary=document.createElement('summary'); summary.textContent=name; details.append(summary);
+    let fpso;
     for (const [id,label,icon] of items) {
       let parent = details;
       let breadcrumb = name;
-      if (id === 'handover') {
-        parent = document.createElement('details');
-        parent.className = 'workspace-subgroup';
-        const subgroupLabel = document.createElement('summary');
-        subgroupLabel.textContent = 'FPSO Ventures';
-        subgroupLabel.title = subgroupLabel.textContent;
-        parent.append(subgroupLabel);
-        details.append(parent);
-        breadcrumb += ' / ' + subgroupLabel.textContent;
+      if (id === 'handover' || id === 'crewdetails') {
+        if (!fpso) {
+          fpso = document.createElement('details');
+          fpso.className = 'workspace-subgroup';
+          const subgroupLabel = document.createElement('summary');
+          subgroupLabel.textContent = 'FPSO Ventures';
+          subgroupLabel.title = subgroupLabel.textContent;
+          fpso.append(subgroupLabel);
+          details.append(fpso);
+        }
+        parent = fpso;
+        breadcrumb += ' / FPSO Ventures';
       }
       let button=sidebar.querySelector(`[data-view="${id}"]`);
       if (!button) { button=document.createElement('button'); button.type='button'; button.className='nav'; button.dataset.view=id; }
@@ -55,6 +60,12 @@
           const section=document.getElementById('handover');
           void import('./operations-handover.mjs').then(module=>module.openOperationsHandover(section)).catch(()=>{
             section.innerHTML='<div class="panel" role="alert">เปิด Operations Handover ไม่สำเร็จ กรุณาเลือกเมนูอีกครั้ง</div>';
+          });
+        }
+        if (id === 'crewdetails') {
+          const section = document.getElementById(id);
+          void import('./operations-crew-details.mjs').then(module => module.openCrewDetails(section)).catch(() => {
+            section.innerHTML='<div class="panel" role="alert">เปิดข้อมูลลูกเรือไม่สำเร็จ กรุณาลองอีกครั้ง</div>';
           });
         }
         if(id==='readerdatabase') window.HarborFlowReaderDatabase?.open();
