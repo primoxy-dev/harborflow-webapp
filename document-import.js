@@ -320,7 +320,10 @@
       if(value){fields[key]=value;changes.push(key);}
     }
     if(!fields.name&&values.given&&values.surname){const name=clean([values.given,values.middle,values.surname].filter(Boolean).join(' '));if(/^[A-Z .'-]+$/i.test(name)){fields.name=upper(name);changes.push('name');}}
-    if(changes.length)result.extractionWarnings=[...(result.extractionWarnings||[]),'Fields suggested by a local Reader data base example; check the original document.'];
+    if(changes.length){
+      result.templateFields=changes;
+      result.extractionWarnings=[...(result.extractionWarnings||[]),'Fields suggested by a local Reader data base example; check the original document.'];
+    }
     return result;
   }
   function trimPassportCanvas(source){
@@ -431,6 +434,53 @@
     return best;
   }
   const looksCombinedDocuments=text=>/(?:\bPASSPORT\b|P<[A-Z]{3})/i.test(text)&&/(?:SEAFARER|MARITIME INDUSTRY AUTHORITY|\bSRB\b|VALID UNTIL)/i.test(text);
+  function documentTypes(text) {
+    const value=upper(text);
+    const mrz=/(?:^|\s)P[<«][A-Z]{3}[A-Z<]/m.test(value);
+    const identityLabels=(value.match(/\b(?:SURNAME|GIVEN NAMES?|NATIONALITY|DATE OF BIRTH|DATE OF EXPIRY)\b/g)||[]).length;
+    const passport=mrz||/\bPASSPORT\b/.test(value)&&identityLabels>=2;
+    const seaman=/\b(?:SEAMAN'?S?\s+(?:BOOK|IDENTITY)|SEAFARER'?S?\s+(?:IDENTITY|IDENTIFICATION|RECORD|BOOK)|CONTINUOUS DISCHARGE CERTIFICATE)\b/.test(value)||
+      /\b(?:SIRB|SRB|CDC)\s*(?:NO\.?|NUMBER|#|:)\s*[A-Z0-9]/.test(value);
+    const flight=/\b(?:E[ -]?TICKET|ITINERARY|PNR|BOOKING (?:REF(?:ERENCE)?|CODE))\b/.test(value)&&
+      /\b(?:FLIGHT|DEPARTURE|ARRIVAL|PASSENGER)\b/.test(value);
+    return [passport&&(!flight||mrz)?'passport':'',seaman?'seamanBook':'',flight?'flightTicket':''].filter(Boolean);
+  }
+  function suggestedDocumentType(types) {
+    const found=new Set(types);
+    if(found.has('flightTicket'))return found.size===1?'flightTicket':'';
+    return found.has('passport')?'passport':found.has('seamanBook')?'seamanBook':'';
+  }
+  function checkDocumentFile(file) {
+    if(!file)throw Error('Please choose a document.');
+    if(file.size>MAX_FILE_BYTES)throw Error('File is larger than 30 MB.');
+    const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name);
+    if(!pdf&&!/^image\//.test(file.type)&&!/\.(png|jpe?g|webp|bmp)$/i.test(file.name))throw Error('Use a PDF, JPG, PNG, WebP or BMP file.');
+    return pdf;
+  }
+  async function identify(file,onProgress,ocr) {
+    if(!checkDocumentFile(file)){
+      const result=await recognize(file,onProgress,{rotateAuto:true},ocr);
+      return suggestedDocumentType(documentTypes(result.text));
+    }
+    const pdfjs=await pdfLibrary(),task=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())});
+    try{
+      const pdf=await task.promise,types=[];
+      for(let index=1;index<=Math.min(pdf.numPages,3);index++){
+        const page=await pdf.getPage(index),content=await page.getTextContent();
+        const pageText=content.items.map(item=>item.str).join(' ');
+        let found=documentTypes(pageText);
+        if(!found.length&&clean(pageText).length<80){
+          const viewport=page.getViewport({scale:2.2}),canvas=document.createElement('canvas');
+          canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+          await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+          const result=await recognize(canvas,onProgress,{rotateAuto:true},ocr);
+          found=documentTypes(result.text);
+        }
+        types.push(...found);
+      }
+      return suggestedDocumentType(types);
+    }finally{await task.destroy();}
+  }
   async function readPdf(file,onProgress,type,ocr){
     const pdfjs=await pdfLibrary(),pdf=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;let text='',confidence=100,combined=false;const images=[],passportPages=[];
     for(let pageNumber=1;pageNumber<=Math.min(pdf.numPages,3);pageNumber++){const page=await pdf.getPage(pageNumber),content=await page.getTextContent(),pageText=content.items.map(item=>item.str+(item.hasEOL?'\n':' ')).join('');text+='\n'+pageText;if(clean(pageText).length<80){const viewport=page.getViewport({scale:3}),canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;images.push(canvas);}else if(type==='passport')passportPages.push({text:pageText,confidence:100});}
@@ -444,8 +494,7 @@
     return {text,confidence,combined,templateValues:images.length===1?images[0].templateValues:{}};
   }
   async function read(file,type,onProgress,sharedOcr){
-    if(!file)throw Error('Please choose a document.');if(file.size>MAX_FILE_BYTES)throw Error('File is larger than 30 MB.');
-    const pdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name),image=/^image\//.test(file.type)||/\.(png|jpe?g|webp|bmp)$/i.test(file.name);if(!pdf&&!image)throw Error('Use a PDF, JPG, PNG, WebP or BMP file.');
+    const pdf=checkDocumentFile(file);
     const ocr=sharedOcr||ocrSession();
     try{
       onProgress?.(0);if(type==='flightTicket')await loadFlightCodeData();let source;
@@ -467,17 +516,68 @@
   }
   function createBatchReader(){
     const ocr=ocrSession();
-    return {read:(file,type,onProgress)=>read(file,type,onProgress,ocr),close:()=>ocr.close()};
+    return {identify:(file,onProgress)=>identify(file,onProgress,ocr),read:(file,type,onProgress)=>read(file,type,onProgress,ocr),close:()=>ocr.close()};
   }
   const daysUntil=value=>value?Math.ceil((new Date(`${value}T00:00:00Z`)-new Date())/86400000):null;
-  function applyToPerson(person,result){
+  function applyToPerson(person,result,{auto=false}={}){
     const next=structuredClone(person||{}),changes=[],conflicts=[],warnings=[];next.documentChecks={...(next.documentChecks||{})};
-    const assign=(key,value,label)=>{if(!value)return;if(!clean(next[key])){next[key]=value;changes.push(label);}else if(upper(next[key])!==upper(value))conflicts.push(`${label}: ข้อมูลเดิม “${next[key]}” ต่างจากไฟล์ “${value}”`);};
+    const fieldsToCheck={};
+    let updatedFlightIndex=-1;
+    const flag=(key,value,reason)=>{if(auto)fieldsToCheck[key]={value:String(value||''),reason};};
+    const lowConfidence=Number.isFinite(result.confidence)&&result.confidence<80;
+    const assign=(key,value,label)=>{
+      if(!value)return;
+      if(!clean(next[key])){next[key]=value;changes.push(label);}
+      else if(upper(next[key])!==upper(value)){
+        conflicts.push(`${label}: ข้อมูลเดิม “${next[key]}” ต่างจากไฟล์ “${value}”`);
+        flag(key,next[key],'Differs from the document');
+      }
+    };
     if(result.type==='flightTicket'){
-      const flight=result.flight||{},hasFlight=Object.values(flight).some(Boolean);if(hasFlight){if(!Array.isArray(next.flights))next.flights=[];const matching=next.flights.find(item=>(flight.number&&upper(item.number)===upper(flight.number))&&(flight.date?upper(item.date)===upper(flight.date):true));if(matching){for(const [key,value] of Object.entries(flight)){if(value&&!matching[key])matching[key]=value;else if(value&&matching[key]&&upper(matching[key])!==upper(value))conflicts.push(`Flight ${key}: ข้อมูลเดิม “${matching[key]}” ต่างจากไฟล์ “${value}”`);}}else next.flights.push(flight);changes.push('Flight details');}else warnings.push('ไม่พบข้อมูลเที่ยวบินที่อ่านได้');
+      const flight=result.flight||{};
+      if(Object.values(flight).some(Boolean)){
+        if(!Array.isArray(next.flights))next.flights=[];
+        const matching=next.flights.find(item=>{
+          if(!flight.number||upper(item.number)!==upper(flight.number))return false;
+          if(auto&&flight.airline&&item.airline&&upper(item.airline)!==upper(flight.airline))return false;
+          return !flight.date||(auto&&!item.date)||upper(item.date)===upper(flight.date);
+        });
+        const savedFlight=matching||{...flight};
+        if(!matching)next.flights.push(savedFlight);
+        const index=next.flights.indexOf(savedFlight);
+        updatedFlightIndex=index;
+        for(const key of ['airline','number','date','from','to','departure','arrival','booking']){
+          const value=flight[key],existing=savedFlight[key],field=`flight.${index}.${key}`;
+          if(value&&!existing)savedFlight[key]=value;
+          if(value&&existing&&upper(existing)!==upper(value)){
+            conflicts.push(`Flight ${key}: ข้อมูลเดิม “${existing}” ต่างจากไฟล์ “${value}”`);
+            flag(field,existing,'Differs from the document');
+          }else if(lowConfidence&&value)flag(field,savedFlight[key],'Low reading confidence');
+          else if(!value&&!existing&&['airline','number','date','from','to'].includes(key))flag(field,'','Field could not be read');
+        }
+        changes.push('Flight details');
+      }else warnings.push('ไม่พบข้อมูลเที่ยวบินที่อ่านได้');
     }else{
       const labels={name:'Name - Surname',passport:'Passport',passportExpiry:'Passport expiry',nationality:'Nationality',dob:'Date of birth',seamanBook:'Seaman book',seamanBookExpiry:'Seaman book expiry'};
-      for(const [key,value] of Object.entries(result.fields||{})){if(key==='name'&&result.nameNeedsTitle)continue;assign(key,value,labels[key]||key);}
+      for(const [key,value] of Object.entries(result.fields||{})){
+        if(key==='name'&&result.nameNeedsTitle&&!auto)continue;
+        assign(key,value,labels[key]||key);
+        if(lowConfidence&&value&&!fieldsToCheck[key])flag(key,next[key],'Low reading confidence');
+      }
+      const required=result.type==='passport'?['passport','passportExpiry','dob','nationality']:['seamanBook','seamanBookExpiry'];
+      for(const key of required)if(!result.fields?.[key]&&!next[key])flag(key,'','Field could not be read');
+      for(const [index,key] of ['passport','dob','passportExpiry'].entries()){
+        if(result.machineChecks?.[index]===false&&result.fields?.[key]&&!fieldsToCheck[key])flag(key,next[key],'Document check digit did not match');
+      }
+      for(const warning of result.extractionWarnings||[]){
+        if(warning.startsWith('Fields suggested by a local Reader data base'))continue;
+        const key=/printed passport number/i.test(warning)?'passport':/expiry/i.test(warning)?'seamanBookExpiry':'name';
+        if(next[key]&&!fieldsToCheck[key])flag(key,next[key],warning);
+      }
+      for(const key of result.templateFields||[]){
+        if(next[key]&&!fieldsToCheck[key])flag(key,next[key],'Read using a saved document template');
+      }
+      if(result.nameNeedsTitle&&next.name&&!/^(MR|MS|MRS|MISS)\.?\s/i.test(next.name))flag('name',next.name,'Title could not be read');
       const expiry=result.type==='passport'?result.fields?.passportExpiry:result.fields?.seamanBookExpiry,remaining=daysUntil(expiry);
       if(remaining!==null&&remaining<0)warnings.push(`${result.type==='passport'?'Passport':'Seaman book'} หมดอายุแล้ว`);
       else if(remaining!==null&&remaining<=SIX_MONTHS_DAYS)warnings.push(`${result.type==='passport'?'Passport':'Seaman book'} เหลืออายุไม่เกิน 6 เดือน (${remaining} วัน)`);
@@ -486,14 +586,16 @@
       if(result.type==='seamanBook'&&!result.fields?.seamanBook)warnings.push('ไม่พบเลข Seaman book');
     }
     warnings.push(...(result.extractionWarnings||[]));
-    if(result.nameNeedsTitle)warnings.push('อ่านเพศจาก Passport ไม่ชัดเจน กรุณาเลือก MR. หรือ MS. ก่อนกรอกชื่อ');
+    if(result.nameNeedsTitle&&!auto)warnings.push('อ่านเพศจาก Passport ไม่ชัดเจน กรุณาเลือก MR. หรือ MS. ก่อนกรอกชื่อ');
     if(result.confidence<80)warnings.push(`ความมั่นใจในการอ่าน ${Math.round(result.confidence)}% กรุณาตรวจทุกช่อง`);
     if(result.machineChecks?.length&&result.machineChecks.some(value=>!value))warnings.push('MRZ check digit บางช่องไม่ตรง กรุณาตรวจต้นฉบับ');
     warnings.push(...conflicts);
-    const status=warnings.length?'warning':'ok';next.documentChecks[result.type]={fileName:result.fileName||'',confidence:Math.round(result.confidence||0),checkedAt:result.checkedAt||new Date().toISOString(),status,messages:warnings,changes,expiry:result.type==='passport'?result.fields?.passportExpiry:result.type==='seamanBook'?result.fields?.seamanBookExpiry:''};
+    const previousFlags=next.documentChecks[result.type]?.fieldsToCheck||{};
+    const retainedFlags=Object.fromEntries(Object.entries(previousFlags).filter(([key])=>key.startsWith('flight.')&&!key.startsWith(`flight.${updatedFlightIndex}.`)));
+    const status=warnings.length||Object.keys(fieldsToCheck).length?'warning':'ok';next.documentChecks[result.type]={fileName:result.fileName||'',confidence:Math.round(result.confidence||0),checkedAt:result.checkedAt||new Date().toISOString(),status,messages:warnings,changes,expiry:result.type==='passport'?result.fields?.passportExpiry:result.type==='seamanBook'?result.fields?.seamanBookExpiry:'',...(auto?{fieldsToCheck:{...retainedFlags,...fieldsToCheck}}:{})};
     return {person:next,changes,conflicts,warnings,status};
   }
-  window.HarborFlowDocumentImport={read,createBatchReader,extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,documentSignal,reconcilePassportSources,mergeCombinedResults,combinedIdentityRegions,combinedPassportRegions,reconcileCombinedPassportFields,setFlightCodeData,applyTemplateValues,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
+  window.HarborFlowDocumentImport={read,createBatchReader,detectDocumentType:text=>suggestedDocumentType(documentTypes(text)),extractFromText,applyToPerson,parseDate,daysUntil,nationalityChoice,passportName,documentSignal,reconcilePassportSources,mergeCombinedResults,combinedIdentityRegions,combinedPassportRegions,reconcileCombinedPassportFields,setFlightCodeData,applyTemplateValues,limits:{maxFileBytes:MAX_FILE_BYTES,maxBatchFiles:20}};
 })();
 
 

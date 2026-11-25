@@ -564,8 +564,15 @@
     return `<div class="hfo-section"><div class="hfo-toolbar"><h3>Checklist · SOP ${escape(s.data.sopVersion||'not set')}</h3>${mayEditService(s)?'<button class="hfo-btn" data-add-step>+ Add step</button>':''}</div>
       ${list.length?list.map((step,i)=>`<div class="hfo-checklist-row"><input type="checkbox" data-step="${i}" ${step.done?'checked':''} ${mayEditService(s)?'':'disabled'}><span style="flex:1">${escape(step.text)}</span><small class="hfo-muted">${step.done?`${escape(step.actor||'')} · ${formatDate(step.completedAt)}`:''}</small>${mayEditService(s)?`<button class="hfo-btn danger" data-remove-step="${i}">×</button>`:''}</div>`).join(''):'<p class="hfo-muted">No checklist steps yet.</p>'}</div>`;
   }
+  function documentFieldWarning(p, field, value) {
+    return Object.values(p?.documentChecks||{}).map(check=>check?.fieldsToCheck?.[field]).find(flag=>flag?.value===String(value||''))?.reason||'';
+  }
+  function warningBadge(reason, label) {
+    return reason?`<span class="hfo-doc-field-warning" role="img" aria-label="${escape(label)}: ${escape(reason)}" title="${escape(reason)}">!</span>`:'';
+  }
   function crewTableInput(p, field, label, type='text', editable=false) {
-  return `<input data-person-field="${field}" data-person-id="${p.id}" aria-label="${escape(label)} for ${escape(p.data.name||'crew member')}" type="${type}" value="${escape(p.data[field]||'')}" ${field==='nationality'?'list="hfoNationalities" autocomplete="off"':''} ${editable?'':'disabled'}>`;
+  const value=p.data[field]||'',warning=documentFieldWarning(p.data,field,value);
+  return `<input data-person-field="${field}" data-person-id="${p.id}" aria-label="${escape(label)} for ${escape(p.data.name||'crew member')}" type="${type}" value="${escape(value)}" ${warning?'data-doc-flagged':''} ${field==='nationality'?'list="hfoNationalities" autocomplete="off"':''} ${editable?'':'disabled'}>${warningBadge(warning,label)}`;
 }
   function personRow(p, i, kind) {
   const edit=canEditPeople(kind), expanded=state.personDraft?.id===p.id;
@@ -573,9 +580,10 @@
   const fields=[['nationality','Nationality'],['rank','Rank'],['dob','Date of Birth','date'],['seamanBook','Seaman book'],['passport','Passport'],['passportExpiry','PP. EXP','date']].filter(([key])=>kind==='crew'||key!=='seamanBook');
   const detailsLabel=kind==='crew'?'Immigration & flight details':'Flight details';
   const detailsToggle=`<button type="button" class="${compact?'hfo-btn hfo-crew-toggle':'hfo-name-link'}" data-edit-person="${p.id}" aria-expanded="${expanded}" aria-label="${detailsLabel}" title="${detailsLabel}">${compact?'':detailsLabel+' '}<span aria-hidden="true">${expanded?'▴':'▾'}</span></button>`;
-  const nameCell=`<input data-person-field="name" data-person-id="${p.id}" aria-label="Name – Surname" value="${escape(p.data.name||'')}" ${edit?'':'disabled'}>${compact?'':detailsToggle}`;
+  const flaggedFlight=p.data.flights?.some((flight,index)=>FLIGHT_FIELDS.some(([key])=>documentFieldWarning(p.data,`flight.${index}.${key}`,flight[key])));
+  const nameCell=crewTableInput(p,'name','Name – Surname','text',edit)+(compact?'':detailsToggle);
   return `<tr class="hfo-person-row"><td data-label="No.">${i+1}</td><td data-label="Name – Surname">${nameCell}</td>${fields.map(([key,label,type])=>`<td data-label="${label}">${crewTableInput(p,key,label,type||'text',edit)}</td>`).join('')}
-    <td data-label="Actions"><div class="hfo-person-actions">${compact?detailsToggle:''}${edit?`<button type="button" class="hfo-btn danger" data-remove-person="${p.id}" aria-label="Remove ${escape(p.data.name)}">×</button>`:''}</div></td></tr>
+    <td data-label="Actions"><div class="hfo-person-actions">${compact?detailsToggle:''}${warningBadge(flaggedFlight?'Check highlighted flight fields':'','Flight details')}${edit?`<button type="button" class="hfo-btn danger" data-remove-person="${p.id}" aria-label="Remove ${escape(p.data.name)}">×</button>`:''}</div></td></tr>
     ${expanded?`<tr class="hfo-person-details-row"><td colspan="${kind==='crew'?9:8}">${personForm()}</td></tr>`:''}`;
 }
   function newPersonRow(category, kind) {
@@ -671,7 +679,8 @@
     const placeholder=key==='date'?'DDMMM':['departure','arrival'].includes(key)?'HH:MM':'';
     const id='hfo-code-'+i+'-'+key;
     const lookupAttrs=kind?`data-code-kind="${kind}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${id}" autocomplete="off" spellcheck="false"`:'';
-    const input=`<input data-flight="${i}" data-flight-field="${key}" aria-label="${label}, flight ${i+1}" type="text" ${placeholder?`placeholder="${placeholder}"`:''} ${lookupAttrs} value="${escape(value)}" ${editable?'':'disabled'}>`;
+    const warning=documentFieldWarning(state.personDraft?.data,`flight.${i}.${key}`,raw);
+    const input=`<input data-flight="${i}" data-flight-field="${key}" aria-label="${label}, flight ${i+1}" type="text" ${warning?'data-doc-flagged':''} ${placeholder?`placeholder="${placeholder}"`:''} ${lookupAttrs} value="${escape(value)}" ${editable?'':'disabled'}>${warningBadge(warning,label)}`;
     const row=kind?(flightCodes[kind]||[]).find(item=>item[0]===value):null;
     const field=kind?`<div class="hfo-code-field">${input}<div id="${id}" class="hfo-code-results" role="listbox" aria-label="${label} suggestions" hidden></div><small class="hfo-code-caption">${escape(row?codeLabel(row,kind):'')}</small></div>`:input;
     if(compact)return `<div class="hfo-crew-flight-field"><span class="hfo-crew-label">${label}</span>${field}</div>`;
@@ -698,17 +707,25 @@
     const results=batch.results||[];
     const crew=kind==='crew',types=crew?DOCUMENT_TYPES:DOCUMENT_TYPES.filter(([type])=>type!=='seamanBook');
     return `<section class="hfo-doc-import hfo-doc-batch" aria-labelledby="hfoDocImportTitle">
-      <div class="hfo-toolbar"><div><h4 id="hfoDocImportTitle">Read ${escape(title)} documents</h4><p class="hfo-muted">Upload several files at once. HarborFlow matches names in this service, fills blank fields only, and adds a new row when no matching name exists.</p></div>
+      <div class="hfo-toolbar"><div><h4 id="hfoDocImportTitle">Read ${escape(title)} documents</h4><p class="hfo-muted">${crew?'Drop files together. HarborFlow fills the crew list automatically. Check any fields marked with a red !.':'Upload several files at once. HarborFlow matches names and fills blank fields.'}</p></div>
       ${editable&&crew?sel('New crew group',batch.category||'On-signers','documentBatchCategory',CATEGORIES.slice(0,2),batch.busy?'disabled':''):''}</div>
       <div class="hfo-doc-privacy" role="note">🔒 Original files and full text stay on this device. PDF, JPG, PNG, WebP or BMP · up to 20 files per batch · 30 MB per file.</div>
-      <div class="hfo-doc-grid">${types.map(([type,label,description])=>`<article class="hfo-doc-card">
+      ${crew?`<div class="hfo-doc-composer">
+        <label class="hfo-field hfo-doc-reader"><span>Read with</span><select aria-label="Read with" ${batch.busy?'disabled':''}>
+          <option value="local">On-device</option>
+          <option value="openai" disabled>OpenAI API · Not connected</option>
+          <option value="copilot" disabled>Copilot Studio · Not connected</option>
+        </select></label>
+        <div class="hfo-doc-drop" data-doc-drop="auto"><div><b>Drop crew documents here</b><span>Passport · Seaman book · Flight ticket</span></div>
+        ${editable?`<input type="file" data-doc-file="auto" accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,application/pdf,image/*" multiple hidden ${batch.busy?'disabled':''}><button type="button" class="hfo-btn" data-doc-choose="auto" ${batch.busy?'disabled':''}>Choose files</button>`:'<span>View only</span>'}</div>
+        <div data-doc-progress="auto" role="status"></div></div>`:`<div class="hfo-doc-grid">${types.map(([type,label,description])=>`<article class="hfo-doc-card">
         <div><b>${escape(label)}</b><small>${escape(description)}</small></div>
         <div class="hfo-doc-drop" data-doc-drop="${type}">
           ${editable?`<input type="file" data-doc-file="${type}" accept=".pdf,.jpg,.jpeg,.png,.webp,.bmp,application/pdf,image/*" multiple hidden ${batch.busy?'disabled':''}><button type="button" class="hfo-btn" data-doc-choose="${type}" ${batch.busy?'disabled':''}>Choose files</button><span>or drop multiple files</span>`:'<span>View only</span>'}
         </div><div data-doc-progress="${type}" role="status"></div>
-      </article>`).join('')}</div>
+      </article>`).join('')}</div>`}
       ${batch.total?`<div class="hfo-doc-batch-progress" role="status"><b>${batch.busy?'Reading documents':'Batch complete'}</b><span>${batch.completed} / ${batch.total}</span></div>`:''}
-      ${results.length?`<div class="hfo-doc-batch-results">${results.map((item,index)=>`<div class="hfo-doc-batch-result ${item.error?'error':item.warnings?.length||item.needsTitle?'warning':'ok'}"><b>${escape(item.fileName)}</b><span>${escape(item.name||'Name not found')} · ${escape(item.outcome||'Needs review')}</span>${item.changes?.length?`<small>Filled: ${escape(item.changes.join(', '))}</small>`:''}${item.error?`<small>${escape(item.error)}</small>`:''}${item.needsTitle?`<div class="hfo-doc-title-choice"><span>เลือกคำนำหน้าตาม Passport:</span><button type="button" class="hfo-btn" data-doc-title="MR." data-doc-result="${index}">MR.</button><button type="button" class="hfo-btn" data-doc-title="MS." data-doc-result="${index}">MS.</button></div>`:''}${item.warnings?.length?`<ul>${item.warnings.map(w=>`<li>${escape(w)}</li>`).join('')}</ul>`:''}</div>`).join('')}</div>`:''}
+      ${results.length?`<div class="hfo-doc-batch-results">${results.map((item,index)=>`<div class="hfo-doc-batch-result ${item.error?'error':item.warnings?.length||item.needsTitle?'warning':'ok'}"><b>${escape(item.fileName)}</b><span>${escape(item.name||'')} ${item.name?'· ':''}${escape(item.outcome||'Needs review')}</span>${item.changes?.length?`<small>Filled: ${escape(item.changes.join(', '))}</small>`:''}${item.error?`<small>${escape(item.error)}</small>`:''}${item.needsTitle?`<div class="hfo-doc-title-choice"><span>เลือกคำนำหน้าตาม Passport:</span><button type="button" class="hfo-btn" data-doc-title="MR." data-doc-result="${index}" ${batch.busy?'disabled':''}>MR.</button><button type="button" class="hfo-btn" data-doc-title="MS." data-doc-result="${index}" ${batch.busy?'disabled':''}>MS.</button></div>`:''}${item.warnings?.length?`<ul>${item.warnings.map(w=>`<li>${escape(w)}</li>`).join('')}</ul>`:''}</div>`).join('')}</div>`:''}
       <p class="hfo-doc-rule">Passport must remain valid for more than 6 months. Review every extracted value against the original before operational use.</p>
     </section>`;
   }
@@ -1108,53 +1125,86 @@
   }
   async function applyImportedResult(result,item) {
     const reader=window.HarborFlowDocumentImport,detectedName=String(result.nameWithoutTitle||result.fields?.name||'').trim();
-    const currentService=service(),kind=currentService?.data.type==='Crew Change'?'crew':'visitor';
-    if(!currentService||(kind==='visitor'&&!FLAT_VISITORS[currentService.data.type]))throw Error('Open a supported service before importing documents.');
+    const currentService=service(),currentJob=job(),kind=currentService?.data.type==='Crew Change'?'crew':'visitor';
+    const auto=kind==='crew';
+    if(!currentJob||!currentService||(kind==='visitor'&&!FLAT_VISITORS[currentService.data.type]))throw Error('Open a supported service before importing documents.');
     if(kind==='visitor'&&result.type==='seamanBook')throw Error('Seaman book import is only available in Crew Change.');
     item.fileName=result.fileName||item.fileName;item.name=detectedName;
-    if(result.nameNeedsTitle&&detectedName){item.needsTitle=true;item.pendingResult=result;item.outcome='Choose MR. or MS.';item.warnings=['อ่านเพศจาก Passport ไม่ชัดเจน ระบบยังไม่กรอกชื่อหรือข้อมูลจนกว่าจะเลือกคำนำหน้า'];return;}
+    if(!auto&&result.nameNeedsTitle&&detectedName){item.needsTitle=true;item.pendingResult=result;item.outcome='Choose MR. or MS.';item.warnings=['อ่านเพศจาก Passport ไม่ชัดเจน ระบบยังไม่กรอกชื่อหรือข้อมูลจนกว่าจะเลือกคำนำหน้า'];return;}
     const key=normalizedCrewName(result.fields?.name||detectedName);
-    if(!key){item.outcome='Needs review';item.error='No readable crew name was found. Nothing was added.';return;}
     const givenSurnameOnly=result.matchStrategy==='given-surname';
     const scopedPeople=state.people.filter(candidate=>candidate.kind===kind&&(kind==='crew'||candidate.data.serviceIds?.includes(currentService.id)));
-    const nameMatches=scopedPeople.filter(candidate=>givenSurnameOnly?matchesGivenSurname(result.fields?.name||detectedName,candidate.data.name):normalizedCrewName(candidate.data.name)===key);
-    if(nameMatches.length>1){item.outcome='Needs review';item.error='More than one person in this service has the same name. Nothing was added.';return;}
+    const samePassport=candidate=>Boolean(result.fields?.passport&&String(candidate.data.passport||'').toUpperCase()===String(result.fields.passport).toUpperCase());
+    let nameMatches=key?scopedPeople.filter(candidate=>givenSurnameOnly?matchesGivenSurname(result.fields?.name||detectedName,candidate.data.name):normalizedCrewName(candidate.data.name)===key):[];
+    if(auto&&nameMatches.length>1){
+      const verified=nameMatches.filter(candidate=>samePassport(candidate)||(result.fields?.dob&&candidate.data.dob===result.fields.dob));
+      if(verified.length)nameMatches=verified;
+    }
+    if(nameMatches.length>1){item.outcome='Needs review';item.error='More than one crew row matches this name. No fields were changed.';return;}
     let person=nameMatches[0];
-    const passportMatches=!person&&result.type==='passport'&&result.fields?.passport?scopedPeople.filter(candidate=>String(candidate.data.passport||'').toUpperCase()===String(result.fields.passport).toUpperCase()):[];
+    const passportMatches=!person&&result.type==='passport'?scopedPeople.filter(samePassport):[];
     const matchedByPassport=passportMatches.length===1;if(matchedByPassport)person=passportMatches[0];
+    if(auto&&person?.data.dob&&result.fields?.dob&&person.data.dob!==result.fields.dob&&!samePassport(person)){
+      item.outcome='Needs review';item.error='Date of birth differs from the matching crew row. No fields were changed.';return;
+    }
     if(person){
-      const safeResult=structuredClone(result);safeResult.fields={...(safeResult.fields||{}),name:person.data.name};
-      const applied=reader.applyToPerson(person.data,safeResult);
+      const safeResult={...result,fields:{...result.fields,name:matchedByPassport&&auto?result.fields?.name:person.data.name}};
+      const applied=reader.applyToPerson(person.data,safeResult,{auto});
       await saveImportedPerson(person,applied.person);
       const nameWarning=matchedByPassport?`Passport matches an existing person. Review Name - Surname: saved “${person.data.name}”, document “${result.fields.name}”.`:'';
       Object.assign(item,{name:person.data.name,outcome:matchedByPassport?'Matched by Passport · Review name':'Matched existing person',changes:applied.changes,warnings:[...applied.warnings,...(nameWarning?[nameWarning]:[])],needsTitle:false,pendingResult:null,error:''});
     }else if(passportMatches.length>1){
       item.outcome='Needs review';item.error='More than one person in this service has this Passport number. Nothing was added.';return;
+    }else if(!key||(auto&&key.split(' ').length<2)){
+      item.outcome='Needs review';item.error='A complete crew name could not be read. No fields were changed.';return;
     }else if(givenSurnameOnly){
       item.outcome='Needs review';item.error='No existing person matched the Given name and Surname. Nothing was added.';return;
     }else{
       const category=kind==='crew'?state.documentBatch.category||'On-signers':currentService.data.type==='SIRE Inspector'?'SIRE Inspectors':currentService.data.type==='Surveyor'?'Surveyors':'Other';
       const seed={name:String(result.fields?.name||detectedName).toUpperCase(),category,serviceIds:[currentService.id],flights:[]};
-      const applied=reader.applyToPerson(seed,result),out=await api('createPerson',{jobId:job().id,kind,data:applied.person});
-      person=out.person;state.people.push(person);
+      const applied=reader.applyToPerson(seed,result,{auto}),out=await api('createPerson',{jobId:currentJob.id,kind,data:applied.person});
+      person=out.person;if(job()?.id===currentJob.id&&state.peopleLoadedFor===currentJob.id)state.people.push(person);
       Object.assign(item,{name:person.data.name,outcome:'Added new person',changes:applied.changes,warnings:applied.warnings,needsTitle:false,pendingResult:null,error:''});
     }
-    state.peopleLoadedFor=job().id;
+  }
+  async function readCrewFile(file,item,batchReader,batch) {
+    const progress=message=>percent=>{
+      if(state.documentBatch===batch)documentProgress('auto',`${message} ${item.fileName}… ${percent||0}%`);
+    };
+    try{
+      const type=await batchReader.identify(file,progress('Identifying'));
+      if(state.documentBatch!==batch)return;
+      if(!type){
+        item.outcome='Needs review';item.error='Document type could not be identified. No fields were changed.';return;
+      }
+      return await batchReader.read(file,type,progress('Reading'));
+    }catch(error){item.outcome='Needs review';item.error=error.message||'Document could not be read.';}
   }
   async function importPersonDocuments(files,type) {
     const reader=window.HarborFlowDocumentImport,batch=state.documentBatch;
     const currentService=service(),kind=currentService?.data.type==='Crew Change'?'crew':'visitor';
     if(!reader||!currentService||(kind==='visitor'&&!FLAT_VISITORS[currentService.data.type])||!canEditPeople(kind)||state.peopleLoadedFor!==currentService.job_id||batch.busy)return;
-    if(kind==='visitor'&&type==='seamanBook')return;
+    if(kind==='visitor'&&['seamanBook','auto'].includes(type))return;
     const serviceId=currentService.id,jobId=job()?.id;
     const chosen=[...files],limit=reader.limits?.maxBatchFiles||20,queue=chosen.slice(0,limit);
     batch.busy=true;batch.completed=0;batch.total=queue.length;batch.results=[];
     if(chosen.length>limit)batch.results.push({fileName:`${chosen.length-limit} file(s)`,error:`Only the first ${limit} files were accepted.`,outcome:'Not processed'});
     render();
-    const batchReader=reader.createBatchReader?.()||reader;
+    const batchReader=reader.createBatchReader?.()||reader,crewResults=[];
+    const sameService=()=>state.documentBatch===batch&&service()?.id===serviceId&&job()?.id===jobId;
+    let savedCrew=false;
     try{
       for(const file of queue){
+        if(state.documentBatch!==batch)break;
         if(service()?.id!==serviceId||job()?.id!==jobId){batch.results.push({fileName:file.name,outcome:'Not processed',error:'Service changed during import. Reopen the original service and retry.'});batch.completed+=1;continue;}
+        if(type==='auto'){
+          const item={fileName:file.name,outcome:'Reading document'};
+          batch.results.push(item);
+          const result=await readCrewFile(file,item,batchReader,batch);
+          if(state.documentBatch!==batch)break;
+          if(result){crewResults.push({item,result});item.outcome='Applying to crew list';}
+          batch.completed+=1;render();continue;
+        }
         documentProgress(type,`Reading ${file.name}…`);
         try{
           const result=await batchReader.read(file,type,progress=>documentProgress(type,`Reading ${file.name}… ${progress||0}%`));
@@ -1163,9 +1213,28 @@
         }catch(error){batch.results.push({fileName:file.name,name:'',outcome:'Not processed',error:error.message||'Document could not be read.'});}
         batch.completed+=1;render();
       }
+      // Apply passports first so companion books and tickets can match the resulting crew rows.
+      crewResults.sort((a,b)=>Number(b.result.type==='passport')-Number(a.result.type==='passport'));
+      for(const {item,result} of crewResults){
+        if(!sameService()){
+          item.outcome='Not processed';item.error='Service changed during import. No fields from this file were changed.';continue;
+        }
+        try{await applyImportedResult(result,item);savedCrew||=!item.error;}
+        catch(error){item.outcome='Not saved';item.error=error.message||'Document could not be saved.';}
+      }
     }finally{
-      try{await batchReader.close?.();}finally{batch.busy=false;state.sync='Saved '+new Date().toLocaleTimeString();render();}
+      try{await batchReader.close?.();}finally{batch.busy=false;if(state.documentBatch===batch){if(type!=='auto'||savedCrew)state.sync='Saved '+new Date().toLocaleTimeString();render();}}
     }
+  }
+  async function saveReviewedDocument(item,result) {
+    const batch=state.documentBatch,kind=service()?.data.type==='Crew Change'?'crew':'visitor';
+    if(batch.busy||!canEditPeople(kind)||state.peopleLoadedFor!==service()?.job_id)return;
+    batch.busy=true;item.error='';item.outcome='Saving…';render();
+    try{
+      await applyImportedResult(result,item);
+      if(state.documentBatch===batch&&!item.error&&!item.needsTitle)state.sync='Saved '+new Date().toLocaleTimeString();
+    }catch(error){item.error=error.message||'Document could not be saved.';item.outcome='Needs review';}
+    finally{batch.busy=false;if(state.documentBatch===batch)render();}
   }
   function captureNewPersonRow() {
     const draft=state.personDraft,row=document.querySelector('.hfo-new-person');
@@ -1251,6 +1320,10 @@
     const out=await api('updatePerson',{id:p.id,kind:p.kind,patch,base});
     Object.assign(p,out.record);
     if (state.personDraft?.id===p.id) state.personDraft.data[field]=value;
+    if(target.hasAttribute('data-doc-flagged')&&!documentFieldWarning(p.data,field,p.data[field])){
+      target.removeAttribute('data-doc-flagged');
+      if(target.nextElementSibling?.classList.contains('hfo-doc-field-warning'))target.nextElementSibling.remove();
+    }
     state.sync='Saved '+new Date().toLocaleTimeString();state.error='';
   } catch(e){handleSaveError(e,{kind:'person',personKind:p.kind,id:p.id,field,value,old,patch,base});}
 }
@@ -1362,10 +1435,9 @@
     if(!b)return;
     if(b.dataset.docChoose){document.querySelector(`[data-doc-file="${b.dataset.docChoose}"]`)?.click();return;}
     if(b.dataset.docTitle){
-      const item=state.documentBatch.results[Number(b.dataset.docResult)],result=item?.pendingResult;if(!item||!result)return;
+      const batch=state.documentBatch,item=batch.results[Number(b.dataset.docResult)],result=item?.pendingResult;if(batch.busy||!item||!result)return;
       result.fields={...(result.fields||{}),name:`${b.dataset.docTitle} ${result.nameWithoutTitle||result.fields?.name||''}`.trim().toUpperCase()};result.nameNeedsTitle=false;result.sex=b.dataset.docTitle==='MR.'?'M':'F';
-      item.needsTitle=false;item.warnings=[];item.error='';item.outcome='Saving…';render();
-      try{await applyImportedResult(result,item);state.sync='Saved '+new Date().toLocaleTimeString();}catch(error){item.error=error.message||'Document could not be saved.';item.outcome='Not processed';}render();return;
+      item.needsTitle=false;item.warnings=[];await saveReviewedDocument(item,result);return;
     }
     if(b.hasAttribute('data-download-toggle')){const menu=b.parentElement.querySelector('[data-download-menu]'),open=menu.hidden;menu.hidden=!open;b.setAttribute('aria-expanded',String(open));return;}
     if(b.dataset.download){b.closest('[data-download-menu]').hidden=true;await downloadCalendarReport(b.dataset.download);return;}
