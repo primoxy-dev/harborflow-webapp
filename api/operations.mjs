@@ -3,6 +3,7 @@ import { provisionRoute } from '../lib/provision.mjs';
 import { hotelRoute } from '../lib/hotels.mjs';
 import { handoverRoute } from '../lib/operation-handover-store.mjs';
 import { handoverByteLimit } from '../lib/handover-catalog.mjs';
+import { crewDetailsByteLimit, crewDetailsRoute } from '../lib/operation-crew-details-store.mjs';
 import { cashVoucherTypes } from '../lib/cash-voucher.mjs';
 import { mailRecipientAddresses } from '../lib/mail-recipients.mjs';
 import { randomUUID } from 'node:crypto';
@@ -20,6 +21,10 @@ const parse = async request => {
   const input = JSON.parse(raw || '{}');
   if (input?.action === 'importHandover') {
     if (Buffer.byteLength(raw) > handoverByteLimit) throw Error('Handover file is too large');
+    return input;
+  }
+  if (input?.action === 'saveCrewDetails') {
+    if (Buffer.byteLength(raw) > crewDetailsByteLimit) throw Error('Crew details file is too large');
     return input;
   }
   const limit=['saveProvisionItem','previewProvisionEmailFile','uploadJobFile'].includes(input?.action)?4100000:['saveHotelEmailDraft','saveHotelEmailTemplate'].includes(input?.action)?60000:24000;
@@ -163,6 +168,7 @@ return async function route(request) {
   if (request.method === 'GET') {
     const action = url.searchParams.get('action') || 'state';
     if (action === 'handover') return handoverRoute({ sql, login, input: { action } });
+    if (action === 'crewDetails') return crewDetailsRoute({ sql, login, grant, input: { action } });
     if (action === 'voucherMailDefaults') {
       const service = await loadService(sql, url.searchParams.get('serviceId'));
       const job = service && await loadJob(sql, service.job_id);
@@ -229,6 +235,7 @@ return async function route(request) {
   try { input = await parse(request); } catch { return error('Invalid or oversized JSON'); }
   const action = input.action;
   if (['importHandover','checkHandoverStep'].includes(action)) return handoverRoute({ sql, login, input });
+  if (action === 'saveCrewDetails') return crewDetailsRoute({ sql, login, grant, input });
   if (['createJobFileFolder','uploadJobFile','renameJobFile','deleteJobFile'].includes(action))return jobFiles(input);
   if (['saveProvisionItem','removeProvisionItem','previewProvisionEmailFile'].includes(action))return provision(input);
   if(['saveHotel','saveHotelEmailDraft','saveHotelEmailTemplate','removeHotelEmailTemplate'].includes(action))return hotelRoute({sql,grant,login,input});

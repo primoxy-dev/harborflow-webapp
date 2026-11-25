@@ -1,0 +1,30 @@
+.hfc-roster{min-width:0;color:#193642}
+.hfc-toolbar,.hfc-actions,.hfc-page-options{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.hfc-toolbar{justify-content:space-between;margin-bottom:16px}
+.hfc-toolbar h2,.hfc-document h3{margin:0}
+.hfc-actions button,.hfc-import,.hfc-print-settings summary{min-height:38px;padding:8px 12px;border-radius:7px}
+.hfc-import,.hfc-print-settings summary{border:1px solid #bfd1d7;cursor:pointer;background:#f4faf9}
+.hfc-import{display:inline-flex;align-items:center;position:relative}
+.hfc-import:focus-within,.hfc-grid:focus-visible{outline:2px solid #08746b;outline-offset:2px}
+.hfc-import input{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.hfc-print-settings{position:relative}
+.hfc-page-options{position:absolute;z-index:4;right:0;top:calc(100% + 6px);width:190px;background:white;border:1px solid #c1d2d8;border-radius:8px;box-shadow:0 6px 18px #19364220;padding:12px;align-items:stretch;flex-direction:column}
+.hfc-page-options label{display:grid;gap:4px;font-size:13px;font-weight:600}
+.hfc-page-options select{margin:0;max-width:100%}
+.hfc-document{margin-bottom:10px}
+.hfc-document p{display:flex;gap:16px;flex-wrap:wrap;margin:6px 0 0;color:#486570;font-size:13px}
+.hfc-message{margin:0 0 12px;color:#086f65}
+.hfc-message:empty{display:none}
+.hfc-error{color:#982e40}
+.hfc-grid{max-width:100%;overflow:auto;max-height:68vh;border:1px solid #a9bec6;background:white}
+.hfc-table{min-width:1240px;width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:13px}
+.hfc-table .hfc-gutter{width:35px}
+.hfc-table th,.hfc-table td{border-inline-end:1px solid #c3d2d7;border-bottom:1px solid #c3d2d7;padding:6px 7px;text-align:left;overflow-wrap:anywhere;white-space:pre-wrap}
+.hfc-table thead{position:sticky;top:0;z-index:1;background:#e6f0ed}
+.hfc-table thead th{text-align:center;font-weight:700}
+.hfc-table .hfc-center,.hfc-table .hfc-number,.hfc-table .hfc-letters td{text-align:center}
+.hfc-table .hfc-letters td,.hfc-table .hfc-number{background:#eef3f5;color:#476270;font-size:11px}
+.hfc-table tbody:nth-of-type(even){background:#f5faf9}
+.hfc-table .hfc-rank{font-weight:600;vertical-align:middle}
+.hfc-print-frame{position:fixed;inset:auto 0 0 auto;width:0;height:0;border:0}
+@media(max-width:520px){.hfc-actions{gap:7px}.hfc-toolbar{align-items:flex-start}.hfc-page-options{right:auto;left:0}}
