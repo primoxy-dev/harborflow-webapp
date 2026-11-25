@@ -3,7 +3,7 @@
   const sidebar = document.getElementById('primaryNav');
   if (!sidebar) return;
   const groups = [
-    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','Summary report','☷'],['handover','Operations Handover','✓'],['crewdetails',"Crew's details",'▤'],['readerdatabase','Reader data base','▧'],['alerts','Smart Alerts','⚑'],['outlook','Outlook','✉']]],
+    ['Operations', [['operations','Port Call Calendar','▦'],['allservices','Summary report','☷'],['readerdatabase','Reader data base','▧'],['handover','Operations Handover','✓'],['crewdetails',"Crew's details",'▤']]],
     ['Quotation & Payments', [['commercial','Quotation / PDA / FDA','◫'],['pv','Payment Voucher','▧'],['price','Price Master','¤'],['approvals','Approvals','✓']]]
   ];
   const title = document.getElementById('title');
@@ -50,7 +50,6 @@
       if (!button) { button=document.createElement('button'); button.type='button'; button.className='nav'; button.dataset.view=id; }
       button.innerHTML=`<i aria-hidden="true">${icon}</i><span class="nav-label">${label}</span>`; button.setAttribute('aria-label',label); button.title=label;
       button.addEventListener('click',()=>{
-        if(id==='outlook') { window.HarborFlowOutlook.open(); return; }
         document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id));
         sidebar.querySelectorAll('.nav').forEach(b=>b.classList.toggle('active',b===button));
         title.textContent=label; crumb.textContent=breadcrumb+' / '+label;
@@ -79,9 +78,6 @@
   }
   // Insertion after the same anchor reverses order; put Operations first.
   anchor.after(sidebar.querySelectorAll('.workspace-group')[1]);
-  const n8nLink=document.createElement('a'); n8nLink.className='nav'; n8nLink.href='http://localhost:5678/'; n8nLink.target='_blank'; n8nLink.rel='noopener noreferrer'; n8nLink.innerHTML='<i aria-hidden="true">⚙</i><span class="nav-label">n8n</span>'; n8nLink.title='เปิด n8n ที่ติดตั้งบนเครื่องนี้'; n8nLink.setAttribute('aria-label','เปิด n8n ที่ติดตั้งบนเครื่องนี้'); sidebar.querySelector('.workspace-group').append(n8nLink);
-  const offlineLink=document.createElement('a');offlineLink.className='nav';offlineLink.href='/offline/';offlineLink.textContent='▧ Documents · Online / Offline';offlineLink.title='แบบฟอร์มบนเครื่อง · ข้อมูลสมมติเท่านั้น';
-  sidebar.querySelector('.workspace-group').append(offlineLink);
   const marketing=sidebar.querySelector('[data-view="marketing"]');
   const business=document.createElement('div'); business.className='group'; business.textContent='Business Development';
   const last=sidebar.querySelectorAll('.workspace-group')[1]; last.after(business); business.after(marketing);
